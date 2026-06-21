@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { inboxes, dnsChecks } from '@/db/schema';
+import { inboxes, dnsChecks, poolMembers } from '@/db/schema';
 import { GoogleOAuthService } from './oauth/google-oauth.service';
 import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { BillingService } from '@/billing/billing.service';
@@ -197,6 +197,19 @@ export class InboxService {
         .update(inboxes)
         .set({ status: 'active', poolConsentAt: new Date() })
         .where(eq(inboxes.id, inboxId));
+
+      // Enroll the inbox in the warmup pool on first activation. Without this row,
+      // PairingService can never find this inbox as a candidate partner (it queries
+      // pool_members, not inboxes) — pairing would silently never work for it.
+      await db.insert(poolMembers).values({
+        inboxId,
+        email: inbox.email,
+        domain: inbox.email.split('@')[1].toLowerCase(),
+        provider: inbox.provider,
+        reputation: 50,
+        active: true,
+        quarantined: false,
+      });
     }
 
     return steps;
