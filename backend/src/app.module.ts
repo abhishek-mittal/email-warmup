@@ -11,6 +11,8 @@ import { InboxModule } from './inbox/inbox.module';
 import { WarmupModule } from './warmup/warmup.module';
 import { MonitorModule } from './monitor/monitor.module';
 import { ScoringModule } from './scoring/scoring.module';
+import { PlacementModule } from './placement/placement.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -28,6 +30,8 @@ import { validate } from './config/env.validation';
     WarmupModule,
     MonitorModule,
     ScoringModule,
+    PlacementModule,
+    DiagnosticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
