@@ -218,6 +218,19 @@ export class WarmupService {
     return (latest.spamPct ?? 0) <= GRADUATION_MAX_SPAM_PCT;
   }
 
+  /**
+   * Pauses an inbox's warmup activity immediately: sets status='paused' and drains
+   * both directions of pending warmup jobs — sends *from* this inbox and
+   * receive-engagement jobs (open/star/reply/rescue) *for* mail already sent *to*
+   * this inbox — so a paused inbox (e.g. blacklisted) does not participate in any
+   * further warmup activity in either direction. See T012 context addendum #3.
+   */
+  async pauseInbox(inboxId: string): Promise<void> {
+    await db.update(inboxes).set({ status: 'paused' }).where(eq(inboxes.id, inboxId));
+    await this.queueService.removeJobsForSender('warmup-send', inboxId);
+    await this.queueService.removeJobsForReceiver('warmup-receive', inboxId);
+  }
+
   private async graduate(inbox: typeof inboxes.$inferSelect): Promise<void> {
     const graduatedAt = new Date();
 

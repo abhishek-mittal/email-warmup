@@ -17,6 +17,7 @@ export class QueueService {
     @InjectQueue('notify') private readonly notifyQueue: Queue,
     @InjectQueue('token-refresh') private readonly tokenRefreshQueue: Queue,
     @InjectQueue('readiness-report') private readonly readinessReportQueue: Queue,
+    @InjectQueue('diagnostics') private readonly diagnosticsQueue: Queue,
   ) {}
 
   private getQueue(name: QueueName): Queue {
@@ -39,6 +40,8 @@ export class QueueService {
         return this.tokenRefreshQueue;
       case 'readiness-report':
         return this.readinessReportQueue;
+      case 'diagnostics':
+        return this.diagnosticsQueue;
       default:
         throw new Error(`Unknown queue: ${name}`);
     }
@@ -54,5 +57,32 @@ export class QueueService {
 
   async getJobCounts(name: QueueName) {
     return this.getQueue(name).getJobCounts();
+  }
+
+  /**
+   * Drains pending (delayed/waiting) jobs from `queueName` whose payload identifies
+   * `senderInboxId` as the sender. Used by WarmupService.pauseInbox to stop a
+   * paused inbox from sending further warmup mail.
+   */
+  async removeJobsForSender(queueName: QueueName, senderInboxId: string): Promise<void> {
+    const queue = this.getQueue(queueName);
+    const jobs = await queue.getJobs(['delayed', 'waiting']);
+    await Promise.all(
+      jobs.filter((job) => job.data.senderInboxId === senderInboxId).map((job) => job.remove()),
+    );
+  }
+
+  /**
+   * Drains pending (delayed/waiting) jobs from `queueName` whose payload identifies
+   * `receiverInboxId` as the receiver. Used by WarmupService.pauseInbox to stop a
+   * paused inbox from engaging with (opening/replying to/rescuing) warmup mail
+   * already sent to it.
+   */
+  async removeJobsForReceiver(queueName: QueueName, receiverInboxId: string): Promise<void> {
+    const queue = this.getQueue(queueName);
+    const jobs = await queue.getJobs(['delayed', 'waiting']);
+    await Promise.all(
+      jobs.filter((job) => job.data.receiverInboxId === receiverInboxId).map((job) => job.remove()),
+    );
   }
 }

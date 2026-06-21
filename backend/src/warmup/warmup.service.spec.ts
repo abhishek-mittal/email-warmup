@@ -16,7 +16,11 @@ describe('WarmupService', () => {
   let service: WarmupService;
   let rampService: { getDailyVolume: jest.Mock };
   let pairingService: { selectPartner: jest.Mock };
-  let queueService: { add: jest.Mock };
+  let queueService: {
+    add: jest.Mock;
+    removeJobsForSender: jest.Mock;
+    removeJobsForReceiver: jest.Mock;
+  };
 
   const activeInbox = {
     id: 'inbox-1',
@@ -59,7 +63,11 @@ describe('WarmupService', () => {
     pairingService = {
       selectPartner: jest.fn().mockResolvedValue({ id: 'pool-partner-1', inboxId: 'inbox-2' }),
     };
-    queueService = { add: jest.fn().mockResolvedValue(undefined) };
+    queueService = {
+      add: jest.fn().mockResolvedValue(undefined),
+      removeJobsForSender: jest.fn().mockResolvedValue(undefined),
+      removeJobsForReceiver: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -318,6 +326,36 @@ describe('WarmupService', () => {
           payload: { warmupDay: 35 },
         },
       ]);
+    });
+  });
+
+  describe('pauseInbox', () => {
+    it("sets the inbox status to 'paused'", async () => {
+      const setMock = jest.fn().mockReturnThis();
+      (db.update as jest.Mock).mockReturnValue({
+        set: setMock,
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+
+      await service.pauseInbox('inbox-1');
+
+      expect(setMock).toHaveBeenCalledWith({ status: 'paused' });
+    });
+
+    it('drains pending warmup-send jobs where this inbox is the sender', async () => {
+      mockUpdate();
+
+      await service.pauseInbox('inbox-1');
+
+      expect(queueService.removeJobsForSender).toHaveBeenCalledWith('warmup-send', 'inbox-1');
+    });
+
+    it('drains pending warmup-receive jobs where this inbox is the receiver', async () => {
+      mockUpdate();
+
+      await service.pauseInbox('inbox-1');
+
+      expect(queueService.removeJobsForReceiver).toHaveBeenCalledWith('warmup-receive', 'inbox-1');
     });
   });
 });
