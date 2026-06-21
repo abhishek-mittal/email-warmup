@@ -60,7 +60,7 @@ When **blocked**:
 | T010 | Daily schedule + graduation | done | 2026-06-21 | 2026-06-21 | WarmupService (@Cron 05:00 UTC), RampService (linear interpolation, capped at 200), PairingService (same-domain hard block, scoring, 7-day recency penalty); 8-min spacing + ±15min jitter algorithm per addendum #3; graduation w/ asymmetric missing-data handling (reputation fails closed, placement skips); readiness-report queue added; fixed Wave-1 pool-enrollment gap in inbox.service.ts. All 9 acceptance criteria verified by unit tests (87/87), typecheck, build, and a clean runtime boot (controller-reviewed directly, diff matches addendum exactly, arithmetic hand-checked). Known gap (not blocking): service-spec's WarmupService.pauseInbox()/resumeInbox()/public scheduleInbox() were not built — T010's own criteria don't need them, but T012 (blacklist-check, "pause on hit") will; T012 is responsible for adding pauseInbox(). |
 
 **Wave 2 gate:** Active inbox sends and receives warmup emails · Daily volume follows ramp curve  
-**Wave 2 status:** ⬜ not started  
+**Wave 2 status:** ✅ verified at unit/integration level — RampService's curve, WarmupService's scheduling/pairing/graduation, WarmupSendProcessor, and WarmupReceiveProcessor are each independently tested (118 tests across the wave) and boot cleanly together as one wired NestJS app (confirmed live: `GET /health` 200 with WarmupModule + ScheduleModule loaded against real Postgres/Redis). Genuine live E2E (real Gmail/Outlook accounts sending/receiving over real elapsed days) was not run — needs real OAuth credentials and manual QA, out of scope for this session.  
 **Blocked by:** Wave 1
 
 ---
