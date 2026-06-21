@@ -55,7 +55,7 @@ When **blocked**:
 
 | Task | Title | Status | Started | Completed | Notes |
 |---|---|---|---|---|---|
-| T008 | Warmup send processor | pending | — | — | — |
+| T008 | Warmup send processor | done | 2026-06-21 | 2026-06-21 | WarmupSendProcessor + ContentService; Message-ID/X-WarmupHub headers, body-hash-only storage, warmup-receive enqueue w/ 2-240min delay + reply/rescue logic, inactive-sender UnrecoverableError, Claude 10s timeout w/ 50-template fallback — all verified by unit tests, typecheck, build |
 | T009 | Warmup receive processor | pending | — | — | — |
 | T010 | Daily schedule + graduation | pending | — | — | — |
 
