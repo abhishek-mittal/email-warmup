@@ -50,17 +50,12 @@ function makeAuth() {
   });
 }
 
-/** Lazy singleton — the underlying pool is only opened on first use so
- *  that build-time page-data collection (which has no env vars) doesn't
- *  fail to import this module. */
-export function getAuth() {
+/**
+ * Lazy singleton — the underlying pool is only opened on first use so
+ * that build-time page-data collection (which has no env vars) doesn't
+ * fail to import this module.
+ */
+export function getAuth(): ReturnType<typeof betterAuth> {
   if (!_auth) _auth = makeAuth();
   return _auth;
 }
-
-// Convenience export for the common case.
-export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
-  get(_target, prop) {
-    return (getAuth() as ReturnType<typeof betterAuth>)[prop as keyof ReturnType<typeof betterAuth>];
-  },
-});

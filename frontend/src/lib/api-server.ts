@@ -1,6 +1,6 @@
 import 'server-only';
 import { headers } from 'next/headers';
-import { auth } from './auth-server';
+import { getAuth } from './auth-server';
 import { mintBearerToken } from './bearer-token';
 
 export class ApiError extends Error {
@@ -20,14 +20,15 @@ function getApiUrl(): string {
 
 /**
  * Server-side authenticated API caller. Reads the better-auth session from
- * the current request's cookies via `auth.api.getSession`, then mints a
- * short-lived HMAC-signed token to forward to the backend in
+ * the current request's cookies via `getAuth().api.getSession`, then mints
+ * a short-lived HMAC-signed token to forward to the backend in
  * `Authorization: Bearer`.
  */
 export async function serverApi<T = unknown>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const auth = getAuth();
   const session = await auth.api.getSession({ headers: await headers() });
   const userId = session?.user?.id;
 
@@ -68,6 +69,7 @@ export async function serverApi<T = unknown>(
  * Components that need to gate rendering on auth.
  */
 export async function currentUserId(): Promise<string | null> {
+  const auth = getAuth();
   const session = await auth.api.getSession({ headers: await headers() });
   return session?.user?.id ?? null;
 }
