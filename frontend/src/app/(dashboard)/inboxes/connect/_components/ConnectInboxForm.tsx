@@ -135,23 +135,31 @@ function CustomSmtpForm() {
   const router = useRouter();
   const { toast, show, clear } = useToasts();
   const [busy, setBusy] = useState(false);
+  // IMAP is optional. When the user ticks the "use IMAP" box we render
+  // the IMAP fields and require them; otherwise we send useImap: false
+  // and the backend stores NULL IMAP columns. The inbox can still send
+  // via SMTP — receive/reply/placement paths no-op gracefully.
+  const [useImap, setUseImap] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
-    const payload = {
+    const payload: Record<string, unknown> = {
       email: String(data.get('email') ?? ''),
       smtpHost: String(data.get('smtpHost') ?? ''),
       smtpPort: Number(data.get('smtpPort') ?? 587),
       smtpUser: String(data.get('smtpUser') ?? ''),
       smtpPassword: String(data.get('smtpPassword') ?? ''),
-      imapHost: String(data.get('imapHost') ?? ''),
-      imapPort: Number(data.get('imapPort') ?? 993),
-      imapUser: String(data.get('imapUser') ?? ''),
-      imapPassword: String(data.get('imapPassword') ?? ''),
+      useImap,
       dkimSelector: (data.get('dkimSelector') as string) || undefined,
     };
+    if (useImap) {
+      payload.imapHost = String(data.get('imapHost') ?? '');
+      payload.imapPort = Number(data.get('imapPort') ?? 993);
+      payload.imapUser = String(data.get('imapUser') ?? '');
+      payload.imapPassword = String(data.get('imapPassword') ?? '');
+    }
 
     setBusy(true);
     try {
@@ -178,12 +186,35 @@ function CustomSmtpForm() {
         <Field label="SMTP port" name="smtpPort" type="number" defaultValue="587" required />
         <Field label="SMTP user" name="smtpUser" required />
         <Field label="SMTP password" name="smtpPassword" type="password" required />
-        <Field label="IMAP host" name="imapHost" required />
-        <Field label="IMAP port" name="imapPort" type="number" defaultValue="993" required />
-        <Field label="IMAP user" name="imapUser" required />
-        <Field label="IMAP password" name="imapPassword" type="password" required />
         <Field label="DKIM selector (optional)" name="dkimSelector" className="sm:col-span-2" />
       </div>
+
+      <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+        <input
+          type="checkbox"
+          checked={useImap}
+          onChange={(e) => setUseImap(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <span>
+          <span className="block font-medium text-slate-900">Also configure IMAP (recommended)</span>
+          <span className="block text-xs text-slate-600">
+            IMAP lets us open, reply to, and rescue-from-spam the warmup emails we send
+            you, and is required to join the warmup pool. Leave unchecked if your SMTP
+            provider does not expose IMAP — sending will still work.
+          </span>
+        </span>
+      </label>
+
+      {useImap ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="IMAP host" name="imapHost" required />
+          <Field label="IMAP port" name="imapPort" type="number" defaultValue="993" required />
+          <Field label="IMAP user" name="imapUser" required />
+          <Field label="IMAP password" name="imapPassword" type="password" required />
+        </div>
+      ) : null}
+
       <button
         type="submit"
         disabled={busy}

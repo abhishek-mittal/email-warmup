@@ -86,14 +86,33 @@ export class InboxService {
       smtpPort: number;
       smtpUser: string;
       smtpPass: string;
-      imapHost: string;
-      imapPort: number;
-      imapUser: string;
-      imapPass: string;
+      useImap?: boolean;
+      imapHost?: string;
+      imapPort?: number;
+      imapUser?: string;
+      imapPass?: string;
       dkimSelector?: string;
     },
   ) {
     await this.billing.assertInboxLimit(userId);
+
+    // Normalize: an all-or-nothing IMAP block. If the user opted in, all
+    // four fields must be present. If they didn't, the IMAP columns stay
+    // NULL and downstream code falls back to SMTP-only behavior.
+    const useImap = dto.useImap === true;
+    const imapFields = useImap
+      ? {
+          imapHost: dto.imapHost!,
+          imapPort: dto.imapPort!,
+          imapUser: dto.imapUser!,
+          imapPass: encrypt(dto.imapPass!),
+        }
+      : {
+          imapHost: null as unknown as string,
+          imapPort: null as unknown as number,
+          imapUser: null as unknown as string,
+          imapPass: null as unknown as string,
+        };
 
     const [inbox] = await db
       .insert(inboxes)
@@ -105,10 +124,7 @@ export class InboxService {
         smtpPort: dto.smtpPort,
         smtpUser: dto.smtpUser,
         smtpPass: encrypt(dto.smtpPass),
-        imapHost: dto.imapHost,
-        imapPort: dto.imapPort,
-        imapUser: dto.imapUser,
-        imapPass: encrypt(dto.imapPass),
+        ...imapFields,
         dkimSelector: dto.dkimSelector,
         status: 'pending',
       })
@@ -140,7 +156,14 @@ export class InboxService {
   }
 
   private async runPrecheck(inboxId: string, provider: string) {
-    const steps: Record<string, boolean> = {};
+    // Each step is one of:
+    //   true  — step passed
+    //   false — step attempted and failed (terminal — precheck throws)
+    //   'skipped' — step not applicable (e.g. user opted out of IMAP for a
+    //               custom SMTP inbox). Counts as "fine" for the
+    //               all-of-activation check.
+    const steps: Record<string, boolean | 'skipped'> = {};
+    let hasImap = false;
     try {
       await this.smtp.verify(inboxId);
       steps.smtp = true;
@@ -149,26 +172,47 @@ export class InboxService {
       throw Object.assign(new Error(err.message || 'SMTP verification failed'), { step: 'smtp' });
     }
 
+    // IMAP is optional. For custom inboxes where the user didn't supply
+    // IMAP creds, we mark imap='skipped' (not false) and do NOT throw —
+    // the inbox can still send via SMTP. For Gmail/Outlook (OAuth) IMAP
+    // is always available via the XOAUTH2 token, so we always verify it.
+    let imapAttempted = false;
+    let imapFailure: Error | null = null;
     try {
       const client = await this.imap.getConnection(inboxId);
-      if (provider === 'gmail') {
-        try {
-          await client.mailboxCreate('WarmupHub');
-        } catch (err: any) {
-          if (!err.message?.includes('exists')) throw err;
-        }
-      } else {
-        try {
-          await client.mailboxCreate('WarmupHub');
-        } catch (err: any) {
-          if (!err.message?.includes('exists')) throw err;
-        }
+      imapAttempted = true;
+      try {
+        await client.mailboxCreate('WarmupHub');
+      } catch (err: any) {
+        if (!err.message?.includes('exists')) throw err;
       }
       await this.imap.close(inboxId);
       steps.imap = true;
+      hasImap = true;
     } catch (err: any) {
-      steps.imap = false;
-      throw Object.assign(new Error(err.message || 'IMAP verification failed'), { step: 'imap' });
+      imapFailure = err;
+      // We don't know yet whether the user supplied IMAP creds; the
+      // ImapClientService throws ImapNotConfiguredError when the row has
+      // no imapHost, and a generic Error otherwise. We can't query the
+      // row inside this try/catch without re-ordering, so defer the
+      // "throw or skip" decision to below.
+    }
+
+    if (!imapAttempted) {
+      // Look up the row to see if the user actually supplied IMAP.
+      const lookup = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+      const row = lookup[0];
+      const noImapConfigured = !row?.imapHost;
+      if (provider !== 'custom' || !noImapConfigured) {
+        // Either: OAuth provider (IMAP is mandatory), or: custom provider
+        // with IMAP creds supplied that failed. Either way, fail.
+        throw Object.assign(
+          imapFailure ?? new Error('IMAP verification failed'),
+          { step: 'imap' },
+        );
+      }
+      // Custom provider, no IMAP creds — skip gracefully.
+      steps.imap = 'skipped';
     }
 
     const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
@@ -185,16 +229,22 @@ export class InboxService {
     });
     steps.dns = dnsResult.spf && dnsResult.dkim && dnsResult.dmarc && dnsResult.mx;
 
-    const allPass = Object.values(steps).every(Boolean);
-    if (allPass) {
+    // Inbox is "active" when SMTP and DNS both pass. 'skipped' counts as
+    // pass; 'true' counts as pass; 'false' would have thrown above.
+    const activationPass =
+      steps.smtp === true && steps.dns === true && steps.imap !== false;
+    if (activationPass) {
       await db
         .update(inboxes)
         .set({ status: 'active', poolConsentAt: new Date() })
         .where(eq(inboxes.id, inboxId));
+    }
 
-      // Enroll the inbox in the warmup pool on first activation. Without this row,
-      // PairingService can never find this inbox as a candidate partner (it queries
-      // pool_members, not inboxes) — pairing would silently never work for it.
+    // Enroll in the warmup pool ONLY if IMAP is actually configured and
+    // passed. The warmup engine needs to confirm delivery via IMAP,
+    // mark-as-read, reply, and rescue from spam. Without IMAP the
+    // inbox is a one-way sender only.
+    if (activationPass && hasImap) {
       await db.insert(poolMembers).values({
         inboxId,
         email: inbox.email,

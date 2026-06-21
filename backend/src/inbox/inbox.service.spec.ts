@@ -3,7 +3,7 @@ import { InboxService } from './inbox.service';
 import { GoogleOAuthService } from './oauth/google-oauth.service';
 import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { BillingService } from '@/billing/billing.service';
-import { ImapClientService } from './imap/imap-client.service';
+import { ImapClientService, ImapNotConfiguredError } from './imap/imap-client.service';
 import { SmtpClientService } from './smtp/smtp-client.service';
 import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
@@ -144,5 +144,76 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
 
     expect(db.insert).not.toHaveBeenCalled();
     expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('connects as SMTP-only when custom inbox has no IMAP creds (imaps=skipped, no pool_members row)', async () => {
+    // Custom SMTP inbox where the user did not tick "also use IMAP".
+    // runPrecheck should still set status=active (SMTP + DNS pass) but
+    // skip the IMAP step and skip pool enrollment.
+    const customInboxRow = {
+      id: 'inbox-2',
+      email: 'smtp-only@sendco.com',
+      provider: 'custom',
+      imapHost: null,    // <- no IMAP configured
+      imapPort: null,
+    };
+
+    // Simulate the real ImapClientService behaviour for a row with no
+    // IMAP: it throws ImapNotConfiguredError instead of opening a
+    // socket.
+    imapClientService.getConnection.mockRejectedValue(
+      new ImapNotConfiguredError('inbox-2'),
+    );
+
+    // The runPrecheck does two selects: one to discover whether IMAP
+    // was configured (after the IMAP client threw), then one to load
+    // the inbox for DNS+pool-enroll. Both return the same row.
+    mockSelectChain([customInboxRow, customInboxRow]);
+    mockInsert();
+    mockUpdate();
+
+    const steps = await (service as any).runPrecheck('inbox-2', 'custom');
+
+    expect(steps.smtp).toBe(true);
+    expect(steps.imap).toBe('skipped');  // not false, not true — user opted out
+    expect(steps.dns).toBe(true);
+
+    // Should have attempted (and been refused) an IMAP connection —
+    // that refusal is what lets us distinguish "no IMAP" from "bad IMAP".
+    expect(imapClientService.getConnection).toHaveBeenCalledTimes(1);
+
+    // Should still mark the inbox active (SMTP + DNS are enough to send).
+    expect(db.update).toHaveBeenCalled();
+    const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
+    expect(setCall.status).toBe('active');
+
+    // Should NOT have inserted a pool_members row (warmup needs IMAP).
+    const insertMock = db.insert as jest.Mock;
+    const poolMembersCall = insertMock.mock.results.find((result) => {
+      const valuesCalls = result.value.values.mock.calls;
+      return valuesCalls.some((call: any[]) => call[0]?.reputation === 50);
+    });
+    expect(poolMembersCall).toBeUndefined();
+  });
+
+  it('throws when a custom inbox supplied IMAP creds but they fail to connect', async () => {
+    // Custom inbox where the user DID tick "use IMAP" and supplied
+    // creds, but the creds are wrong. The precheck must surface the
+    // failure rather than silently treating it as "no IMAP".
+    const customInboxRowWithBadImap = {
+      id: 'inbox-3',
+      email: 'bad-imap@sendco.com',
+      provider: 'custom',
+      imapHost: 'imap.sendco.com',
+      imapPort: 993,
+    };
+
+    imapClientService.getConnection.mockRejectedValue(new Error('auth failed'));
+
+    mockSelectChain([customInboxRowWithBadImap, customInboxRowWithBadImap]);
+    mockInsert();
+    mockUpdate();
+
+    await expect((service as any).runPrecheck('inbox-3', 'custom')).rejects.toThrow(/auth failed/);
   });
 });

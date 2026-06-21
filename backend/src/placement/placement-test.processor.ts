@@ -81,6 +81,16 @@ export class PlacementTestProcessor extends WorkerHost {
   }
 
   private async checkSeed(seed: SeedRow, messageId: string): Promise<Placement> {
+    // Defensive: a seed row missing IMAP creds can't tell us where the
+    // email landed. Report as 'missing' rather than blowing up the whole
+    // batch with an unhandled decrypt/undefined error.
+    if (!seed.imapHost || !seed.imapPort || !seed.imapUser || !seed.imapPass) {
+      this.logger.warn(
+        `Seed ${seed.id} (${seed.email}) missing IMAP creds — treating as missing`,
+      );
+      return 'missing';
+    }
+
     const client = new ImapFlow({
       host: seed.imapHost,
       port: seed.imapPort,

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { ImapFlow } from 'imapflow';
 import { db } from '../db';
 import { inboxes, warmupSends } from '../db/schema';
-import { ImapClientService } from '../inbox/imap/imap-client.service';
+import { ImapClientService, ImapNotConfiguredError } from '../inbox/imap/imap-client.service';
 import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
 import { ContentService, WarmupEmail } from './content.service';
 
@@ -59,7 +59,21 @@ export class WarmupReceiveProcessor extends WorkerHost {
       throw new Error(`Receiver inbox not found: ${receiverInboxId}`);
     }
 
-    const client = await this.imapClientService.getConnection(receiverInboxId);
+    // No-op gracefully when the receiver inbox doesn't have IMAP
+    // configured (custom-SMTP inbox where the user opted out). Sending
+    // still works via SMTP; only the receive path is skipped.
+    let client: ImapFlow;
+    try {
+      client = await this.imapClientService.getConnection(receiverInboxId);
+    } catch (err: any) {
+      if (err instanceof ImapNotConfiguredError) {
+        this.logger.warn(
+          `warmup-receive skipped for ${receiverInboxId}: IMAP not configured`,
+        );
+        return;
+      }
+      throw err;
+    }
     const isGmail = receiverInbox.provider === 'gmail';
 
     const located = await this.locateMessage(client, messageId, receiverInbox.provider);

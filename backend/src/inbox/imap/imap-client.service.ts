@@ -5,6 +5,20 @@ import { db } from '../../db';
 import { inboxes } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 
+/**
+ * Error thrown when a caller asks for an IMAP connection on an inbox that
+ * has no IMAP configured (e.g. a custom-SMTP inbox where the user
+ * didn't tick the "also use IMAP" box at connect time). Warmup/placement
+ * code should catch this and treat it as "this inbox can't receive —
+ * skip" rather than as a hard failure.
+ */
+export class ImapNotConfiguredError extends Error {
+  constructor(inboxId: string) {
+    super(`IMAP not configured for inbox ${inboxId}`);
+    this.name = 'ImapNotConfiguredError';
+  }
+}
+
 @Injectable()
 export class ImapClientService {
   private pool = new Map<string, ImapFlow>();
@@ -17,15 +31,25 @@ export class ImapClientService {
     const inbox = rows[0];
     if (!inbox) throw new Error('Inbox not found');
 
+    // No IMAP creds on this row at all — surface a typed error so the
+    // warmup/placement consumers can no-op instead of throwing.
+    if (!inbox.imapHost || !inbox.imapPort) {
+      throw new ImapNotConfiguredError(inboxId);
+    }
+
     const auth: any =
       inbox.provider === 'gmail' || inbox.provider === 'outlook'
-        ? { user: inbox.email, accessToken: decrypt(inbox.oauthAccessToken!) }
-        : { user: inbox.imapUser!, pass: decrypt(inbox.imapPass!) };
+        ? inbox.oauthAccessToken
+          ? { user: inbox.email, accessToken: decrypt(inbox.oauthAccessToken) }
+          : { user: inbox.email, pass: '' } // should not happen for OAuth inboxes
+        : inbox.imapUser && inbox.imapPass
+          ? { user: inbox.imapUser, pass: decrypt(inbox.imapPass) }
+          : (() => { throw new ImapNotConfiguredError(inboxId); })();
 
     const client = new ImapFlow({
-      host: inbox.imapHost || this.imapHostForProvider(inbox.provider),
-      port: inbox.imapPort || 993,
-      secure: true,
+      host: inbox.imapHost,
+      port: inbox.imapPort,
+      secure: inbox.imapPort === 993,
       auth,
       logger: false,
     });
@@ -40,17 +64,6 @@ export class ImapClientService {
     if (client) {
       await client.logout();
       this.pool.delete(inboxId);
-    }
-  }
-
-  private imapHostForProvider(provider: string): string {
-    switch (provider) {
-      case 'gmail':
-        return 'imap.gmail.com';
-      case 'outlook':
-        return 'outlook.office365.com';
-      default:
-        throw new Error(`Unknown provider: ${provider}`);
     }
   }
 }
