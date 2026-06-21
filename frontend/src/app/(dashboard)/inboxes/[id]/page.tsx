@@ -1,7 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { currentUserId } from '@/lib/api-server';
 import { serverApi } from '@/lib/api-server';
-import { DashboardShell } from '@/components/DashboardShell';
 import { RunPlacementButton } from '@/app/(dashboard)/inboxes/[id]/_components/RunPlacementButton';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +20,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <DashboardShell>
-      <div className="space-y-8">
-        <header>
+    <div className="space-y-8">
+      <header>
           <h1 className="text-2xl font-semibold text-slate-900">{inbox.email}</h1>
           <p className="text-sm text-slate-600 capitalize">{inbox.provider} · {inbox.status}</p>
         </header>
@@ -43,7 +41,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         <a className="inline-block text-sm text-indigo-600 hover:underline" href={`/inboxes/${id}/diagnostics`}>
           View diagnostics →
         </a>
-      </div>
-    </DashboardShell>
+    </div>
   );
 }

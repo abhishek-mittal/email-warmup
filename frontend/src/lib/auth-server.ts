@@ -54,8 +54,46 @@ function makeAuth() {
  * Lazy singleton — the underlying pool is only opened on first use so
  * that build-time page-data collection (which has no env vars) doesn't
  * fail to import this module.
+ *
+ * On first construction we also run better-auth's migrations
+ * idempotently to ensure its `user`/`session`/`account`/`verification`
+ * tables exist. better-auth normally does this lazily on first request,
+ * but with our pg.Pool setup the auto-migration can race with the first
+ * signup and 500. We make the bootstrap explicit so the seed script
+ * (and any other cold-start caller) gets a clean schema.
  */
+let _migrated = false;
+let _migrationPromise: Promise<void> | undefined;
 export function getAuth(): ReturnType<typeof betterAuth> {
-  if (!_auth) _auth = makeAuth();
+  if (!_auth) {
+    _auth = makeAuth();
+    if (!_migrated) {
+      _migrated = true;
+      // In better-auth 1.6.x, `$context` is a Promise (it's the awaitable
+      // returned by `init()`), not the resolved context object. The actual
+      // context (with `runMigrations` attached) is the resolved value.
+      // Run synchronously and return the in-flight promise so the first
+      // signup request awaits the migration before it touches the DB.
+      const ctxPromise = (
+        _auth as unknown as {
+          $context: Promise<{ runMigrations?: () => Promise<void> }>;
+        }
+      ).$context;
+      _migrationPromise = ctxPromise
+        .then((ctx) => ctx.runMigrations?.())
+        .catch((err: unknown) => {
+          console.error('[better-auth] runMigrations failed:', err);
+        });
+    }
+  }
   return _auth;
+}
+
+/**
+ * Awaitable hook for callers (the catch-all route handler, the seed
+ * script) that need to be sure the schema exists before they touch it.
+ */
+export async function waitForAuthSchema(): Promise<void> {
+  getAuth();
+  if (_migrationPromise) await _migrationPromise;
 }

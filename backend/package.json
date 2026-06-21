@@ -37,6 +37,7 @@
     "bullmq": "^5.12.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "imapflow": "^1.0.164",
     "ioredis": "^5.4.0",

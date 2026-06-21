@@ -15,12 +15,18 @@ export async function mintBearerToken(
   const userPart = b64u(userId);
   const expPart = b64u(String(expiry));
   const payload = `v1.${userPart}.${expPart}`;
-  const sig = await hmac(payload, secret);
-  return `${payload}.${b64u(sig)}`;
+  const sig = await hmac(payload, secret); // already base64url
+  return `${payload}.${sig}`;
 }
 
 async function hmac(message: string, secret: string): Promise<string> {
-  // Web Crypto API (works in both browser and Node 18+).
+  // Web Crypto API (works in both browser and Node 18+). We need the raw
+  // HMAC bytes as base64url, not a UTF-8 decoding of those bytes. The
+  // caller's `b64u()` will base64url-encode whatever we return, so
+  // returning a TextDecoder-decoded string would corrupt the signature
+  // with replacement characters (U+FFFD) wherever the raw byte is not
+  // valid UTF-8. The backend verifies the same payload against the
+  // base64url-encoded raw bytes via `timingSafeEqual`.
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
@@ -30,7 +36,16 @@ async function hmac(message: string, secret: string): Promise<string> {
     ['sign'],
   );
   const buf = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-  return new TextDecoder().decode(buf); // bytes -> raw; base64-encoded in mintBearerToken
+  return bytesToBase64Url(new Uint8Array(buf));
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64url');
+  }
+  let bin = '';
+  bytes.forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function b64u(input: string): string {

@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
 import { currentUserId, serverApi } from '@/lib/api-server';
-import { DashboardShell } from '@/components/DashboardShell';
 import { RequestAnalysisButton } from '@/app/(dashboard)/inboxes/[id]/diagnostics/_components/RequestAnalysisButton';
 
 export const dynamic = 'force-dynamic';
@@ -20,9 +19,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <DashboardShell>
-      <div className="space-y-6">
-        <header className="flex items-center justify-between">
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-slate-900">Diagnostics</h1>
           <RequestAnalysisButton inboxId={id} canRun={true} />
         </header>
@@ -39,7 +37,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             <p className="mt-3 text-sm text-slate-500">No issues detected.</p>
           )}
         </div>
-      </div>
-    </DashboardShell>
+    </div>
   );
 }

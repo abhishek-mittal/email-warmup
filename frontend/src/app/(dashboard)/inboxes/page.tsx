@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { currentUserId } from '@/lib/api-server';
-import { DashboardShell } from '@/components/DashboardShell';
 import { getInboxes } from '@/app/(dashboard)/_lib/data';
 import { InboxActions } from '@/app/(dashboard)/inboxes/_components/InboxActions';
 
@@ -14,9 +13,8 @@ export default async function Page() {
   const inboxes = await getInboxes();
 
   return (
-    <DashboardShell>
-      <div className="space-y-6">
-        <header className="flex items-center justify-between">
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inboxes</h1>
             <p className="text-sm text-slate-600">All inboxes connected to your account.</p>
@@ -63,7 +61,6 @@ export default async function Page() {
             </tbody>
           </table>
         </div>
-      </div>
-    </DashboardShell>
+    </div>
   );
 }

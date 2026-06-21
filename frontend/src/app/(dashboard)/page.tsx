@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { currentUserId } from '@/lib/api-server';
-import { DashboardShell } from '@/components/DashboardShell';
 import { getInboxes, getInboxSummaries } from '@/app/(dashboard)/_lib/data';
 
 export const dynamic = 'force-dynamic';
@@ -16,9 +15,8 @@ export default async function Page() {
   ]);
 
   return (
-    <DashboardShell>
-      <div className="space-y-8">
-        <header>
+    <div className="space-y-8">
+      <header>
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-600">
             {summaries.total} {summaries.total === 1 ? 'inbox' : 'inboxes'} connected · avg score {summaries.avgScore ?? '—'}
@@ -76,7 +74,6 @@ export default async function Page() {
             </table>
           </div>
         )}
-      </div>
-    </DashboardShell>
+    </div>
   );
 }

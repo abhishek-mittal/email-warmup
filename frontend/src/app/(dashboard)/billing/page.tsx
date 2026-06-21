@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { currentUserId, serverApi } from '@/lib/api-server';
-import { DashboardShell } from '@/components/DashboardShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +12,8 @@ export default async function Page() {
   );
 
   return (
-    <DashboardShell>
-      <div className="space-y-6">
-        <header>
+    <div className="space-y-6">
+      <header>
           <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
           <p className="text-sm text-slate-600">Current plan: <strong className="capitalize">{status.plan}</strong></p>
         </header>
@@ -31,7 +29,6 @@ export default async function Page() {
             </p>
           ) : null}
         </div>
-      </div>
-    </DashboardShell>
+    </div>
   );
 }

@@ -1,0 +1,13 @@
+{
+  "name": "emailwarm-scripts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Standalone dev scripts for EmailWarm (seed test users, etc). Uses its own node_modules so it can pull `pg` without touching backend/frontend package.json.",
+  "scripts": {
+    "seed-users": "node seed-test-users.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}

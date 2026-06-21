@@ -20,6 +20,12 @@ import { validate } from './config/env.validation';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // Load `backend/.env` automatically. Without this, ConfigModule only
+      // reads `process.env` and any secret that isn't already exported into
+      // the shell (DATABASE_URL, BETTER_AUTH_SECRET, etc.) ends up
+      // undefined — which causes the postgres pool to fail SCRAM auth with
+      // "client password must be a string".
+      envFilePath: ['.env', '../.env'],
       validate,
     }),
     ScheduleModule.forRoot(),
