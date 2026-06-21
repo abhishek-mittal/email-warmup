@@ -1,0 +1,5 @@
+allowBuilds:
+  '@clerk/shared': false
+  '@nestjs/core': true
+  esbuild: true
+  msgpackr-extract: true

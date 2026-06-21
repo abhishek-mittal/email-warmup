@@ -1,0 +1,53 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/sunny-ship-236913/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deploy@sunny-ship-236913.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: docker/login-action@v3
+        with:
+          registry: gcr.io
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - name: Build and push API
+        run: |
+          docker build -t gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }} ./projects/email-warmup/backend
+          docker push gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }}
+      - name: Build and push Web
+        run: |
+          docker build -t gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }} ./projects/email-warmup/frontend
+          docker push gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }}
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy emailwarm-api \
+            --image gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }} \
+            --region asia-south1 \
+            --platform managed \
+            --min-instances 1 \
+            --no-allow-unauthenticated \
+            --set-secrets \"DATABASE_URL=emailwarm/database-url:latest,REDIS_URL=emailwarm/redis-url:latest,ENCRYPTION_KEY=emailwarm/encryption-key:latest,CLERK_SECRET_KEY=emailwarm/clerk-secret-key:latest,CLERK_WEBHOOK_SECRET=emailwarm/clerk-webhook-secret:latest,STRIPE_SECRET_KEY=emailwarm/stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=emailwarm/stripe-webhook-secret:latest,ANTHROPIC_API_KEY=emailwarm/anthropic-api-key:latest,GOOGLE_CLIENT_ID=emailwarm/google-client-id:latest,GOOGLE_CLIENT_SECRET=emailwarm/google-client-secret:latest,MICROSOFT_CLIENT_ID=emailwarm/microsoft-client-id:latest,MICROSOFT_CLIENT_SECRET=emailwarm/microsoft-client-secret:latest\"
+      - name: Deploy Web to Cloud Run
+        run: |
+          gcloud run deploy emailwarm-web \
+            --image gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }} \
+            --region asia-south1 \
+            --platform managed \
+            --min-instances 1 \
+            --no-allow-unauthenticated \
+            --set-secrets \"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=emailwarm/clerk-publishable-key:latest,CLERK_SECRET_KEY=emailwarm/clerk-secret-key:latest\"
+      - name: Run DB migration
+        run: |
+          gcloud run jobs execute emailwarm-migrate --region asia-south1
