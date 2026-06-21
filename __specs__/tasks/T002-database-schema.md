@@ -12,7 +12,7 @@ Define the complete Drizzle ORM schema for all 10 tables and generate the initia
 
 ### Tables to define (in `backend/src/db/schema/`)
 
-1. **users** — Clerk user ID as PK, email, plan, trial_ends_at, stripe IDs, slack_webhook_url
+1. **users** — better-auth user ID as PK, email, plan, trial_ends_at, stripe IDs, slack_webhook_url
 2. **inboxes** — inbox config, provider, all encrypted credential fields, warmup state, status
 3. **pool_members** — pool enrollment record, domain, provider, industry, reputation, quarantined
 4. **warmup_sends** — per-send record with all timestamp fields and engagement flags

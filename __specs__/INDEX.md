@@ -28,7 +28,7 @@ Track all progress in **SPEC-STATUS.md**.
 | T001 | Project scaffold + infra config | W0 | domains/infra.md |
 | T002 | Database schema + migrations | W0 | — |
 | T003 | BullMQ + Redis setup | W0 | — |
-| T004 | Clerk auth guard + user sync | W1 | — |
+| T004 | Better-auth guard + user sync | W1 | docs/05-agent-skills/02-skill-auth.md |
 | T005 | Gmail OAuth connect | W1 | services/inbox.md |
 | T006 | Outlook OAuth connect | W1 | services/inbox.md |
 | T007 | Custom SMTP/IMAP connect | W1 | services/inbox.md |

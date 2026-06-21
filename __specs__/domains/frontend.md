@@ -77,20 +77,28 @@ Sections:
 
 ## Routing and auth
 
-All routes under `/(dashboard)` are protected by Clerk middleware.  
-Public routes: `/sign-in`, `/sign-up`, `/api/webhooks/*`
+All routes under `/(dashboard)` are protected by better-auth session middleware
+(`getSessionCookie()` from `better-auth/cookies` in `src/middleware.ts`).
+Public routes: `/sign-in`, `/sign-up`, `/api/auth/*`, `/api/webhooks/*`
 
 Redirects:
-- Unauthenticated → `/sign-in`
+- Unauthenticated → `/sign-in?redirect_url=...`
 - Authenticated + no inboxes → `/inboxes/connect` (first-run state)
-- OAuth callback → `/api/auth/callback` → `/inboxes` after pre-check
+- Inbox-connect OAuth callback → `GET /auth/callback/{google,microsoft}` on the **backend** → redirects to `/inboxes`
+
+The frontend never builds its own Google/Microsoft OAuth URL — it only calls
+`/auth/{gmail,outlook}/connect` on the backend and follows the returned redirect.
+The `useApi()` / `serverApi()` helpers mint a `v1.<uid>.<exp>.<sig>` Bearer token
+from the active better-auth session and attach it as `Authorization: Bearer` on
+every backend call. The backend verifies the HMAC against the shared
+`BETTER_AUTH_SECRET`.
 
 ---
 
 ## Acceptance criteria (T018)
 
 - [ ] `/` renders inbox list with correct score and status for each inbox
-- [ ] Gmail OAuth connect flow completes end-to-end and inbox appears in list
+- [ ] Gmail inbox-connect OAuth flow completes end-to-end and inbox appears in list
 - [ ] Inbox detail page shows score gauge with correct colour for score range
 - [ ] Placement bar shows three distinct segments (Primary / Promotions / Spam)
 - [ ] Score breakdown hidden for Starter plan user — shows locked state
@@ -98,4 +106,5 @@ Redirects:
 - [ ] Billing page shows current plan with correct inbox count / limit
 - [ ] Stripe checkout redirect works from billing page
 - [ ] All pages render without console errors
-- [ ] Clerk middleware blocks access to dashboard routes for unauthenticated users
+- [ ] Better-auth middleware blocks access to dashboard routes for unauthenticated users (redirects to `/sign-in`)
+- [ ] No `clerk`, `Clerk`, `@clerk/*` in `src/` or `package.json`

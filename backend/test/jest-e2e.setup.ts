@@ -3,9 +3,8 @@ process.env.DATABASE_URL =
 process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/1';
 process.env.ENCRYPTION_KEY =
   process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
-process.env.CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || 'sk_test_dummy';
-process.env.CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY || 'pk_test_dummy';
-process.env.CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET || 'whsec_dummy';
+process.env.BETTER_AUTH_SECRET =
+  process.env.BETTER_AUTH_SECRET || 'e2e-test-better-auth-secret-not-for-prod-use-32-chars';
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_dummy';
 process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_dummy';
 process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'sk-ant-dummy';

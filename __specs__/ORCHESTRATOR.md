@@ -36,12 +36,12 @@ This file defines the exact build sequence for Phase 1. Follow it. Do not skip w
 
 | Task | Description | Parallelizable? |
 |---|---|---|
-| T004 | ClerkGuard, ClerkWebhook controller, user sync, plan gating | Yes (with T005) |
+| T004 | BetterAuthGuard, user sync, plan gating | Yes (with T005) |
 | T005 | Gmail OAuth 2.0 exchange + token storage + pre-check | Yes (with T006, T007) |
 | T006 | Outlook OAuth 2.0 exchange + token storage + pre-check | Yes (with T005, T007) |
 | T007 | Custom SMTP/IMAP credential input + pre-check | Yes (with T005, T006) |
 
-**Wave 1 gate:** A user can sign in via Clerk, connect a Gmail inbox, and see it appear in `GET /inboxes` with status `pending` → `active` after pre-check passes.
+**Wave 1 gate:** A user can sign in via better-auth, connect a Gmail inbox, and see it appear in `GET /inboxes` with status `pending` → `active` after pre-check passes.
 
 ---
 
@@ -102,7 +102,7 @@ This file defines the exact build sequence for Phase 1. Follow it. Do not skip w
 |---|---|---|
 | T018 | Next.js 15 App Router dashboard: all pages and flows | — (depends on all prior waves) |
 
-**Wave 6 gate:** All Phase 1 user flows work end-to-end in the browser without console errors. Clerk auth protects all dashboard routes.
+**Wave 6 gate:** All Phase 1 user flows work end-to-end in the browser without console errors. Better-auth session middleware protects all dashboard routes.
 
 ---
 

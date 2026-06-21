@@ -54,7 +54,7 @@ export type DB = typeof db;
 ### users
 ```typescript
 export const users = pgTable('users', {
-  id:              text('id').primaryKey(),          // Clerk user ID
+  id:              text('id').primaryKey(),          // better-auth user ID
   email:           text('email').notNull().unique(),
   plan:            text('plan').notNull().default('trial'), // trial|starter|growth|agency|enterprise
   trialEndsAt:     timestamp('trial_ends_at'),

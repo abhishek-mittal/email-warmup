@@ -9,7 +9,7 @@ Skill files tell coding agents exactly how to work within each technical domain.
 | Skill file | Domain | Load when... |
 |---|---|---|
 | [01-skill-database.md](01-skill-database.md) | Database / Drizzle ORM | Working on schema, migrations, queries |
-| [02-skill-auth.md](02-skill-auth.md) | Auth / Clerk | Working on auth guards, user sync, JWT |
+| [02-skill-auth.md](02-skill-auth.md) | Auth / better-auth (HMAC bearer) | Working on auth guards, user sync, JWT-shaped tokens |
 | [03-skill-inbox-connection.md](03-skill-inbox-connection.md) | Inbox OAuth + SMTP/IMAP | Working on inbox connect, token refresh, imapflow |
 | [04-skill-warmup-engine.md](04-skill-warmup-engine.md) | Warmup scheduler + BullMQ | Working on send/receive workers, ramp curve, pairing |
 | [05-skill-monitoring.md](05-skill-monitoring.md) | DNS + Blacklist monitoring | Working on DNS checks, RBL checks, alert dispatch |
@@ -17,7 +17,7 @@ Skill files tell coding agents exactly how to work within each technical domain.
 | [07-skill-diagnostics.md](07-skill-diagnostics.md) | AI diagnostics | Working on spam cause analysis, readiness report |
 | [08-skill-scoring.md](08-skill-scoring.md) | Reputation scoring | Working on score computation, history, trends |
 | [09-skill-billing.md](09-skill-billing.md) | Stripe billing | Working on plans, webhooks, entitlements |
-| [10-skill-frontend.md](10-skill-frontend.md) | Next.js 15 frontend | Working on dashboard, components, data fetching |
+| [10-skill-frontend.md](10-skill-frontend.md) | Next.js 16 frontend (better-auth) | Working on dashboard, components, data fetching |
 
 ---
 

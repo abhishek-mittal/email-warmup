@@ -43,7 +43,7 @@ projects/email-warmup/
 | emailwarm-api | backend/Dockerfile | 3001 | 1 |
 | emailwarm-web | frontend/Dockerfile | 3000 | 1 |
 
-Both services use `--no-allow-unauthenticated` at the network level; auth handled by Clerk at app level.
+Both services use `--no-allow-unauthenticated` at the network level; auth handled by better-auth at app level.
 
 ### Cloud SQL (existing dmphub instance)
 - Instance: `dmphub-pg` (already running)
@@ -60,8 +60,7 @@ Both services use `--no-allow-unauthenticated` at the network level; auth handle
 Secrets to create:
 ```
 emailwarm/encryption-key          ← 32-byte hex AES key
-emailwarm/clerk-secret-key
-emailwarm/clerk-webhook-secret
+emailwarm/better-auth-secret      ← 32+ char random string; shared with frontend
 emailwarm/stripe-secret-key
 emailwarm/stripe-webhook-secret
 emailwarm/anthropic-api-key

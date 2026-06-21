@@ -60,8 +60,9 @@ Complete Next.js 15 App Router frontend: all pages, components, and auth flows c
 
 ### Auth flow
 
-- All `/(dashboard)` routes protected by Clerk middleware
-- OAuth callback: `GET /api/auth/callback/google` → hit backend → redirect to `/inboxes`
+- All `/(dashboard)` routes protected by better-auth session middleware (`getSessionCookie()` from `better-auth/cookies` in `src/middleware.ts`)
+- OAuth (sign-in): handled by better-auth's own routes at `/api/auth/*` (catch-all `toNextJsHandler(getAuth())`)
+- OAuth (inbox connect): `GET /auth/gmail/connect` + `GET /auth/callback/google` (or `/outlook`/microsoft) on the **backend** — frontend never builds its own Google URL
 - First-run redirect: authenticated user with no inboxes → `/inboxes/connect`
 
 ---
@@ -69,7 +70,7 @@ Complete Next.js 15 App Router frontend: all pages, components, and auth flows c
 ## Acceptance criteria
 
 - [ ] `/` renders inbox list with correct score badge colours for all score ranges
-- [ ] Gmail OAuth connect flow completes and inbox appears in `/inboxes` list
+- [ ] Gmail inbox-connect flow completes and inbox appears in `/inboxes` list
 - [ ] Score gauge colour is green for 80+, blue for 60–79, yellow for 40–59, orange for 20–39, red for 0–19
 - [ ] `<PlacementBar>` shows Promotions as amber — not combined with Spam (red)
 - [ ] Score breakdown (DNS / blacklist / placement split) NOT shown for Starter/Trial — locked state shown instead
@@ -77,7 +78,8 @@ Complete Next.js 15 App Router frontend: all pages, components, and auth flows c
 - [ ] DNS status cards show red for any critical issue code
 - [ ] `/billing` shows correct inbox count vs. limit for current plan
 - [ ] Stripe checkout redirects on "Upgrade" click
-- [ ] Clerk middleware blocks `/inboxes` for unauthenticated users (redirects to `/sign-in`)
+- [ ] Better-auth middleware blocks `/inboxes` for unauthenticated users (redirects to `/sign-in`)
+- [ ] Frontend mints a `v1.<uid>.<exp>.<sig>` Bearer token from the better-auth session and the backend accepts it (no Clerk anywhere)
 - [ ] All pages render with 0 console errors in browser DevTools
 
 ## Mark done in SPEC-STATUS.md when all criteria above are verified

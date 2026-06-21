@@ -9,8 +9,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Next.js 15 Frontend                         │
-│              (App Router + Server Actions + RSC)                 │
+│                      Next.js 16 Frontend                         │
+│              (App Router + Server Actions + RSC + better-auth)     │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ HTTPS / REST / SSE
 ┌──────────────────────────▼──────────────────────────────────────┐
@@ -41,7 +41,7 @@
 
 | Service | NestJS Module | Queue | Cron | Description |
 |---|---|---|---|---|
-| Auth | AuthModule | — | — | Clerk webhook sync, JWT validation |
+| Auth | AuthModule | — | — | BetterAuthGuard HMAC verification of better-auth bearer tokens |
 | Inbox | InboxModule | — | — | CRUD for connected inboxes, OAuth token management |
 | Pool | PoolModule | — | — | Warmup pool membership, pairing algorithm |
 | Warmup Engine | WarmupModule | `warmup-send`, `warmup-receive` | Daily schedule per inbox | Send warmup emails, simulate engagement |
@@ -61,7 +61,7 @@
 ```sql
 CREATE TABLE users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  clerk_id        TEXT UNIQUE NOT NULL,
+  clerk_id        TEXT UNIQUE NOT NULL,             -- better-auth user id (column name kept for migration history)
   email           TEXT UNIQUE NOT NULL,
   industry        TEXT,                          -- saas|agency|finance|legal|ecommerce|other
   plan_id         TEXT NOT NULL DEFAULT 'trial', -- trial|starter|growth|agency|enterprise
@@ -264,7 +264,7 @@ CREATE TABLE notifications (
 ## 4. API contracts
 
 ### Auth
-All endpoints require `Authorization: Bearer <clerk_jwt>` unless marked `[public]`.
+All endpoints require `Authorization: Bearer <better_auth_token>` unless marked `[public]`. Token format: `v1.<base64url(userId)>.<base64url(expMs)>.<base64url(hmac)>` — HMAC-SHA-256 keyed by `BETTER_AUTH_SECRET`. See `docs/05-agent-skills/02-skill-auth.md` for the full contract.
 
 ### POST /api/inboxes — Connect inbox
 ```
@@ -390,19 +390,19 @@ Response 200:
 Response 200: { "url": "string" }
 ```
 
-### POST /api/webhooks/clerk — Clerk user lifecycle [public, SVIX-signed]
 ### POST /api/webhooks/stripe — Stripe billing events [public, Stripe-signed]
+
+*(No `POST /api/webhooks/clerk` — better-auth manages user lifecycle directly in Postgres. To react to user sign-ups, wire a `databaseHooks.user.create.after` in `frontend/src/lib/auth-server.ts` that calls the backend's `UserSyncService.upsertUser()` via an internal API.)*
 
 ---
 
 ## 5. Auth design
-
-- **Identity provider:** Clerk
-- **Session:** Clerk issues a JWT (RS256) per session. Backend validates via Clerk's JWKS endpoint.
-- **NestJS guard:** `ClerkAuthGuard` — validates JWT on every protected request, attaches `userId` to request context
+better-auth (MIT, self-hosted, runs in the Next.js frontend process)
+- **Session:** better-auth stores sessions in a Postgres table it manages. On every request, the frontend mints a short-lived `v1.<uid>.<exp>.<sig>` bearer token from the active session and sends it as `Authorization: Bearer`.
+- **NestJS guard:** `BetterAuthGuard` — HMAC-verifies the token against the shared `BETTER_AUTH_SECRET` (constant-time compare + expiry check), attaches the verified `userId` to `request.userId`. No third-party API call, no DB lookup on the API side.
 - **OAuth tokens for inboxes:** Stored encrypted (AES-256-GCM) in `inboxes` table. Key in GCP Secret Manager.
 - **Token refresh:** BullMQ repeating job `oauth-token-refresh` runs every 45 minutes per OAuth inbox. On 401 from IMAP/SMTP, triggers immediate refresh. On refresh failure, sets inbox status = `error`, fires `token_revoked` notification.
-- **Webhook verification:** Clerk webhooks verified via SVIX signature. Stripe webhooks verified via `stripe.webhooks.constructEvent`.
+- **Webhook verification:** Only Stripe webhooks (signed via `stripe.webhooks.constructEvent`). No Clerk webhook anymore — better-auth manages user lifecycle directly in Postgres.
 
 ---
 
@@ -548,8 +548,7 @@ placement_sub_score:
 ```
 DATABASE_URL
 REDIS_URL
-CLERK_SECRET_KEY
-CLERK_WEBHOOK_SECRET
+BETTER_AUTH_SECRET
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 ENCRYPTION_KEY           # AES-256 key for OAuth tokens + SMTP passwords

@@ -22,7 +22,7 @@ Scaffold `backend/` with:
   - `@nestjs/core`, `@nestjs/common`, `@nestjs/config`, `@nestjs/platform-express`
   - `drizzle-orm`, `drizzle-kit`, `pg`
   - `bullmq`, `ioredis`
-  - `@clerk/backend`, `svix`
+  - `better-auth` (self-hosted auth — see `docs/05-agent-skills/02-skill-auth.md`)
   - `stripe`
   - `@anthropic-ai/sdk`
   - `nodemailer`, `imapflow`
@@ -35,9 +35,9 @@ Scaffold `backend/` with:
 
 Scaffold `frontend/` with:
 - `npx create-next-app@latest . --typescript --app --tailwind --eslint --src-dir=false`
-- Install: `@clerk/nextjs`, `swr`, `recharts`
-- Root layout with `<ClerkProvider>`
-- Middleware protecting all non-public routes
+- Install: `better-auth`, `pg`, `swr`, `recharts`
+- Root layout with `<AuthProvider>` from `src/components/AuthProvider.tsx` (better-auth session wrapper)
+- Middleware protecting all non-public routes via `getSessionCookie()` from `better-auth/cookies`
 - `.env.example` with required env vars
 
 ### Docker + CI

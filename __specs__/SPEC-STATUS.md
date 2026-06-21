@@ -170,3 +170,9 @@ All of the following must be true before Phase 1 is declared done:
 | 2 | The diagnostics skill file lists 4 automatic trigger conditions (blacklist hit, score drop >15, spam placement >20%, manual). T012 and T013 wire the first two and T015 builds the consumer + manual trigger, but nothing enqueues a `diagnostics` job when a placement test returns `spamPct > 20%` — T014's task spec doesn't ask for this integration and it was deliberately left out of both T014's and T015's scope to avoid one task reaching into the other's files. Needs a small follow-up (likely a 2-line addition to T014's `placement-test.processor.ts` once both are merged) if "auto_spam" diagnostics triggering is required for Phase 1 completion. | Minor | Controller (pre-flight, Wave 4) | No |
 
 *Add issues here as they are discovered during implementation.*
+
+---
+
+## Migration notice (2026-06-21)
+
+The Wave 1 / 3 / 4 / 6 task notes above mention "Clerk" because they describe what was originally built and tested at the time. After Wave 6, the project was migrated from Clerk to [better-auth](https://better-auth.com) (MIT, self-hosted) — see the "Auth migration — Clerk → better-auth" section above for the full diff, including commits `0fa039f` / `21de968` / `77e9d1c`. The historical "Clerk" mentions here are kept verbatim so the spec row accurately reflects what was tested at the time each task was marked done.

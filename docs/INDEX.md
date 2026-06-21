@@ -28,11 +28,11 @@
 | Job queue | BullMQ + Redis | Millisecond-precision delays, per-inbox rate limiting, parent-child flows |
 | Database | PostgreSQL 16 | Relational integrity for pool pairing, tenant isolation, audit logs |
 | ORM | Drizzle ORM | Type-safe, zero-overhead SQL, schema-as-code |
-| Auth | Clerk | OAuth social login + email/password; JWT issued per session |
+| Auth | better-auth (self-hosted) | OAuth social login + email/password; HMAC-signed bearer tokens issued per session |
 | Email send | Nodemailer (raw SMTP) | Direct protocol control — no ESP abstraction |
 | IMAP client | imapflow | Modern OAuth-aware IMAP; handles token refresh natively |
 | AI content | Anthropic Claude API | Industry-aware warmup email generation |
-| Frontend | Next.js 15 (App Router) | Consistent with dmphub; RSC + server actions |
+| Frontend | Next.js 16 (App Router) | Latest stable; RSC + server actions |
 | Hosting | GCP Cloud Run | Reuse dmphub infrastructure (asia-south1) |
 | Database host | GCP Cloud SQL (PostgreSQL) | Reuse dmphub Cloud SQL instance |
 | Cache / Queue | GCP Memorystore (Redis) | Reuse dmphub Memorystore |
