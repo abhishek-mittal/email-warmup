@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EmailWarm",
-  description: "Peer-to-peer email inbox warming",
+  title: "EmailWarm — Inbox Warming for Outreach Teams",
+  description:
+    "Peer-to-peer email inbox warming. Build sender reputation, monitor deliverability, and protect every campaign.",
 };
 
 export default function RootLayout({
@@ -29,7 +30,7 @@ export default function RootLayout({
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <body className="min-h-full flex flex-col">{children}</body>
+        <body className="min-h-full bg-slate-50 text-slate-900">{children}</body>
       </html>
     </ClerkProvider>
   );
