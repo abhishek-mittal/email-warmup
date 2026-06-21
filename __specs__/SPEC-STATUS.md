@@ -137,5 +137,6 @@ All of the following must be true before Phase 1 is declared done:
 | ID | Description | Severity | Raised by | Resolved |
 |---|---|---|---|---|
 | 1 | `ScoringService.computePlacementScore` uses non-null assertions (`primaryCount!`, `promotionsCount!`, `seedCount!`) on columns that are nullable in the schema; a real row with a null count would produce `NaN` rather than throwing/defaulting. Inherited from the controller's own addendum code sample, not implementer error. | Minor | T013 reviewer | No |
+| 2 | The diagnostics skill file lists 4 automatic trigger conditions (blacklist hit, score drop >15, spam placement >20%, manual). T012 and T013 wire the first two and T015 builds the consumer + manual trigger, but nothing enqueues a `diagnostics` job when a placement test returns `spamPct > 20%` — T014's task spec doesn't ask for this integration and it was deliberately left out of both T014's and T015's scope to avoid one task reaching into the other's files. Needs a small follow-up (likely a 2-line addition to T014's `placement-test.processor.ts` once both are merged) if "auto_spam" diagnostics triggering is required for Phase 1 completion. | Minor | Controller (pre-flight, Wave 4) | No |
 
 *Add issues here as they are discovered during implementation.*
