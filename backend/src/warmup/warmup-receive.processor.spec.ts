@@ -191,10 +191,11 @@ describe('WarmupReceiveProcessor', () => {
   it('rescues from spam before any other action when message found in spam and "rescue" requested', async () => {
     const order: string[] = [];
     const client = makeImapClient();
-    // First mailbox checked is INBOX (miss), second is Spam (hit).
+    // First mailbox checked is INBOX (miss), second is Spam (hit). After the
+    // rescue move, INBOX is re-checked and must hit this time (relocated).
     client.search.mockImplementation(async () => {
       const opened = client.mailboxOpen.mock.calls.at(-1)?.[0];
-      return opened === '[Gmail]/Spam' ? [1] : [];
+      return opened === '[Gmail]/Spam' || client.mailboxOpen.mock.calls.length > 2 ? [1] : [];
     });
     client.messageMove.mockImplementation(async (_seq: unknown, dest: string) => {
       order.push(`move:${dest}`);
@@ -266,7 +267,7 @@ describe('WarmupReceiveProcessor', () => {
     });
     client.search.mockImplementation(async () => {
       const opened = client.mailboxOpen.mock.calls.at(-1)?.[0];
-      return opened === 'Junk Email' ? [1] : [];
+      return opened === 'Junk Email' || client.mailboxOpen.mock.calls.length > 2 ? [1] : [];
     });
     imapClientService.getConnection.mockResolvedValue(client);
     mockSelectInbox(outlookInbox);
@@ -278,11 +279,19 @@ describe('WarmupReceiveProcessor', () => {
   });
 
   it('creates the WarmupHub mailbox when it does not already exist before filing', async () => {
+    const client = makeImapClient();
+    imapClientService.getConnection.mockResolvedValue(client);
+    mockSelectInbox(receiverInbox);
+    mockUpdate();
+
+    await processor.process(makeJob({ actions: [] }));
+
+    expect(client.mailboxCreate).toHaveBeenCalledWith('WarmupHub');
+  });
+
+  it('swallows an "already exists" error from mailboxCreate and still files the message', async () => {
     const client = makeImapClient({
-      mailboxOpen: jest.fn().mockImplementation(async (path: string) => {
-        if (path === 'WarmupHub') throw new Error('Mailbox does not exist');
-        return { path };
-      }),
+      mailboxCreate: jest.fn().mockRejectedValue(new Error('Mailbox already exists')),
     });
     imapClientService.getConnection.mockResolvedValue(client);
     mockSelectInbox(receiverInbox);
@@ -291,6 +300,50 @@ describe('WarmupReceiveProcessor', () => {
     await processor.process(makeJob({ actions: [] }));
 
     expect(client.mailboxCreate).toHaveBeenCalledWith('WarmupHub');
+    expect(client.messageMove).toHaveBeenCalledWith(expect.anything(), 'WarmupHub');
+  });
+
+  it('never selects (mailboxOpen) the WarmupHub folder before moving the message into it', async () => {
+    const client = makeImapClient();
+    imapClientService.getConnection.mockResolvedValue(client);
+    mockSelectInbox(receiverInbox);
+    mockUpdate();
+
+    await processor.process(makeJob({ actions: [] }));
+
+    // The destination mailbox must only ever be touched via mailboxCreate,
+    // never via mailboxOpen -- opening it would change the selected mailbox
+    // and corrupt the sequence-number context for messageMove.
+    expect(client.mailboxOpen).not.toHaveBeenCalledWith('WarmupHub');
+    expect(client.mailboxCreate).toHaveBeenCalledWith('WarmupHub');
+    expect(client.messageMove).toHaveBeenCalledWith(expect.anything(), 'WarmupHub');
+
+    // And mailboxCreate must happen strictly before the move.
+    const createOrder = client.mailboxCreate.mock.invocationCallOrder[0];
+    const moveOrder = client.messageMove.mock.invocationCallOrder[0];
+    expect(createOrder).toBeLessThan(moveOrder);
+  });
+
+  it('throws and does not proceed to flag/file when relocation after rescue fails', async () => {
+    const client = makeImapClient();
+    client.search.mockImplementation(async () => {
+      const opened = client.mailboxOpen.mock.calls.at(-1)?.[0];
+      if (opened === '[Gmail]/Spam') return [1];
+      if (opened === 'INBOX') return []; // post-rescue relocation finds nothing
+      return [];
+    });
+    imapClientService.getConnection.mockResolvedValue(client);
+    mockSelectInbox(receiverInbox);
+    mockUpdate();
+
+    await expect(
+      processor.process(makeJob({ actions: ['rescue', 'open', 'star'] })),
+    ).rejects.toThrow('Rescued message not found in INBOX after move');
+
+    expect(client.messageMove).toHaveBeenCalledWith(expect.anything(), 'INBOX');
+    expect(client.messageFlagsAdd).not.toHaveBeenCalled();
+    expect(client.messageMove).not.toHaveBeenCalledWith(expect.anything(), 'WarmupHub');
+    expect(db.update).not.toHaveBeenCalled();
   });
 
   it('best-effort detects the Gmail tab from labels and sets landed_in_tab', async () => {
@@ -359,9 +412,10 @@ describe('WarmupReceiveProcessor', () => {
   it('performs actions in the fixed order rescue -> open -> star -> reply -> file regardless of payload order', async () => {
     const order: string[] = [];
     const client = makeImapClient();
+    // First INBOX check misses, Spam hits, post-rescue INBOX re-check hits (relocated).
     client.search.mockImplementation(async () => {
       const opened = client.mailboxOpen.mock.calls.at(-1)?.[0];
-      return opened === '[Gmail]/Spam' ? [1] : [];
+      return opened === '[Gmail]/Spam' || client.mailboxOpen.mock.calls.length > 2 ? [1] : [];
     });
     client.messageMove.mockImplementation(async (_seq: unknown, dest: string) => {
       order.push(`move:${dest}`);

@@ -78,7 +78,10 @@ export class WarmupReceiveProcessor extends WorkerHost {
       await client.messageMove(current.seq, 'INBOX');
       updates.rescuedAt = new Date();
       const relocated = await this.locateInMailbox(client, 'INBOX', messageId, false);
-      if (relocated) current = relocated;
+      if (!relocated) {
+        throw new Error('Rescued message not found in INBOX after move');
+      }
+      current = relocated;
     }
 
     const needsFetch =
@@ -149,11 +152,20 @@ export class WarmupReceiveProcessor extends WorkerHost {
     await client.messageMove(seq, WARMUP_HUB_FOLDER);
   }
 
+  /**
+   * Ensures the mailbox exists without ever selecting it. Must never call
+   * mailboxOpen on `path` here: doing so would change the currently selected
+   * mailbox out from under the caller, which would break a subsequent
+   * messageMove (its range is resolved against whatever mailbox is open).
+   */
   private async ensureMailbox(client: ImapFlow, path: string): Promise<void> {
     try {
-      await client.mailboxOpen(path);
-    } catch {
       await client.mailboxCreate(path);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/already\s*exists/i.test(message)) {
+        throw err;
+      }
     }
   }
 
