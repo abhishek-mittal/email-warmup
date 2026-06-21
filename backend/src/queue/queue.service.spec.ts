@@ -22,6 +22,7 @@ describe('QueueService', () => {
           'score-compute',
           'notify',
           'token-refresh',
+          'readiness-report',
         ].map((name) => ({
           provide: getQueueToken(name),
           useValue: mockQueue,
@@ -34,19 +35,16 @@ describe('QueueService', () => {
 
   it('adds a job to warmup-send queue', async () => {
     await service.add('warmup-send', { inboxId: '123' });
-    expect(mockQueue.add).toHaveBeenCalledWith(
-      'warmup-send',
-      { inboxId: '123' },
-      undefined,
-    );
+    expect(mockQueue.add).toHaveBeenCalledWith('warmup-send', { inboxId: '123' }, undefined);
   });
 
   it('adds a job with options', async () => {
     await service.add('dns-check', { inboxId: '123' }, { delay: 1000 });
-    expect(mockQueue.add).toHaveBeenCalledWith(
-      'dns-check',
-      { inboxId: '123' },
-      { delay: 1000 },
-    );
+    expect(mockQueue.add).toHaveBeenCalledWith('dns-check', { inboxId: '123' }, { delay: 1000 });
+  });
+
+  it('adds a job to readiness-report queue', async () => {
+    await service.add('readiness-report', { inboxId: '123' });
+    expect(mockQueue.add).toHaveBeenCalledWith('readiness-report', { inboxId: '123' }, undefined);
   });
 });

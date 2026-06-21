@@ -11,6 +11,7 @@ export const QUEUE_NAMES = [
   'score-compute',
   'notify',
   'token-refresh',
+  'readiness-report',
 ] as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];

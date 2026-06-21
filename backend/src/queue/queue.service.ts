@@ -16,6 +16,7 @@ export class QueueService {
     @InjectQueue('score-compute') private readonly scoreComputeQueue: Queue,
     @InjectQueue('notify') private readonly notifyQueue: Queue,
     @InjectQueue('token-refresh') private readonly tokenRefreshQueue: Queue,
+    @InjectQueue('readiness-report') private readonly readinessReportQueue: Queue,
   ) {}
 
   private getQueue(name: QueueName): Queue {
@@ -36,6 +37,8 @@ export class QueueService {
         return this.notifyQueue;
       case 'token-refresh':
         return this.tokenRefreshQueue;
+      case 'readiness-report':
+        return this.readinessReportQueue;
       default:
         throw new Error(`Unknown queue: ${name}`);
     }
