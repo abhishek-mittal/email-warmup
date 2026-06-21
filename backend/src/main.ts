@@ -6,6 +6,10 @@ import { ClerkGuard } from './auth/clerk.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Raw-body middleware for webhook paths MUST be registered before the
+  // global bodyParser.json() — Stripe and Clerk both verify signatures
+  // against the unparsed request body. Order matters.
+  app.use('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }));
   app.use('/webhooks/clerk', bodyParser.raw({ type: 'application/json' }));
   app.use(bodyParser.json());
   app.enableCors();

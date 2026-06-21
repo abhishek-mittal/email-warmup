@@ -13,6 +13,7 @@ import { MonitorModule } from './monitor/monitor.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { PlacementModule } from './placement/placement.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { NotifyModule } from './notify/notify.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -32,6 +33,7 @@ import { validate } from './config/env.validation';
     ScoringModule,
     PlacementModule,
     DiagnosticsModule,
+    NotifyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

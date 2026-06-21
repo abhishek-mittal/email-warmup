@@ -199,6 +199,11 @@ export const diagnostics = pgTable('diagnostics', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const stripeEvents = pgTable('stripe_events', {
+  id: text('id').primaryKey(), // the Stripe event id, e.g. 'evt_...'
+  processedAt: timestamp('processed_at').defaultNow().notNull(),
+});
+
 export const notifications = pgTable('notifications', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: text('user_id')

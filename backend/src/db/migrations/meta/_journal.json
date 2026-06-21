@@ -15,6 +15,13 @@
       "when": 1782042549738,
       "tag": "0001_clever_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782044443871,
+      "tag": "0002_petite_bloodstrike",
+      "breakpoints": true
     }
   ]
 }
