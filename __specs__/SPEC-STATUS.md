@@ -136,6 +136,6 @@ All of the following must be true before Phase 1 is declared done:
 
 | ID | Description | Severity | Raised by | Resolved |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 1 | `ScoringService.computePlacementScore` uses non-null assertions (`primaryCount!`, `promotionsCount!`, `seedCount!`) on columns that are nullable in the schema; a real row with a null count would produce `NaN` rather than throwing/defaulting. Inherited from the controller's own addendum code sample, not implementer error. | Minor | T013 reviewer | No |
 
 *Add issues here as they are discovered during implementation.*
