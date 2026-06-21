@@ -1,7 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { desc, eq } from 'drizzle-orm';
-import { ClerkGuard } from '@/auth/clerk.guard';
+import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { db } from '../db';
 import { inboxes, placementTests } from '../db/schema';
 import { PlacementService, RunTestResult } from './placement.service';
@@ -28,7 +28,7 @@ export interface PlacementResultResponse {
  * inboxes.
  */
 @Controller('inboxes')
-@UseGuards(ClerkGuard)
+@UseGuards(BetterAuthGuard)
 export class PlacementController {
   constructor(private readonly placementService: PlacementService) {}
 

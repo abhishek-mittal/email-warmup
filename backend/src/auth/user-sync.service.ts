@@ -5,12 +5,7 @@ import { users } from '../db/schema';
 
 @Injectable()
 export class UserSyncService {
-  async upsertUser(input: {
-    id: string;
-    email: string;
-    plan?: string;
-    trialEndsAt?: Date;
-  }) {
+  async upsertUser(input: { id: string; email: string; plan?: string; trialEndsAt?: Date }) {
     const existing = await db.select().from(users).where(eq(users.id, input.id)).limit(1);
     if (existing.length > 0) {
       return db

@@ -43,7 +43,9 @@ export class GoogleOAuthService {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new BadRequestException(data.error_description || data.error || 'Google token exchange failed');
+      throw new BadRequestException(
+        data.error_description || data.error || 'Google token exchange failed',
+      );
     }
     if (!data.refresh_token) {
       throw new BadRequestException('Refresh token missing. Re-authorize with prompt=consent.');
@@ -71,7 +73,9 @@ export class GoogleOAuthService {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new BadRequestException(data.error_description || data.error || 'Google token refresh failed');
+      throw new BadRequestException(
+        data.error_description || data.error || 'Google token refresh failed',
+      );
     }
     return {
       access_token: data.access_token,

@@ -1,7 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { asc, eq } from 'drizzle-orm';
-import { ClerkGuard } from '@/auth/clerk.guard';
+import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { db } from '../db';
 import { inboxes, users, reputationScores } from '../db/schema';
 
@@ -15,7 +15,7 @@ export interface ScoreResponse {
 }
 
 @Controller('inboxes')
-@UseGuards(ClerkGuard)
+@UseGuards(BetterAuthGuard)
 export class ScoringController {
   @Get(':id/score')
   async getScore(

@@ -290,7 +290,12 @@ describe('BillingService', () => {
 
   describe('downgradePlan', () => {
     it('pauses all of the user inboxes BEFORE setting plan to free', async () => {
-      mockSelectSequence([[{ id: 'inbox-1', userId: 'u1' }, { id: 'inbox-2', userId: 'u1' }]]);
+      mockSelectSequence([
+        [
+          { id: 'inbox-1', userId: 'u1' },
+          { id: 'inbox-2', userId: 'u1' },
+        ],
+      ]);
       const { setMock, whereMock } = mockUpdate();
       whereMock.mockResolvedValue(undefined);
 
@@ -298,11 +303,7 @@ describe('BillingService', () => {
 
       // First two update calls pause inboxes, last call sets plan to free.
       const setCalls = setMock.mock.calls.map((c) => c[0]);
-      expect(setCalls).toEqual([
-        { status: 'paused' },
-        { status: 'paused' },
-        { plan: 'free' },
-      ]);
+      expect(setCalls).toEqual([{ status: 'paused' }, { status: 'paused' }, { plan: 'free' }]);
       // No notification type is spec'd for downgradePlan (only activatePlan/
       // handlePaymentFailure/expireTrials have one — addendum #6).
       expect(queueService.add).not.toHaveBeenCalledWith('notify', expect.anything());

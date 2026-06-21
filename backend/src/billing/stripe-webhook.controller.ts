@@ -17,7 +17,7 @@ import { BillingService } from './billing.service';
 
 /**
  * Stripe webhook entrypoint. Must be @Public() — Stripe does not present a
- * Clerk JWT; it presents a Stripe-Signature header instead. The raw body is
+ * signed with a Stripe-Signature header instead. The raw body is
  * required for signature verification, which is configured in main.ts ahead
  * of the global bodyParser.json().
  */

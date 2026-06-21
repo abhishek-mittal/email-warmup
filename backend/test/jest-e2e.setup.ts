@@ -1,6 +1,8 @@
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://emailwarm:localdev@localhost:5432/emailwarm';
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL || 'postgresql://emailwarm:localdev@localhost:5432/emailwarm';
 process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/1';
-process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
+process.env.ENCRYPTION_KEY =
+  process.env.ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
 process.env.CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || 'sk_test_dummy';
 process.env.CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY || 'pk_test_dummy';
 process.env.CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET || 'whsec_dummy';

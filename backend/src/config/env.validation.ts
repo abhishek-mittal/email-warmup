@@ -14,17 +14,12 @@ class EnvironmentVariables {
   @IsNotEmpty()
   ENCRYPTION_KEY: string;
 
+  // Better-auth (self-hosted). Must match BETTER_AUTH_SECRET on the frontend
+  // so the backend can verify the HMAC-signed bearer tokens that the frontend
+  // mints from each better-auth session.
   @IsString()
   @IsNotEmpty()
-  CLERK_SECRET_KEY: string;
-
-  @IsString()
-  @IsNotEmpty()
-  CLERK_PUBLISHABLE_KEY: string;
-
-  @IsString()
-  @IsNotEmpty()
-  CLERK_WEBHOOK_SECRET: string;
+  BETTER_AUTH_SECRET: string;
 
   @IsString()
   @IsNotEmpty()

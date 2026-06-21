@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { count, eq } from 'drizzle-orm';
-import { ClerkGuard } from '@/auth/clerk.guard';
+import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { db } from '../db';
 import { users, inboxes } from '../db/schema';
 import { BillingService, PLAN_LIMITS } from './billing.service';
@@ -9,10 +9,10 @@ import { BillingService, PLAN_LIMITS } from './billing.service';
 /**
  * Surface for Stripe checkout, billing-portal, and self-service status.
  * Mirrors the @Req() req.userId pattern from scoring/diagnostics/inbox
- * controllers (ClerkGuard populates req.userId; see ClerkGuard).
+ * controllers (BetterAuthGuard populates req.userId; see BetterAuthGuard).
  */
 @Controller('billing')
-@UseGuards(ClerkGuard)
+@UseGuards(BetterAuthGuard)
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
@@ -25,9 +25,7 @@ export class BillingController {
   }
 
   @Post('portal')
-  async portal(
-    @Req() req: Request & { userId?: string },
-  ): Promise<{ url: string }> {
+  async portal(@Req() req: Request & { userId?: string }): Promise<{ url: string }> {
     return this.billingService.createPortalSession(req.userId as string);
   }
 
@@ -37,9 +35,7 @@ export class BillingController {
    * throws in that case so trial users can still poll this endpoint).
    */
   @Get('status')
-  async status(
-    @Req() req: Request & { userId?: string },
-  ): Promise<{
+  async status(@Req() req: Request & { userId?: string }): Promise<{
     plan: string;
     trialEndsAt: string | null;
     inboxesUsed: number;

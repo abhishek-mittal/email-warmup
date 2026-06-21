@@ -1,9 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
-const KEY = Buffer.from(
-  process.env.ENCRYPTION_KEY || '',
-  'hex',
-);
+const KEY = Buffer.from(process.env.ENCRYPTION_KEY || '', 'hex');
 
 export function encrypt(plaintext: string): string {
   if (KEY.length !== 32) {

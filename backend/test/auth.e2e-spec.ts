@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
-import { ClerkGuard } from './../src/auth/clerk.guard';
+import { BetterAuthGuard } from './../src/auth/better-auth.guard';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -11,7 +11,7 @@ describe('Auth (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideGuard(ClerkGuard)
+      .overrideGuard(BetterAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

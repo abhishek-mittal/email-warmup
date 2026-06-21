@@ -14,21 +14,24 @@ describe('formatSlackMessage', () => {
     'token_revoked',
   ];
 
-  it.each(ACTIONS_TYPES)('includes an actions block with a View dashboard button for %s', (type) => {
-    const message = formatSlackMessage({
-      type,
-      inboxEmail: 'sender@sendco.com',
-      inboxId: 'inbox-1',
-      appUrl: 'https://app.emailwarm.io',
-      payload: {},
-    });
+  it.each(ACTIONS_TYPES)(
+    'includes an actions block with a View dashboard button for %s',
+    (type) => {
+      const message = formatSlackMessage({
+        type,
+        inboxEmail: 'sender@sendco.com',
+        inboxId: 'inbox-1',
+        appUrl: 'https://app.emailwarm.io',
+        payload: {},
+      });
 
-    const actionsBlock = message.blocks.find((b: any) => b.type === 'actions')!;
-    expect(actionsBlock).toBeDefined();
-    const button = actionsBlock.elements[0];
-    expect(button.text.text).toContain('View dashboard');
-    expect(button.url).toBe('https://app.emailwarm.io/inboxes/inbox-1');
-  });
+      const actionsBlock = message.blocks.find((b: any) => b.type === 'actions')!;
+      expect(actionsBlock).toBeDefined();
+      const button = actionsBlock.elements[0];
+      expect(button.text.text).toContain('View dashboard');
+      expect(button.url).toBe('https://app.emailwarm.io/inboxes/inbox-1');
+    },
+  );
 
   it('does NOT include an actions block for warmup_complete', () => {
     const message = formatSlackMessage({

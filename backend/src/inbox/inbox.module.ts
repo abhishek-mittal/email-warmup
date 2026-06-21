@@ -11,7 +11,19 @@ import { QueueModule } from '../queue/queue.module';
 @Module({
   imports: [BillingModule, QueueModule],
   controllers: [InboxController, AuthCallbackController],
-  providers: [InboxService, GoogleOAuthService, MicrosoftOAuthService, ImapClientService, SmtpClientService],
-  exports: [InboxService, GoogleOAuthService, MicrosoftOAuthService, ImapClientService, SmtpClientService],
+  providers: [
+    InboxService,
+    GoogleOAuthService,
+    MicrosoftOAuthService,
+    ImapClientService,
+    SmtpClientService,
+  ],
+  exports: [
+    InboxService,
+    GoogleOAuthService,
+    MicrosoftOAuthService,
+    ImapClientService,
+    SmtpClientService,
+  ],
 })
 export class InboxModule {}

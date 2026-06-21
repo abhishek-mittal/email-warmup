@@ -12,7 +12,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ClerkGuard } from '@/auth/clerk.guard';
+import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { Public } from '@/auth/public.decorator';
 import { InboxService } from './inbox.service';
 import { GoogleOAuthService } from './oauth/google-oauth.service';
@@ -20,7 +20,7 @@ import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { ConnectCustomSmtpDto } from './dto/connect-custom-smtp.dto';
 
 @Controller('inboxes')
-@UseGuards(ClerkGuard)
+@UseGuards(BetterAuthGuard)
 export class InboxController {
   constructor(private readonly inboxService: InboxService) {}
 
@@ -60,18 +60,18 @@ export class AuthCallbackController {
   @Public()
   @Get('gmail/connect')
   getGmailConnectUrl(@Req() req: Request & { userId?: string }) {
-    const state = Buffer.from(
-      JSON.stringify({ userId: req.userId || 'anonymous' }),
-    ).toString('base64url');
+    const state = Buffer.from(JSON.stringify({ userId: req.userId || 'anonymous' })).toString(
+      'base64url',
+    );
     return { url: this.googleOAuth.getAuthorizationUrl(state) };
   }
 
   @Public()
   @Get('outlook/connect')
   getOutlookConnectUrl(@Req() req: Request & { userId?: string }) {
-    const state = Buffer.from(
-      JSON.stringify({ userId: req.userId || 'anonymous' }),
-    ).toString('base64url');
+    const state = Buffer.from(JSON.stringify({ userId: req.userId || 'anonymous' })).toString(
+      'base64url',
+    );
     return { url: this.microsoftOAuth.getAuthorizationUrl(state) };
   }
 
@@ -79,9 +79,7 @@ export class AuthCallbackController {
   @Get('callback/google')
   @Redirect()
   async googleCallback(@Query('code') code: string, @Query('state') state: string) {
-    const { userId } = JSON.parse(
-      Buffer.from(state, 'base64url').toString('utf8'),
-    );
+    const { userId } = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
     await this.inboxService.connectGmail(userId, code);
     return { url: '/inboxes' };
   }
@@ -90,9 +88,7 @@ export class AuthCallbackController {
   @Get('callback/microsoft')
   @Redirect()
   async microsoftCallback(@Query('code') code: string, @Query('state') state: string) {
-    const { userId } = JSON.parse(
-      Buffer.from(state, 'base64url').toString('utf8'),
-    );
+    const { userId } = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
     await this.inboxService.connectOutlook(userId, code);
     return { url: '/inboxes' };
   }

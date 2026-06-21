@@ -250,9 +250,7 @@ export class NotifyProcessor extends WorkerHost {
 
     if (!response.ok) {
       // Slack delivery failure — let BullMQ retry.
-      throw new Error(
-        `Slack webhook POST failed: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Slack webhook POST failed: ${response.status} ${response.statusText}`);
     }
 
     this.logger.log(`Sent ${type} slack notification to user ${user.id}`);

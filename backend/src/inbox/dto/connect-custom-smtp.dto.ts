@@ -1,11 +1,4 @@
-import {
-  IsEmail,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsIn,
-  IsNotEmpty,
-} from 'class-validator';
+import { IsEmail, IsInt, IsOptional, IsString, IsIn, IsNotEmpty } from 'class-validator';
 
 export class ConnectCustomSmtpDto {
   @IsEmail()

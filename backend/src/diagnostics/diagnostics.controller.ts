@@ -1,7 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { desc, eq } from 'drizzle-orm';
-import { ClerkGuard } from '@/auth/clerk.guard';
+import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { db } from '../db';
 import { inboxes, diagnostics } from '../db/schema';
 import { BillingService } from '../billing/billing.service';
@@ -19,7 +19,7 @@ export interface DiagnosticsResponse {
 }
 
 @Controller('inboxes')
-@UseGuards(ClerkGuard)
+@UseGuards(BetterAuthGuard)
 export class DiagnosticsController {
   constructor(
     private readonly billingService: BillingService,

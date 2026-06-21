@@ -17,7 +17,8 @@ export class MicrosoftOAuthService {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
-      scope: 'https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access',
+      scope:
+        'https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access',
       prompt: 'consent',
       state,
     });
@@ -42,7 +43,9 @@ export class MicrosoftOAuthService {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new BadRequestException(data.error_description || data.error || 'Microsoft token exchange failed');
+      throw new BadRequestException(
+        data.error_description || data.error || 'Microsoft token exchange failed',
+      );
     }
     if (!data.refresh_token) {
       throw new BadRequestException('Refresh token missing. Re-authorize with prompt=consent.');
@@ -66,12 +69,15 @@ export class MicrosoftOAuthService {
         client_id: this.clientId,
         client_secret: this.clientSecret,
         grant_type: 'refresh_token',
-        scope: 'https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access',
+        scope:
+          'https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access',
       }),
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new BadRequestException(data.error_description || data.error || 'Microsoft token refresh failed');
+      throw new BadRequestException(
+        data.error_description || data.error || 'Microsoft token refresh failed',
+      );
     }
     return {
       access_token: data.access_token,

@@ -43,10 +43,7 @@ export class InboxService {
 
     const precheck = await this.runPrecheck(inbox.id, 'gmail');
 
-    await this.queue.addTokenRefresh(
-      { inboxId: inbox.id },
-      { delay: 45 * 60 * 1000 },
-    );
+    await this.queue.addTokenRefresh({ inboxId: inbox.id }, { delay: 45 * 60 * 1000 });
 
     return { inbox, precheck };
   }
@@ -76,10 +73,7 @@ export class InboxService {
 
     const precheck = await this.runPrecheck(inbox.id, 'outlook');
 
-    await this.queue.addTokenRefresh(
-      { inboxId: inbox.id },
-      { delay: 45 * 60 * 1000 },
-    );
+    await this.queue.addTokenRefresh({ inboxId: inbox.id }, { delay: 45 * 60 * 1000 });
 
     return { inbox, precheck };
   }
@@ -227,8 +221,7 @@ export class InboxService {
       this.resolveTxt(`_dmarc.${domain}`),
     ]);
 
-    const mx =
-      mxRecords.status === 'fulfilled' && mxRecords.value.length > 0;
+    const mx = mxRecords.status === 'fulfilled' && mxRecords.value.length > 0;
     const txt = spfTxt.status === 'fulfilled' ? spfTxt.value : [];
     const spf = txt.some((r) => r.includes('v=spf1'));
     const dmarcRecords = dmarcTxt.status === 'fulfilled' ? dmarcTxt.value : [];

@@ -116,6 +116,37 @@ When **blocked**:
 
 ---
 
+## Auth migration — Clerk → better-auth (post-Wave 6)
+
+Replaced the third-party Clerk SaaS with self-hosted [better-auth](https://better-auth.com) (MIT). Driver: `host_invalid` errors from Clerk's API and a user preference for self-hosted auth.
+
+**Frontend:**
+- Removed `@clerk/nextjs`; added `better-auth@1.6.20` + `pg` + `@types/pg`.
+- New `lib/auth-server.ts` (lazy `betterAuth({...})` singleton over Postgres, Google + Microsoft social providers, email+password).
+- New `app/api/auth/[...all]/route.ts` catch-all using `toNextJsHandler`.
+- New `lib/bearer-token.ts` mints HMAC-signed `v1.<uid>.<exp>.<sig>` tokens from the better-auth session. `lib/api.ts` (`useApi`) and `lib/api-server.ts` (`serverApi`) attach it as `Authorization: Bearer` on every backend call.
+- `middleware.ts` uses `getSessionCookie` from `better-auth/cookies` (Edge-safe) to gate protected routes.
+- `ClerkProvider` → bare layout; sign-in / sign-up pages are now email+password + social buttons; `<UserButton>` → `useSession` avatar + sign-out.
+- `frontend/.env.example` rewritten with `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NEXT_PUBLIC_BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, social provider creds. Removed all `CLERK_*` and `NEXT_PUBLIC_GOOGLE_*` vars.
+
+**Backend:**
+- Removed `@clerk/backend` and `svix` (Clerk webhook verifier).
+- Replaced `ClerkGuard` (verified Clerk JWTs via `verifyToken`) with `BetterAuthGuard` that HMAC-verifies the same `v1.<uid>.<exp>.<sig>` token format the frontend mints. Verification is a single HMAC compare + expiry check — no DB lookup, no Clerk API call.
+- Deleted `clerk-webhook.controller.ts` + spec; better-auth manages user lifecycle directly in Postgres.
+- `main.ts`: removed the `/webhooks/clerk` raw-body middleware (no longer needed).
+- `env.validation.ts` + `backend/.env.example`: dropped `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` / `CLERK_WEBHOOK_SECRET`; added `BETTER_AUTH_SECRET`.
+- All controllers (`inbox`, `scoring`, `placement`, `diagnostics`, `billing`) updated to use `BetterAuthGuard`. The `req.userId` contract is unchanged.
+
+**Verified:**
+- Frontend: `pnpm build` (10 routes, 0 errors), `pnpm lint` (0 errors).
+- Backend: 32/32 test suites, 355/355 tests pass, `tsc --noEmit` clean.
+- 3 pre-existing wave-5 lint errors (`QUEUE_NAMES`, `DiagnosticsRow` unused) remain — unrelated to this migration.
+
+**Caveats / not done in this commit:**
+- The `UserSyncService` (backend) and the backend's `users` table are now decoupled from the better-auth `user` table. The service exists but is unwired. A follow-up should add a `databaseHooks.user.create.after` in `lib/auth-server.ts` to call `userSyncService.upsertUser()` so the backend's plan/trial fields stay in sync.
+- No real OAuth round-trip was tested (requires real Google + Microsoft credentials); structurally complete.
+- Better-auth is mounted on the frontend (`:3000`) and the backend (`:3001`) only share the HMAC secret. The session cookie is httpOnly and not shared cross-origin — `useApi`/`serverApi` carry the bearer token explicitly so no cookie plumbing is needed.
+
 ## Phase 1 completion gate
 
 All of the following must be true before Phase 1 is declared done:

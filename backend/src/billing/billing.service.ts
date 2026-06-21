@@ -54,9 +54,7 @@ export class BillingService {
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user || !allowedPlans.includes(user.plan)) {
-      throw new ForbiddenException(
-        `This feature requires plan: ${allowedPlans.join(' or ')}`,
-      );
+      throw new ForbiddenException(`This feature requires plan: ${allowedPlans.join(' or ')}`);
     }
   }
 
@@ -72,9 +70,7 @@ export class BillingService {
       .from(inboxes)
       .where(eq(inboxes.userId, userId));
     if (result.count >= limit) {
-      throw new ForbiddenException(
-        `Inbox limit reached for ${user.plan} plan (${limit} inboxes)`,
-      );
+      throw new ForbiddenException(`Inbox limit reached for ${user.plan} plan (${limit} inboxes)`);
     }
   }
 
