@@ -1,0 +1,3 @@
+# Runtime state for .bin/dev — PIDs and logs. Never commit.
+*.pid
+*.log
