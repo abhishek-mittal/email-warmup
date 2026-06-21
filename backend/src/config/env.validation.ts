@@ -53,6 +53,42 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   MICROSOFT_CLIENT_SECRET: string;
+
+  @IsString()
+  @IsNotEmpty()
+  STRIPE_PRICE_STARTER: string;
+
+  @IsString()
+  @IsNotEmpty()
+  STRIPE_PRICE_GROWTH: string;
+
+  @IsString()
+  @IsNotEmpty()
+  STRIPE_PRICE_AGENCY: string;
+
+  @IsString()
+  @IsNotEmpty()
+  APP_URL: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PLATFORM_SMTP_HOST: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PLATFORM_SMTP_PORT: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PLATFORM_SMTP_USER: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PLATFORM_SMTP_PASS: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PLATFORM_FROM_EMAIL: string;
 }
 
 export function validate(config: Record<string, unknown>) {
