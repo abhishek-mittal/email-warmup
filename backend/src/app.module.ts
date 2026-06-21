@@ -7,6 +7,7 @@ import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { InboxModule } from './inbox/inbox.module';
+import { WarmupModule } from './warmup/warmup.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -20,6 +21,7 @@ import { validate } from './config/env.validation';
     AuthModule,
     BillingModule,
     InboxModule,
+    WarmupModule,
   ],
   controllers: [AppController],
   providers: [AppService],

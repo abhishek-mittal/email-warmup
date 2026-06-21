@@ -30,3 +30,6 @@ coverage/
 # Misc caches
 .turbo/
 .cache/
+
+# Claude Code session lock
+.claude/scheduled_tasks.lock
