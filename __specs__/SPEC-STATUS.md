@@ -69,7 +69,7 @@ When **blocked**:
 
 | Task | Title | Status | Started | Completed | Notes |
 |---|---|---|---|---|---|
-| T011 | DNS check processor | pending | — | — | — |
+| T011 | DNS check processor | done | 2026-06-21 | 2026-06-21 | DnsService (5 check methods: checkSpf/checkDkim/checkDmarc/checkMx/checkRdns) using explicit-DNS-server `dns.promises.Resolver(['1.1.1.1','8.8.8.8'])` for TXT/MX lookups per addendum #1 (bare `dns.promises.reverse()` for rDNS, no custom-resolver support in Node's API). DnsCheckProcessor (`@Processor('dns-check')` + `@Cron('0 6 * * *', {utcOffset:0}) scheduleAllInboxes()` on the same class per addendum #8). New-critical-issue alerting resolved at the boolean level (spfValid/dkimValid/mxValid only — DMARC/rDNS never alertable per addendum #3); first-ever check for an inbox never alerts (addendum #4); payload includes every currently-failing critical code, alert fires once. rDNS skipped (`rdnsValid: null`) when sendingIp unset (addendum #6); `score` left unset for T013 (addendum #7); notify enqueued directly via QueueService, no AlertService (addendum #2). No `monitor.module.ts` created (controller wires it after T012 lands). All 8 acceptance criteria verified by 38 unit tests (20 DnsService + 18 DnsCheckProcessor), typecheck, lint, and build all pristine. |
 | T012 | Blacklist check processor | pending | — | — | — |
 | T013 | Reputation score computation | pending | — | — | — |
 
