@@ -10,6 +10,7 @@ import { BillingModule } from './billing/billing.module';
 import { InboxModule } from './inbox/inbox.module';
 import { WarmupModule } from './warmup/warmup.module';
 import { MonitorModule } from './monitor/monitor.module';
+import { ScoringModule } from './scoring/scoring.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -26,6 +27,7 @@ import { validate } from './config/env.validation';
     InboxModule,
     WarmupModule,
     MonitorModule,
+    ScoringModule,
   ],
   controllers: [AppController],
   providers: [AppService],
