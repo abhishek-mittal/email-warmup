@@ -7,8 +7,10 @@ import { Toast, useToasts } from '@/components/Toast';
 
 type Tab = 'gmail' | 'outlook' | 'custom';
 
-const GMAIL_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const MICROSOFT_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
+// Backend owns the OAuth client_id/secret + state encoding. Frontend just
+// fetches the Google/Microsoft URL it should redirect to, then bounces the
+// browser there. Backend's /auth/callback/{google,microsoft} handles the
+// code exchange + token encryption + inbox creation, then redirects to /inboxes.
 
 export function ConnectInboxForm() {
   const [tab, setTab] = useState<Tab>('gmail');
@@ -59,17 +61,20 @@ function TabButton({
 }
 
 function GmailConnect() {
-  function startGmail() {
-    if (typeof window === 'undefined') return;
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/api/auth/callback/google`;
-    const scope = encodeURIComponent(
-      'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email',
-    );
-    const url = `${GMAIL_AUTH_URL}?client_id=${clientId ?? ''}&redirect_uri=${encodeURIComponent(
-      redirectUri,
-    )}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
-    window.location.href = url;
+  const api = useApi();
+  const { show } = useToasts();
+  const [busy, setBusy] = useState(false);
+
+  async function startGmail() {
+    setBusy(true);
+    try {
+      const { url } = await api<{ url: string }>('/auth/gmail/connect');
+      window.location.href = url;
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.body : 'Failed to start Google connect';
+      show(msg || 'Failed to start Google connect', 'error');
+      setBusy(false);
+    }
   }
   return (
     <div className="space-y-4">
@@ -81,24 +86,30 @@ function GmailConnect() {
       <button
         type="button"
         onClick={startGmail}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+        disabled={busy}
+        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
       >
-        <GoogleMark /> Connect with Google
+        <GoogleMark /> {busy ? 'Redirecting…' : 'Connect with Google'}
       </button>
     </div>
   );
 }
 
 function OutlookConnect() {
-  function startOutlook() {
-    if (typeof window === 'undefined') return;
-    const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/api/auth/callback/microsoft`;
-    const scope = encodeURIComponent('offline_access Mail.Send Mail.Read User.Read');
-    const url = `${MICROSOFT_AUTH_URL}?client_id=${clientId ?? ''}&redirect_uri=${encodeURIComponent(
-      redirectUri,
-    )}&response_type=code&scope=${scope}&prompt=consent`;
-    window.location.href = url;
+  const api = useApi();
+  const { show } = useToasts();
+  const [busy, setBusy] = useState(false);
+
+  async function startOutlook() {
+    setBusy(true);
+    try {
+      const { url } = await api<{ url: string }>('/auth/outlook/connect');
+      window.location.href = url;
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.body : 'Failed to start Microsoft connect';
+      show(msg || 'Failed to start Microsoft connect', 'error');
+      setBusy(false);
+    }
   }
   return (
     <div className="space-y-4">
@@ -110,9 +121,10 @@ function OutlookConnect() {
       <button
         type="button"
         onClick={startOutlook}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+        disabled={busy}
+        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
       >
-        <MicrosoftMark /> Connect with Microsoft
+        <MicrosoftMark /> {busy ? 'Redirecting…' : 'Connect with Microsoft'}
       </button>
     </div>
   );
