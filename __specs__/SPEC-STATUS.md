@@ -56,7 +56,7 @@ When **blocked**:
 | Task | Title | Status | Started | Completed | Notes |
 |---|---|---|---|---|---|
 | T008 | Warmup send processor | done | 2026-06-21 | 2026-06-21 | WarmupSendProcessor + ContentService; Message-ID/X-WarmupHub headers, body-hash-only storage, warmup-receive enqueue w/ 2-240min delay + reply/rescue logic, inactive-sender UnrecoverableError, Claude 10s timeout w/ 50-template fallback — all verified by unit tests, typecheck, build |
-| T009 | Warmup receive processor | pending | — | — | — |
+| T009 | Warmup receive processor | done | 2026-06-21 | 2026-06-21 | WarmupReceiveProcessor: strict rescue→open→star→reply→file order, landed_in_spam unconditional/rescue gated on actions, IMAP pool reused, Gmail-only tab detection. Reviewer caught a real WarmupHub mailbox-selection bug (mailboxOpen before messageMove broke seq-relative MOVE semantics) — fixed in ee0d740, re-reviewed and approved. All verified by unit tests, typecheck, build, and a runtime boot. |
 | T010 | Daily schedule + graduation | pending | — | — | — |
 
 **Wave 2 gate:** Active inbox sends and receives warmup emails · Daily volume follows ramp curve  
