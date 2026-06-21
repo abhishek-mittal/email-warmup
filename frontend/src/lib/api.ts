@@ -1,6 +1,5 @@
-'use client';
-
-import { useAuth } from '@clerk/nextjs';
+import { createAuthClient } from 'better-auth/react';
+import { mintBearerToken } from './bearer-token';
 
 export class ApiError extends Error {
   status: number;
@@ -17,23 +16,31 @@ export function getApiUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 }
 
+const authClient = createAuthClient({
+  baseURL:
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ??
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'),
+});
+
 /**
- * Hook that returns an authenticated API caller. The returned function injects
- * the Clerk session token as `Authorization: Bearer <token>` and parses JSON.
- *
- * Use in Client Components only. For Server Components, call
- * `serverApi(token, ...)` from `src/lib/api-server.ts`.
+ * Hook that returns an authenticated API caller. Mints a short-lived
+ * HMAC-signed token from the active better-auth session and sends it as
+ * `Authorization: Bearer <token>`. Backend verifies the HMAC against the
+ * shared BETTER_AUTH_SECRET — no DB lookup needed.
  */
 export function useApi() {
-  const { getToken } = useAuth();
-
   return async function api<T = unknown>(
     path: string,
     init?: RequestInit,
   ): Promise<T> {
     let token: string | null = null;
     try {
-      token = await getToken();
+      const session = await authClient.getSession();
+      const userId = session?.data?.user?.id;
+      const secret = process.env.NEXT_PUBLIC_BETTER_AUTH_SECRET;
+      if (userId && secret) {
+        token = await mintBearerToken(userId, secret);
+      }
     } catch {
       token = null;
     }

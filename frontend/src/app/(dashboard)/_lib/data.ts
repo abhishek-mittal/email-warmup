@@ -1,6 +1,47 @@
 import { serverApi } from '@/lib/api-server';
 import type { ScoreResponse, DiagnosticsResponse } from '@/lib/types';
 
+export type InboxListItem = {
+  id: string;
+  email: string;
+  provider: 'gmail' | 'outlook' | 'smtp';
+  status: 'pending' | 'active' | 'paused' | 'error' | 'disconnected';
+  warmupSpeed: 'slow' | 'normal' | 'aggressive' | null;
+  warmupDay: number | null;
+  score: number | null;
+  trend: 'up' | 'down' | 'stable' | null;
+  lastPlacementAt: string | null;
+};
+
+/** List the user's inboxes (with score + last placement, if known). */
+export async function getInboxes(): Promise<InboxListItem[]> {
+  try {
+    return await serverApi<InboxListItem[]>('/inboxes');
+  } catch {
+    return [];
+  }
+}
+
+/** Roll up counts for the dashboard summary bar. */
+export async function getInboxSummaries(): Promise<{
+  total: number;
+  avgScore: number | null;
+  withIssues: number;
+}> {
+  const inboxes = await getInboxes();
+  if (inboxes.length === 0) return { total: 0, avgScore: null, withIssues: 0 };
+  const scored = inboxes.filter((i) => i.score != null) as Array<
+    InboxListItem & { score: number }
+  >;
+  const avgScore = scored.length
+    ? Math.round(scored.reduce((a, i) => a + i.score, 0) / scored.length)
+    : null;
+  // We can't derive per-inbox issues without a per-inbox fetch; treat any
+  // inbox not in 'active' status as having an issue for the summary bar.
+  const withIssues = inboxes.filter((i) => i.status !== 'active').length;
+  return { total: inboxes.length, avgScore, withIssues };
+}
+
 export async function getInboxScores(inboxId: string): Promise<ScoreResponse | null> {
   try {
     return await serverApi<ScoreResponse>(`/inboxes/${inboxId}/score`);
