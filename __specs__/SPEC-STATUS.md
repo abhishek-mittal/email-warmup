@@ -57,7 +57,7 @@ When **blocked**:
 |---|---|---|---|---|---|
 | T008 | Warmup send processor | done | 2026-06-21 | 2026-06-21 | WarmupSendProcessor + ContentService; Message-ID/X-WarmupHub headers, body-hash-only storage, warmup-receive enqueue w/ 2-240min delay + reply/rescue logic, inactive-sender UnrecoverableError, Claude 10s timeout w/ 50-template fallback — all verified by unit tests, typecheck, build |
 | T009 | Warmup receive processor | done | 2026-06-21 | 2026-06-21 | WarmupReceiveProcessor: strict rescue→open→star→reply→file order, landed_in_spam unconditional/rescue gated on actions, IMAP pool reused, Gmail-only tab detection. Reviewer caught a real WarmupHub mailbox-selection bug (mailboxOpen before messageMove broke seq-relative MOVE semantics) — fixed in ee0d740, re-reviewed and approved. All verified by unit tests, typecheck, build, and a runtime boot. |
-| T010 | Daily schedule + graduation | pending | — | — | — |
+| T010 | Daily schedule + graduation | done | 2026-06-21 | 2026-06-21 | WarmupService (@Cron 05:00 UTC), RampService (linear interpolation, capped at 200), PairingService (same-domain hard block, scoring, 7-day recency penalty); 8-min spacing + ±15min jitter algorithm per addendum #3; graduation w/ asymmetric missing-data handling (reputation fails closed, placement skips); readiness-report queue added; fixed Wave-1 pool-enrollment gap in inbox.service.ts. All verified by unit tests, typecheck, build. |
 
 **Wave 2 gate:** Active inbox sends and receives warmup emails · Daily volume follows ramp curve  
 **Wave 2 status:** ⬜ not started  

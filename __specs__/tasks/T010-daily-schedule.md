@@ -52,14 +52,14 @@ When a new inbox is first activated (pre-check passes):
 
 ## Acceptance criteria
 
-- [ ] Cron fires daily at 05:00 UTC (verify with NestJS `@Cron` decorator)
-- [ ] Active inbox on day 7 (medium speed) receives exactly 10 warmup-send jobs (±1 for rounding)
-- [ ] No two jobs from the same sender scheduled within 8 minutes of each other
-- [ ] All jobs have ±15 min jitter applied (no job fires at exact base time)
-- [ ] `warmup_day` increments by 1 after each scheduling run
-- [ ] Graduation triggers `status='graduated'` and `graduated_at` timestamp
-- [ ] Readiness report generation triggered on graduation
-- [ ] `warmup_complete` notification enqueued on graduation
-- [ ] Inbox with no valid pairing partner skips send slots (no orphaned jobs)
+- [x] Cron fires daily at 05:00 UTC (verify with NestJS `@Cron` decorator)
+- [x] Active inbox on day 7 (medium speed) receives exactly 10 warmup-send jobs (±1 for rounding)
+- [x] No two jobs from the same sender scheduled within 8 minutes of each other
+- [x] All jobs have ±15 min jitter applied (no job fires at exact base time)
+- [x] `warmup_day` increments by 1 after each scheduling run
+- [x] Graduation triggers `status='graduated'` and `graduated_at` timestamp
+- [x] Readiness report generation triggered on graduation
+- [x] `warmup_complete` notification enqueued on graduation
+- [x] Inbox with no valid pairing partner skips send slots (no orphaned jobs)
 
 ## Mark done in SPEC-STATUS.md when all criteria above are verified
