@@ -32,6 +32,13 @@ export const inboxes = pgTable('inboxes', {
   oauthAccessToken: text('oauth_access_token'),
   oauthRefreshToken: text('oauth_refresh_token'),
   oauthTokenExpiry: timestamp('oauth_token_expiry'),
+  // Per-row OAuth app credentials supplied by the user for a batch-imported
+  // inbox (T020). Distinct from the platform's GOOGLE_CLIENT_ID/
+  // MICROSOFT_CLIENT_ID env vars used by the interactive OAuth connect flow.
+  // clientId is not a secret (plaintext, like smtpUser/imapUser); clientSecret
+  // is encrypted (like oauthAccessToken/oauthRefreshToken/smtpPass/imapPass).
+  oauthClientId: text('oauth_client_id'),
+  oauthClientSecret: text('oauth_client_secret'),
   smtpHost: text('smtp_host'),
   smtpPort: integer('smtp_port'),
   smtpUser: text('smtp_user'),

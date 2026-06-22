@@ -11,6 +11,101 @@ import { SmtpClientService } from './smtp/smtp-client.service';
 import { QueueService } from '@/queue/queue.service';
 import * as dns from 'dns';
 
+/**
+ * Per-entry shape accepted by both `POST /inboxes/batch` (this service) and
+ * `POST /pool-inboxes/batch` (PoolInboxService). Loosely typed (not the
+ * class-validator DTO) because both the JSON-body path (already validated
+ * by `BatchUploadDto`) and the CSV path (parsed by `csv-parser.ts`, no
+ * class-validator involved) funnel through here.
+ */
+export interface BatchInboxEntry {
+  email: string;
+  provider: 'gmail' | 'outlook' | 'custom';
+  clientId?: string;
+  clientSecret?: string;
+  refreshToken?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPassword?: string;
+  imapHost?: string;
+  imapPort?: number;
+  imapUser?: string;
+  imapPassword?: string;
+}
+
+/**
+ * Structural validation for one batch entry. Returns a human-readable
+ * reason string when invalid, or null when valid. Mirrors the per-provider
+ * required-field rules in `BatchInboxEntryDto` — duplicated here (rather
+ * than reused) because CSV rows never pass through class-validator.
+ */
+export function validateBatchEntry(entry: BatchInboxEntry): string | null {
+  if (!entry || typeof entry !== 'object') return 'malformed entry';
+  if (!entry.email || typeof entry.email !== 'string') return 'email is required';
+  if (!['gmail', 'outlook', 'custom'].includes(entry.provider)) {
+    return `unrecognized provider: '${entry.provider}' (expected gmail, outlook, or custom)`;
+  }
+
+  if (entry.provider === 'gmail' || entry.provider === 'outlook') {
+    const missing: string[] = [];
+    if (!entry.clientId) missing.push('clientId');
+    if (!entry.clientSecret) missing.push('clientSecret');
+    if (!entry.refreshToken) missing.push('refreshToken');
+    if (missing.length > 0) return `missing required field(s): ${missing.join(', ')}`;
+    return null;
+  }
+
+  // custom
+  const missing: string[] = [];
+  if (!entry.smtpHost) missing.push('smtpHost');
+  if (entry.smtpPort == null || !Number.isFinite(Number(entry.smtpPort))) missing.push('smtpPort');
+  if (!entry.smtpUser) missing.push('smtpUser');
+  if (!entry.smtpPassword) missing.push('smtpPassword');
+  if (!entry.imapHost) missing.push('imapHost');
+  if (entry.imapPort == null || !Number.isFinite(Number(entry.imapPort))) missing.push('imapPort');
+  if (!entry.imapUser) missing.push('imapUser');
+  if (!entry.imapPassword) missing.push('imapPassword');
+  if (missing.length > 0) return `missing required field(s): ${missing.join(', ')}`;
+  return null;
+}
+
+/**
+ * Builds the Drizzle insert payload for the `inboxes` table from a
+ * validated batch entry. Assumes `validateBatchEntry` already passed —
+ * does not re-validate. All secret fields are `encrypt()`-ed here, never
+ * left plaintext.
+ */
+export function buildInboxInsertValues(userId: string, entry: BatchInboxEntry) {
+  if (entry.provider === 'gmail' || entry.provider === 'outlook') {
+    return {
+      userId,
+      email: entry.email,
+      provider: entry.provider,
+      oauthProvider: entry.provider === 'gmail' ? 'google' : 'microsoft',
+      oauthClientId: entry.clientId!,
+      oauthClientSecret: encrypt(entry.clientSecret!),
+      oauthRefreshToken: encrypt(entry.refreshToken!),
+      status: 'pending',
+    };
+  }
+
+  return {
+    userId,
+    email: entry.email,
+    provider: 'custom' as const,
+    smtpHost: entry.smtpHost!,
+    smtpPort: Number(entry.smtpPort),
+    smtpUser: entry.smtpUser!,
+    smtpPass: encrypt(entry.smtpPassword!),
+    imapHost: entry.imapHost!,
+    imapPort: Number(entry.imapPort),
+    imapUser: entry.imapUser!,
+    imapPass: encrypt(entry.imapPassword!),
+    status: 'pending',
+  };
+}
+
 @Injectable()
 export class InboxService {
   constructor(
@@ -138,6 +233,72 @@ export class InboxService {
     return db.select().from(inboxes).where(eq(inboxes.userId, userId));
   }
 
+  /** Ownership-checked single-row lookup for `GET /inboxes/:id`. Returns
+   * null (not throw) when not found/not owned — the controller maps that
+   * to a 404. No analysis join here; a later step attaches the latest
+   * `inbox_analysis` row at the controller layer. */
+  async findById(userId: string, inboxId: string) {
+    const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const inbox = rows[0];
+    if (!inbox || inbox.userId !== userId) return null;
+    return inbox;
+  }
+
+  /**
+   * Batch-uploads inboxes-to-warm (T020). Accepts the same per-entry shape
+   * as `POST /pool-inboxes/batch` (PoolInboxService.batchUpload) — only the
+   * destination table and the column layout (flat columns here vs a single
+   * `encryptedCredentials` JSONB blob there) differ. Each entry is
+   * processed independently: structurally invalid entries, in-batch
+   * duplicate emails, and duplicates against the user's existing inboxes
+   * all land in `failed[]` rather than aborting the batch or crashing on a
+   * DB error (inboxes.email has no unique constraint, so this is purely an
+   * application-level check, not a 23505 catch).
+   */
+  async batchUpload(
+    userId: string,
+    entries: BatchInboxEntry[],
+  ): Promise<{ created: number; failed: { email: string; reason: string }[] }> {
+    const failed: { email: string; reason: string }[] = [];
+    let created = 0;
+
+    const existingRows = await db
+      .select({ email: inboxes.email })
+      .from(inboxes)
+      .where(eq(inboxes.userId, userId));
+    const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
+    const seenInBatch = new Set<string>();
+
+    for (const entry of entries) {
+      const email = entry?.email ?? '(unknown)';
+      try {
+        const validationError = validateBatchEntry(entry);
+        if (validationError) {
+          failed.push({ email, reason: validationError });
+          continue;
+        }
+
+        const normalizedEmail = entry.email.toLowerCase();
+        if (existingEmails.has(normalizedEmail) || seenInBatch.has(normalizedEmail)) {
+          failed.push({ email, reason: 'duplicate email — already exists for this user' });
+          continue;
+        }
+
+        const values = buildInboxInsertValues(userId, entry);
+        const [inbox] = await db.insert(inboxes).values(values).returning();
+
+        seenInBatch.add(normalizedEmail);
+        created += 1;
+
+        await this.queue.add('inbox-analysis', { inboxId: inbox.id, userId });
+      } catch (err: any) {
+        failed.push({ email, reason: err?.message || 'failed to process row' });
+      }
+    }
+
+    return { created, failed };
+  }
+
   private async fetchGoogleUserinfo(accessToken: string): Promise<{ email: string }> {
     const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -206,10 +367,7 @@ export class InboxService {
       if (provider !== 'custom' || !noImapConfigured) {
         // Either: OAuth provider (IMAP is mandatory), or: custom provider
         // with IMAP creds supplied that failed. Either way, fail.
-        throw Object.assign(
-          imapFailure ?? new Error('IMAP verification failed'),
-          { step: 'imap' },
-        );
+        throw Object.assign(imapFailure ?? new Error('IMAP verification failed'), { step: 'imap' });
       }
       // Custom provider, no IMAP creds — skip gracefully.
       steps.imap = 'skipped';
@@ -231,8 +389,7 @@ export class InboxService {
 
     // Inbox is "active" when SMTP and DNS both pass. 'skipped' counts as
     // pass; 'true' counts as pass; 'false' would have thrown above.
-    const activationPass =
-      steps.smtp === true && steps.dns === true && steps.imap !== false;
+    const activationPass = steps.smtp === true && steps.dns === true && steps.imap !== false;
     if (activationPass) {
       await db
         .update(inboxes)

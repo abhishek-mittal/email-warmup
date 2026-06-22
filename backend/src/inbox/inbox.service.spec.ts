@@ -154,16 +154,14 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
       id: 'inbox-2',
       email: 'smtp-only@sendco.com',
       provider: 'custom',
-      imapHost: null,    // <- no IMAP configured
+      imapHost: null, // <- no IMAP configured
       imapPort: null,
     };
 
     // Simulate the real ImapClientService behaviour for a row with no
     // IMAP: it throws ImapNotConfiguredError instead of opening a
     // socket.
-    imapClientService.getConnection.mockRejectedValue(
-      new ImapNotConfiguredError('inbox-2'),
-    );
+    imapClientService.getConnection.mockRejectedValue(new ImapNotConfiguredError('inbox-2'));
 
     // The runPrecheck does two selects: one to discover whether IMAP
     // was configured (after the IMAP client threw), then one to load
@@ -175,7 +173,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     const steps = await (service as any).runPrecheck('inbox-2', 'custom');
 
     expect(steps.smtp).toBe(true);
-    expect(steps.imap).toBe('skipped');  // not false, not true — user opted out
+    expect(steps.imap).toBe('skipped'); // not false, not true — user opted out
     expect(steps.dns).toBe(true);
 
     // Should have attempted (and been refused) an IMAP connection —

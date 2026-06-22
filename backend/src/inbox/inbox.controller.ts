@@ -3,24 +3,28 @@ import {
   Get,
   Post,
   Body,
+  Param,
   Query,
   Redirect,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   UnprocessableEntityException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { validateSync } from 'class-validator';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { Public } from '@/auth/public.decorator';
-import { InboxService } from './inbox.service';
+import { InboxService, BatchInboxEntry } from './inbox.service';
 import { GoogleOAuthService } from './oauth/google-oauth.service';
 import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
-import {
-  ConnectCustomSmtpDto,
-  normalizeAliases,
-} from './dto/connect-custom-smtp.dto';
+import { normalizeAliases } from './dto/connect-custom-smtp.dto';
+import { BatchUploadDto } from '@/pool-inbox/dto/batch-inbox-entry.dto';
+import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
 
 @Controller('inboxes')
 @UseGuards(BetterAuthGuard)
@@ -30,6 +34,75 @@ export class InboxController {
   @Get()
   findAll(@Req() req: Request & { userId?: string }) {
     return this.inboxService.findByUser(req.userId!);
+  }
+
+  /**
+   * Ownership-checked single-row lookup (T020 addendum). No analysis join
+   * yet — a later step attaches the latest `inbox_analysis` row here.
+   */
+  @Get(':id')
+  async findOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
+    const inbox = await this.inboxService.findById(req.userId!, id);
+    if (!inbox) throw new NotFoundException();
+    return inbox;
+  }
+
+  /**
+   * Batch upload (T020). Accepts `{ inboxes: [...] }`, same per-entry shape
+   * as `POST /pool-inboxes/batch`. class-validator (via BatchUploadDto)
+   * structurally rejects entries missing required fields for their
+   * provider before they ever reach InboxService — those land in
+   * `failed[]`, never abort the whole request, matching the "partial
+   * success" requirement (validateBatchEntry duplicates the same checks
+   * for entries that the ValidationPipe can't catch, e.g. an unrecognized
+   * provider value combined with otherwise-empty fields — defense in depth
+   * with the service-layer validation that also runs per row).
+   */
+  @Post('batch')
+  async batchUpload(@Req() req: Request & { userId?: string }, @Body() body: BatchUploadDto) {
+    const entries = (body?.inboxes ?? []) as BatchInboxEntry[];
+    return this.inboxService.batchUpload(req.userId!, entries);
+  }
+
+  /**
+   * CSV variant of `POST /inboxes/batch` (T020). Parses the uploaded file
+   * in memory (never persisted to disk or DB) and funnels every
+   * structurally valid row through the exact same InboxService.batchUpload
+   * used by the JSON path. Rows the CSV parser itself flags as malformed
+   * (missing required columns for their provider, unknown provider, no
+   * email) are folded directly into the response's `failed[]` without ever
+   * reaching the service — they never had enough information to attempt
+   * an insert.
+   */
+  @Post('batch/csv')
+  @UseInterceptors(FileInterceptor('file'))
+  async batchUploadCsv(
+    @Req() req: Request & { userId?: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('CSV file is required (multipart field "file")');
+    }
+
+    const parsedRows = parseInboxBatchCsv(file.buffer.toString('utf8'));
+
+    const failed: { email: string; reason: string }[] = [];
+    const validEntries: BatchInboxEntry[] = [];
+
+    for (const row of parsedRows) {
+      if (isMalformedCsvRow(row)) {
+        failed.push({ email: row.email, reason: row.__reason });
+        continue;
+      }
+      validEntries.push(row as BatchInboxEntry);
+    }
+
+    const result = await this.inboxService.batchUpload(req.userId!, validEntries);
+
+    return {
+      created: result.created,
+      failed: [...failed, ...result.failed],
+    };
   }
 
   @Post('connect/smtp')
@@ -48,9 +121,7 @@ export class InboxController {
       forbidNonWhitelisted: true,
     });
     if (errors.length > 0) {
-      const messages = errors.flatMap((e) =>
-        e.constraints ? Object.values(e.constraints) : [],
-      );
+      const messages = errors.flatMap((e) => (e.constraints ? Object.values(e.constraints) : []));
       throw new BadRequestException(messages);
     }
     try {
