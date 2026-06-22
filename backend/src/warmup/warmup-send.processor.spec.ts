@@ -10,6 +10,7 @@ jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
     insert: jest.fn(),
+    update: jest.fn(),
   },
 }));
 
@@ -108,7 +109,8 @@ describe('WarmupSendProcessor', () => {
     return {
       data: {
         senderInboxId: 'sender-1',
-        partnerInboxId: 'pool-1',
+        partnerSource: 'shared',
+        partnerId: 'pool-1',
         warmupDay: 5,
         scheduledAt: '2026-06-20T09:47:00.000Z',
         ...overrides,
@@ -170,6 +172,8 @@ describe('WarmupSendProcessor', () => {
     expect(queueService.add).toHaveBeenCalledTimes(1);
     const [queueName, payload, opts] = queueService.add.mock.calls[0];
     expect(queueName).toBe('warmup-receive');
+    expect(payload.receiverSource).toBe('shared');
+    expect(payload.receiverId).toBe('receiver-1');
     expect(payload.receiverInboxId).toBe('receiver-1');
     expect(payload.actions).toEqual(expect.arrayContaining(['open', 'star']));
     expect(payload.actions).not.toContain('rescue');
@@ -277,5 +281,96 @@ describe('WarmupSendProcessor', () => {
     expect(valuesArg.text).toBeUndefined();
     expect(valuesArg.html).toBeUndefined();
     expect(Object.keys(valuesArg)).not.toContain('bodyText');
+  });
+
+  describe('private pool partner (partnerSource = private)', () => {
+    const poolInbox = {
+      id: 'pi-1',
+      userId: 'user-1',
+      email: 'partner@poolco.com',
+      provider: 'gmail',
+      status: 'active',
+      activePairs: 3,
+    };
+
+    function mockUpdate() {
+      const setMock = jest.fn().mockReturnThis();
+      const whereMock = jest.fn().mockResolvedValue(undefined);
+      (db.update as jest.Mock).mockReturnValue({ set: setMock, where: whereMock });
+      return { setMock, whereMock };
+    }
+
+    function makePrivateJob(overrides: Partial<Record<string, unknown>> = {}) {
+      return makeJob({ partnerSource: 'private', partnerId: 'pi-1', ...overrides });
+    }
+
+    it('sends via the sender SMTP transporter to the pool inbox email and writes receiverPoolInboxId', async () => {
+      mockSelectSequence([
+        [senderInbox], // sender inbox
+        [poolInbox], // pool_inboxes lookup
+        [], // no prior warmup_sends row for this pool inbox -> no rescue
+      ]);
+      const returningMock = mockInsert();
+      mockUpdate();
+
+      await processor.process(makePrivateJob());
+
+      expect(smtpClientService.getTransporter).toHaveBeenCalledWith('sender-1');
+      expect(sendMailMock).toHaveBeenCalledTimes(1);
+      const mailArgs = sendMailMock.mock.calls[0][0];
+      expect(mailArgs.from).toBe('sender@sendco.com');
+      expect(mailArgs.to).toBe('partner@poolco.com');
+
+      const valuesArg = (db.insert as jest.Mock).mock.results[0].value.values.mock.calls[0][0];
+      expect(valuesArg.receiverPoolInboxId).toBe('pi-1');
+      expect(valuesArg.receiverInboxId).toBeUndefined();
+      expect(returningMock).toHaveBeenCalled();
+    });
+
+    it('decrements pool_inboxes.active_pairs (floor 0) after a successful private-pool send', async () => {
+      mockSelectSequence([[senderInbox], [poolInbox], []]);
+      mockInsert();
+      const { setMock, whereMock } = mockUpdate();
+
+      await processor.process(makePrivateJob());
+
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ activePairs: expect.anything() }),
+      );
+      expect(whereMock).toHaveBeenCalled();
+    });
+
+    it('enqueues a warmup-receive job tagged receiverSource=private with the pool inbox id, no receiverInboxId key', async () => {
+      mockSelectSequence([[senderInbox], [poolInbox], []]);
+      mockInsert();
+      mockUpdate();
+
+      await processor.process(makePrivateJob());
+
+      expect(queueService.add).toHaveBeenCalledTimes(1);
+      const [queueName, payload] = queueService.add.mock.calls[0];
+      expect(queueName).toBe('warmup-receive');
+      expect(payload.receiverSource).toBe('private');
+      expect(payload.receiverId).toBe('pi-1');
+      expect(payload.receiverInboxId).toBeUndefined();
+    });
+
+    it('throws UnrecoverableError when the pool inbox partner cannot be found', async () => {
+      mockSelectSequence([[senderInbox], []]);
+
+      await expect(processor.process(makePrivateJob())).rejects.toThrow(UnrecoverableError);
+      expect(sendMailMock).not.toHaveBeenCalled();
+    });
+
+    it('includes "rescue" when the previous send to that pool inbox landed in spam', async () => {
+      mockSelectSequence([[senderInbox], [poolInbox], [{ landedInSpam: true }]]);
+      mockInsert();
+      mockUpdate();
+
+      await processor.process(makePrivateJob());
+
+      const payload = queueService.add.mock.calls[0][1];
+      expect(payload.actions).toContain('rescue');
+    });
   });
 });

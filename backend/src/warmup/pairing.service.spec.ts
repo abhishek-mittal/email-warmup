@@ -110,7 +110,7 @@ describe('PairingService', () => {
 
     // candidateLow score = 50 (same provider, same industry doesn't matter since not different provider) + 10 = 60
     // candidateHigh score = 50 + 20 + 10 = 80
-    expect(result).toEqual(candidateHigh);
+    expect(result).toEqual({ source: 'shared', poolMember: candidateHigh });
   });
 
   it('applies a -15 penalty for candidates paired with the sender in the last 7 days', async () => {
@@ -145,10 +145,10 @@ describe('PairingService', () => {
     const result = await service.selectPartner('sender-1');
 
     // candidateB (70) beats candidateA (65) despite candidateA's higher base reputation.
-    expect(result).toEqual(candidateB);
+    expect(result).toEqual({ source: 'shared', poolMember: candidateB });
   });
 
-  it('returns the pool_members row (with .id usable as partnerInboxId) of the winner', async () => {
+  it('returns the pool_members row (with .poolMember.id usable as partnerId) of the winner', async () => {
     const candidate = {
       id: 'pool-winner',
       inboxId: 'inbox-winner',
@@ -164,7 +164,8 @@ describe('PairingService', () => {
 
     const result = await service.selectPartner('sender-1');
 
-    expect(result?.id).toBe('pool-winner');
+    expect(result?.source).toBe('shared');
+    expect(result && result.source === 'shared' ? result.poolMember.id : null).toBe('pool-winner');
   });
 
   it('does not write to warmup_sends (selection only, no side effects)', async () => {
@@ -173,5 +174,191 @@ describe('PairingService', () => {
     await service.selectPartner('sender-1');
 
     expect((db as any).insert).toBeUndefined();
+  });
+
+  describe('private pool (userId provided)', () => {
+    const senderInbox = {
+      id: 'sender-1',
+      email: 'sender@sendco.com',
+      provider: 'gmail',
+    };
+
+    it('queries pool_inboxes for the tenant before the shared pool', async () => {
+      mockSelectSequence([
+        [senderInbox], // sender inbox lookup (for domain)
+        [], // no pool_inboxes candidates
+        [senderPoolMember], // shared pool fallback: sender's own pool_members row
+        [], // shared pool fallback: no candidates
+      ]);
+
+      await service.selectPartner('sender-1', 'user-1');
+
+      // 1: sender inbox lookup, 2: pool_inboxes candidates, 3: shared sender lookup, 4: shared candidates
+      expect(db.select).toHaveBeenCalledTimes(4);
+    });
+
+    it('returns the private pool inbox with the lowest active_pairs, tagged source=private', async () => {
+      const poolInboxHigh = {
+        id: 'pi-high',
+        userId: 'user-1',
+        email: 'a@poolco.com',
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 5,
+      };
+      const poolInboxLow = {
+        id: 'pi-low',
+        userId: 'user-1',
+        email: 'b@otherpool.com',
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 1,
+      };
+
+      mockSelectSequence([
+        [senderInbox],
+        [poolInboxHigh, poolInboxLow],
+        [], // poolInboxHigh recency check
+        [], // poolInboxLow recency check
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      expect(result).toEqual({ source: 'private', poolInbox: poolInboxLow });
+    });
+
+    it('applies the same-domain hard block to private pool candidates', async () => {
+      const sameDomainPoolInbox = {
+        id: 'pi-same-domain',
+        userId: 'user-1',
+        email: 'pool@sendco.com', // same domain as sender
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 0,
+      };
+
+      mockSelectSequence([
+        [senderInbox],
+        [sameDomainPoolInbox],
+        [senderPoolMember], // falls through to shared pool
+        [],
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      // sameDomainPoolInbox filtered out -> falls back to shared pool, which also
+      // has no eligible candidates here -> null.
+      expect(result).toBeNull();
+    });
+
+    it('falls back to the shared pool when no private pool inbox qualifies (empty pool)', async () => {
+      const sharedCandidate = {
+        id: 'shared-winner',
+        inboxId: 'inbox-shared',
+        domain: 'shared.com',
+        provider: 'outlook',
+        industry: null,
+        reputation: 60,
+        active: true,
+        quarantined: false,
+      };
+
+      mockSelectSequence([
+        [senderInbox],
+        [], // no pool_inboxes at all
+        [senderPoolMember],
+        [sharedCandidate],
+        [], // recency check for sharedCandidate
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      expect(result).toEqual({ source: 'shared', poolMember: sharedCandidate });
+    });
+
+    it('falls back to the shared pool when only same-domain private pool inboxes exist', async () => {
+      const sameDomainPoolInbox = {
+        id: 'pi-same-domain',
+        userId: 'user-1',
+        email: 'pool@sendco.com',
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 0,
+      };
+      const sharedCandidate = {
+        id: 'shared-winner',
+        inboxId: 'inbox-shared',
+        domain: 'shared.com',
+        provider: 'outlook',
+        industry: null,
+        reputation: 60,
+        active: true,
+        quarantined: false,
+      };
+
+      mockSelectSequence([
+        [senderInbox],
+        [sameDomainPoolInbox],
+        [senderPoolMember],
+        [sharedCandidate],
+        [],
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      expect(result).toEqual({ source: 'shared', poolMember: sharedCandidate });
+    });
+
+    it('returns null when neither private nor shared pool yields a partner', async () => {
+      mockSelectSequence([
+        [senderInbox],
+        [], // no pool_inboxes
+        [], // shared: sender has no pool_members row either
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('applies the 7-day recency penalty for a private pool inbox used by this sender recently', async () => {
+      const poolInboxA = {
+        id: 'pi-a',
+        userId: 'user-1',
+        email: 'a@apool.com',
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 0, // equal active_pairs so recency is the deciding factor
+      };
+      const poolInboxB = {
+        id: 'pi-b',
+        userId: 'user-1',
+        email: 'b@bpool.com',
+        provider: 'gmail',
+        status: 'active',
+        activePairs: 0,
+      };
+
+      mockSelectSequence([
+        [senderInbox],
+        [poolInboxA, poolInboxB],
+        [{ id: 'ws-1' }], // poolInboxA used by this sender in last 7 days -> penalized
+        [], // poolInboxB not used recently
+      ]);
+
+      const result = await service.selectPartner('sender-1', 'user-1');
+
+      expect(result).toEqual({ source: 'private', poolInbox: poolInboxB });
+    });
+
+    it('does not query the private pool when userId is not provided (existing behavior unchanged)', async () => {
+      mockSelectSequence([[senderPoolMember], []]);
+
+      await service.selectPartner('sender-1');
+
+      // Only the shared-pool queries (sender pool_members lookup + candidates) — no
+      // pool_inboxes query at all.
+      expect(db.select).toHaveBeenCalledTimes(2);
+    });
   });
 });

@@ -14,8 +14,8 @@ jest.mock('../db', () => ({
 
 describe('WarmupReceiveProcessor', () => {
   let processor: WarmupReceiveProcessor;
-  let imapClientService: { getConnection: jest.Mock };
-  let smtpClientService: { getTransporter: jest.Mock };
+  let imapClientService: { getConnection: jest.Mock; getPoolInboxConnection: jest.Mock };
+  let smtpClientService: { getTransporter: jest.Mock; getPoolInboxTransporter: jest.Mock };
   let contentService: { generateReply: jest.Mock };
   let updateSetMock: jest.Mock;
   let updateWhereMock: jest.Mock;
@@ -52,7 +52,8 @@ describe('WarmupReceiveProcessor', () => {
   function makeJob(overrides: Partial<Record<string, unknown>> = {}) {
     return {
       data: {
-        receiverInboxId: 'receiver-1',
+        receiverSource: 'shared',
+        receiverId: 'receiver-1',
         messageId: '<abc@emailwarm.io>',
         actions: ['open', 'star'],
         executeAt: '2026-06-20T10:22:00.000Z',
@@ -80,9 +81,11 @@ describe('WarmupReceiveProcessor', () => {
 
     imapClientService = {
       getConnection: jest.fn(),
+      getPoolInboxConnection: jest.fn(),
     };
     smtpClientService = {
       getTransporter: jest.fn(),
+      getPoolInboxTransporter: jest.fn(),
     };
     contentService = {
       generateReply: jest.fn().mockResolvedValue({
@@ -444,5 +447,118 @@ describe('WarmupReceiveProcessor', () => {
       'reply',
       'move:WarmupHub',
     ]);
+  });
+
+  describe('private pool receiver (receiverSource = private)', () => {
+    const poolInbox = {
+      id: 'pi-1',
+      email: 'partner@poolco.com',
+      provider: 'gmail',
+    };
+
+    function mockSelectPoolInbox(row: any) {
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue(row ? [row] : []),
+      });
+    }
+
+    function makePrivateJob(overrides: Partial<Record<string, unknown>> = {}) {
+      return makeJob({ receiverSource: 'private', receiverId: 'pi-1', ...overrides });
+    }
+
+    it('loads the receiver from pool_inboxes and uses getPoolInboxConnection', async () => {
+      const client = makeImapClient();
+      imapClientService.getPoolInboxConnection.mockResolvedValue(client);
+      mockSelectPoolInbox(poolInbox);
+      mockUpdate();
+
+      await processor.process(makePrivateJob());
+
+      expect(imapClientService.getPoolInboxConnection).toHaveBeenCalledWith('pi-1');
+      expect(imapClientService.getConnection).not.toHaveBeenCalled();
+    });
+
+    it('marks \\Seen for the open action against the pool inbox connection', async () => {
+      const client = makeImapClient();
+      imapClientService.getPoolInboxConnection.mockResolvedValue(client);
+      mockSelectPoolInbox(poolInbox);
+      mockUpdate();
+
+      await processor.process(makePrivateJob({ actions: ['open'] }));
+
+      expect(client.messageFlagsAdd).toHaveBeenCalledWith(expect.anything(), ['\\Seen']);
+      expect(updateSetMock).toHaveBeenCalledWith(
+        expect.objectContaining({ openedAt: expect.any(Date) }),
+      );
+    });
+
+    it('sends a reply via getPoolInboxTransporter for the reply action', async () => {
+      const client = makeImapClient();
+      imapClientService.getPoolInboxConnection.mockResolvedValue(client);
+      mockSelectPoolInbox(poolInbox);
+      mockUpdate();
+      const sendMailMock = jest.fn().mockResolvedValue({ messageId: 'whatever' });
+      smtpClientService.getPoolInboxTransporter.mockResolvedValue({ sendMail: sendMailMock });
+
+      await processor.process(makePrivateJob({ actions: ['reply'] }));
+
+      expect(smtpClientService.getPoolInboxTransporter).toHaveBeenCalledWith('pi-1');
+      expect(smtpClientService.getTransporter).not.toHaveBeenCalled();
+      expect(sendMailMock).toHaveBeenCalledTimes(1);
+      expect(updateSetMock).toHaveBeenCalledWith(
+        expect.objectContaining({ repliedAt: expect.any(Date) }),
+      );
+    });
+
+    it('still files to WarmupHub and updates warmup_sends by messageId', async () => {
+      const client = makeImapClient();
+      imapClientService.getPoolInboxConnection.mockResolvedValue(client);
+      mockSelectPoolInbox(poolInbox);
+      mockUpdate();
+
+      await processor.process(makePrivateJob({ actions: [] }));
+
+      expect(client.messageMove).toHaveBeenCalledWith(expect.anything(), 'WarmupHub');
+      expect(db.update).toHaveBeenCalled();
+      expect(updateWhereMock).toHaveBeenCalled();
+    });
+
+    it('rescues from spam using the pool inbox connection', async () => {
+      const client = makeImapClient();
+      client.search.mockImplementation(async () => {
+        const opened = client.mailboxOpen.mock.calls.at(-1)?.[0];
+        return opened === '[Gmail]/Spam' || client.mailboxOpen.mock.calls.length > 2 ? [1] : [];
+      });
+      imapClientService.getPoolInboxConnection.mockResolvedValue(client);
+      mockSelectPoolInbox(poolInbox);
+      mockUpdate();
+
+      await processor.process(makePrivateJob({ actions: ['rescue'] }));
+
+      expect(client.messageMove).toHaveBeenCalledWith(expect.anything(), 'INBOX');
+      expect(updateSetMock).toHaveBeenCalledWith(
+        expect.objectContaining({ rescuedAt: expect.any(Date), landedInSpam: true }),
+      );
+    });
+
+    it('throws when the pool inbox cannot be found', async () => {
+      mockSelectPoolInbox(null);
+
+      await expect(processor.process(makePrivateJob())).rejects.toThrow();
+      expect(imapClientService.getPoolInboxConnection).not.toHaveBeenCalled();
+    });
+
+    it('no-ops gracefully when IMAP is not configured for the pool inbox', async () => {
+      const { ImapNotConfiguredError } = jest.requireActual('../inbox/imap/imap-client.service');
+      imapClientService.getPoolInboxConnection.mockRejectedValue(
+        new ImapNotConfiguredError('pi-1'),
+      );
+      mockSelectPoolInbox(poolInbox);
+
+      await expect(processor.process(makePrivateJob())).resolves.toBeUndefined();
+      expect(db.update).not.toHaveBeenCalled();
+    });
   });
 });

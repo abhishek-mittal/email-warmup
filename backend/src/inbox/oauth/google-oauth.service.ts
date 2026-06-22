@@ -57,17 +57,31 @@ export class GoogleOAuthService {
     };
   }
 
-  async refreshToken(refreshToken: string): Promise<{
+  /**
+   * Refreshes an access token. Defaults to the platform's own OAuth app
+   * (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET) — correct for inboxes connected
+   * via the platform's interactive OAuth flow. A batch-imported pool inbox
+   * supplies its OWN clientId/clientSecret (a different OAuth app entirely);
+   * refresh tokens are bound to the client that issued them, so pass
+   * `clientOverride` in that case.
+   */
+  async refreshToken(
+    refreshToken: string,
+    clientOverride?: { clientId: string; clientSecret: string },
+  ): Promise<{
     access_token: string;
     expires_in: number;
   }> {
+    const clientId = clientOverride?.clientId ?? this.clientId;
+    const clientSecret = clientOverride?.clientSecret ?? this.clientSecret;
+
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         refresh_token: refreshToken,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
+        client_id: clientId,
+        client_secret: clientSecret,
         grant_type: 'refresh_token',
       }),
     });

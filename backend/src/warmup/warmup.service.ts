@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { inboxes, placementTests, poolMembers, reputationScores } from '../db/schema';
+import { inboxes, placementTests, poolInboxes, poolMembers, reputationScores } from '../db/schema';
 import { RampService, WarmupSpeed } from './ramp.service';
 import { PairingService } from './pairing.service';
 import { QueueService } from '../queue/queue.service';
@@ -67,24 +67,34 @@ export class WarmupService {
     const slots = this.buildJitteredSlots(volume);
 
     for (const scheduledAt of slots) {
-      const partner = await this.pairingService.selectPartner(inbox.id);
+      const partner = await this.pairingService.selectPartner(inbox.id, inbox.userId);
       if (!partner) {
         // Never exceed the ramp-curve volume for the day with a substitute send —
         // if pairing fails for this slot, skip it entirely.
         continue;
       }
 
+      const partnerId = partner.source === 'private' ? partner.poolInbox.id : partner.poolMember.id;
+
       const delay = Math.max(0, scheduledAt.getTime() - Date.now());
       await this.queueService.add(
         'warmup-send',
         {
           senderInboxId: inbox.id,
-          partnerInboxId: partner.id,
+          partnerSource: partner.source,
+          partnerId,
           warmupDay,
           scheduledAt: scheduledAt.toISOString(),
         },
         { delay },
       );
+
+      if (partner.source === 'private') {
+        await db
+          .update(poolInboxes)
+          .set({ activePairs: sql`${poolInboxes.activePairs} + 1` })
+          .where(eq(poolInboxes.id, partner.poolInbox.id));
+      }
     }
 
     await db

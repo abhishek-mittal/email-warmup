@@ -2,16 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
 import { randomUUID, createHash } from 'crypto';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { inboxes, poolMembers, warmupSends } from '../db/schema';
+import { inboxes, poolInboxes, poolMembers, warmupSends } from '../db/schema';
 import { ContentService } from './content.service';
 import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
 import { QueueService } from '../queue/queue.service';
 
+export type PartnerSource = 'private' | 'shared';
+
 export interface WarmupSendJobData {
   senderInboxId: string;
-  partnerInboxId: string;
+  partnerSource: PartnerSource;
+  partnerId: string;
   warmupDay: number;
   scheduledAt: string;
 }
@@ -19,6 +22,11 @@ export interface WarmupSendJobData {
 const RECEIVE_DELAY_MIN_MS = 2 * 60_000;
 const RECEIVE_DELAY_MAX_MS = 240 * 60_000;
 const REPLY_PROBABILITY = 0.6;
+
+interface ReceiverIdentity {
+  id: string;
+  email: string;
+}
 
 @Injectable()
 @Processor('warmup-send')
@@ -34,7 +42,7 @@ export class WarmupSendProcessor extends WorkerHost {
   }
 
   async process(job: Job<WarmupSendJobData>): Promise<void> {
-    const { senderInboxId, partnerInboxId, warmupDay } = job.data;
+    const { senderInboxId, partnerSource, partnerId, warmupDay } = job.data;
 
     const senderRows = await db
       .select()
@@ -51,14 +59,31 @@ export class WarmupSendProcessor extends WorkerHost {
       );
     }
 
+    if (partnerSource === 'private') {
+      await this.processPrivatePoolSend(job, sender, partnerId, warmupDay);
+      return;
+    }
+
+    await this.processSharedPoolSend(job, sender, partnerId, warmupDay);
+  }
+
+  /** Shared pool_members path — exact existing logic, unchanged behavior. */
+  private async processSharedPoolSend(
+    job: Job<WarmupSendJobData>,
+    sender: typeof inboxes.$inferSelect,
+    partnerId: string,
+    warmupDay: number,
+  ): Promise<void> {
+    const senderInboxId = sender.id;
+
     const poolMemberRows = await db
       .select()
       .from(poolMembers)
-      .where(eq(poolMembers.id, partnerInboxId))
+      .where(eq(poolMembers.id, partnerId))
       .limit(1);
     const partnerPoolMember = poolMemberRows[0];
     if (!partnerPoolMember) {
-      throw new UnrecoverableError(`Partner pool member ${partnerInboxId} not found`);
+      throw new UnrecoverableError(`Partner pool member ${partnerId} not found`);
     }
 
     const receiverRows = await db
@@ -117,11 +142,96 @@ export class WarmupSendProcessor extends WorkerHost {
       })
       .returning();
 
-    await this.enqueueReceiveJob(receiver.id, messageId, warmupDay, sendRecord?.id);
+    await this.enqueueReceiveJob(
+      'shared',
+      { id: receiver.id, email: receiver.email },
+      messageId,
+      warmupDay,
+      sendRecord?.id,
+    );
+  }
+
+  /**
+   * Private pool path — receiver identity comes from pool_inboxes (no
+   * inboxes row exists for it). Sending still goes through the sender's own
+   * SMTP transporter (the SENDER is always an `inboxes` row regardless of
+   * who the partner is); only the receiver's identity/table changes.
+   */
+  private async processPrivatePoolSend(
+    job: Job<WarmupSendJobData>,
+    sender: typeof inboxes.$inferSelect,
+    partnerId: string,
+    warmupDay: number,
+  ): Promise<void> {
+    const senderInboxId = sender.id;
+
+    const poolInboxRows = await db
+      .select()
+      .from(poolInboxes)
+      .where(eq(poolInboxes.id, partnerId))
+      .limit(1);
+    const poolInbox = poolInboxRows[0];
+    if (!poolInbox) {
+      throw new UnrecoverableError(`Partner pool inbox ${partnerId} not found`);
+    }
+
+    // No pool_members row applies here — private pool inboxes carry no industry.
+    const email = await this.contentService.generateEmail({
+      warmupDay,
+      industry: null,
+    });
+
+    const transporter = await this.smtpClientService.getTransporter(senderInboxId);
+    const messageId = `<${randomUUID()}@emailwarm.io>`;
+
+    await transporter.sendMail({
+      from: sender.email,
+      to: poolInbox.email,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+      headers: {
+        'Message-ID': messageId,
+        'X-WarmupHub': 'true',
+      },
+    });
+
+    const bodyHash = createHash('sha256').update(email.text).digest('hex');
+    const sentAt = new Date();
+
+    const [sendRecord] = await db
+      .insert(warmupSends)
+      .values({
+        senderInboxId,
+        receiverPoolInboxId: poolInbox.id,
+        messageId,
+        subject: email.subject,
+        bodyHash,
+        warmupDay,
+        scheduledAt: new Date(job.data.scheduledAt),
+        sentAt,
+      })
+      .returning();
+
+    // Best-effort active_pairs decrement (floor 0) now that the send completed —
+    // this counter is an approximation per the spec, not transactionally precise.
+    await db
+      .update(poolInboxes)
+      .set({ activePairs: sql`GREATEST(${poolInboxes.activePairs} - 1, 0)` })
+      .where(eq(poolInboxes.id, poolInbox.id));
+
+    await this.enqueueReceiveJob(
+      'private',
+      { id: poolInbox.id, email: poolInbox.email },
+      messageId,
+      warmupDay,
+      sendRecord?.id,
+    );
   }
 
   private async enqueueReceiveJob(
-    receiverInboxId: string,
+    receiverSource: PartnerSource,
+    receiver: ReceiverIdentity,
     messageId: string,
     warmupDay: number,
     currentSendId?: string,
@@ -132,7 +242,11 @@ export class WarmupSendProcessor extends WorkerHost {
       actions.push('reply');
     }
 
-    const landedInSpam = await this.didPreviousSendLandInSpam(receiverInboxId, currentSendId);
+    const landedInSpam = await this.didPreviousSendLandInSpam(
+      receiverSource,
+      receiver.id,
+      currentSendId,
+    );
     if (landedInSpam) {
       actions.push('rescue');
     }
@@ -141,27 +255,39 @@ export class WarmupSendProcessor extends WorkerHost {
       RECEIVE_DELAY_MIN_MS +
       Math.floor(Math.random() * (RECEIVE_DELAY_MAX_MS - RECEIVE_DELAY_MIN_MS));
 
-    await this.queueService.add(
-      'warmup-receive',
-      {
-        receiverInboxId,
-        messageId,
-        warmupDay,
-        actions,
-        executeAt: new Date(Date.now() + delay).toISOString(),
-      },
-      { delay },
-    );
+    const payload: Record<string, unknown> = {
+      receiverSource,
+      receiverId: receiver.id,
+      messageId,
+      warmupDay,
+      actions,
+      executeAt: new Date(Date.now() + delay).toISOString(),
+    };
+
+    // Preserved verbatim for the shared-pool case so QueueService.removeJobsForReceiver
+    // (keyed on literal `data.receiverInboxId`, outside this task's file ownership)
+    // keeps draining pending warmup-receive jobs when a shared-pool inbox is paused.
+    // Private-pool receivers have no equivalent pause path, so this key is simply
+    // omitted for them.
+    if (receiverSource === 'shared') {
+      payload.receiverInboxId = receiver.id;
+    }
+
+    await this.queueService.add('warmup-receive', payload, { delay });
   }
 
   private async didPreviousSendLandInSpam(
-    receiverInboxId: string,
+    receiverSource: PartnerSource,
+    receiverId: string,
     excludeSendId?: string,
   ): Promise<boolean> {
+    const receiverColumn =
+      receiverSource === 'private' ? warmupSends.receiverPoolInboxId : warmupSends.receiverInboxId;
+
     const rows = await db
       .select()
       .from(warmupSends)
-      .where(eq(warmupSends.receiverInboxId, receiverInboxId))
+      .where(and(eq(receiverColumn, receiverId)))
       .orderBy(desc(warmupSends.sentAt))
       .limit(excludeSendId ? 2 : 1);
 

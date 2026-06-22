@@ -4,18 +4,26 @@ import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import type { ImapFlow } from 'imapflow';
 import { db } from '../db';
-import { inboxes, warmupSends } from '../db/schema';
+import { inboxes, poolInboxes, warmupSends } from '../db/schema';
 import { ImapClientService, ImapNotConfiguredError } from '../inbox/imap/imap-client.service';
 import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
 import { ContentService, WarmupEmail } from './content.service';
 
 export type WarmupReceiveAction = 'open' | 'star' | 'reply' | 'rescue';
+export type ReceiverSource = 'private' | 'shared';
 
 export interface WarmupReceiveJobPayload {
-  receiverInboxId: string;
+  receiverSource: ReceiverSource;
+  receiverId: string;
   messageId: string;
   actions: WarmupReceiveAction[];
   executeAt: string;
+}
+
+interface ReceiverIdentity {
+  id: string;
+  email: string;
+  provider: string;
 }
 
 const WARMUP_HUB_FOLDER = 'WarmupHub';
@@ -51,34 +59,36 @@ export class WarmupReceiveProcessor extends WorkerHost {
   }
 
   async process(job: Job<WarmupReceiveJobPayload>): Promise<void> {
-    const { receiverInboxId, messageId, actions } = job.data;
+    const { receiverSource, receiverId, messageId, actions } = job.data;
 
-    const rows = await db.select().from(inboxes).where(eq(inboxes.id, receiverInboxId)).limit(1);
-    const receiverInbox = rows[0];
-    if (!receiverInbox) {
-      throw new Error(`Receiver inbox not found: ${receiverInboxId}`);
+    const receiver = await this.loadReceiver(receiverSource, receiverId);
+    if (!receiver) {
+      throw new Error(`Receiver not found: ${receiverSource}:${receiverId}`);
     }
 
-    // No-op gracefully when the receiver inbox doesn't have IMAP
-    // configured (custom-SMTP inbox where the user opted out). Sending
-    // still works via SMTP; only the receive path is skipped.
+    // No-op gracefully when the receiver doesn't have IMAP configured (custom-SMTP
+    // inbox where the user opted out). Sending still works via SMTP; only the
+    // receive path is skipped.
     let client: ImapFlow;
     try {
-      client = await this.imapClientService.getConnection(receiverInboxId);
+      client =
+        receiverSource === 'private'
+          ? await this.imapClientService.getPoolInboxConnection(receiver.id)
+          : await this.imapClientService.getConnection(receiver.id);
     } catch (err: any) {
       if (err instanceof ImapNotConfiguredError) {
         this.logger.warn(
-          `warmup-receive skipped for ${receiverInboxId}: IMAP not configured`,
+          `warmup-receive skipped for ${receiverSource}:${receiver.id}: IMAP not configured`,
         );
         return;
       }
       throw err;
     }
-    const isGmail = receiverInbox.provider === 'gmail';
+    const isGmail = receiver.provider === 'gmail';
 
-    const located = await this.locateMessage(client, messageId, receiverInbox.provider);
+    const located = await this.locateMessage(client, messageId, receiver.provider);
     if (!located) {
-      throw new Error(`Message ${messageId} not found in any folder for inbox ${receiverInboxId}`);
+      throw new Error(`Message ${messageId} not found in any folder for receiver ${receiver.id}`);
     }
 
     const updates: Partial<typeof warmupSends.$inferInsert> = {};
@@ -122,7 +132,7 @@ export class WarmupReceiveProcessor extends WorkerHost {
     }
 
     if (actions.includes('reply')) {
-      await this.sendReply(receiverInbox, messageId, fetched);
+      await this.sendReply(receiverSource, receiver, messageId, fetched);
       updates.repliedAt = new Date();
     }
 
@@ -132,12 +142,35 @@ export class WarmupReceiveProcessor extends WorkerHost {
     await db.update(warmupSends).set(updates).where(eq(warmupSends.messageId, messageId));
 
     this.logger.log(
-      `Processed warmup-receive for ${messageId} (inbox ${receiverInboxId}): actions=[${actions.join(',')}]${located.isSpam ? ' rescued-from-spam' : ''}`,
+      `Processed warmup-receive for ${messageId} (${receiverSource}:${receiver.id}): actions=[${actions.join(',')}]${located.isSpam ? ' rescued-from-spam' : ''}`,
     );
   }
 
+  /** shared: existing inboxes-table lookup, unchanged. private: pool_inboxes lookup. */
+  private async loadReceiver(
+    receiverSource: ReceiverSource,
+    receiverId: string,
+  ): Promise<ReceiverIdentity | null> {
+    if (receiverSource === 'private') {
+      const rows = await db
+        .select()
+        .from(poolInboxes)
+        .where(eq(poolInboxes.id, receiverId))
+        .limit(1);
+      const poolInbox = rows[0];
+      if (!poolInbox) return null;
+      return { id: poolInbox.id, email: poolInbox.email, provider: poolInbox.provider };
+    }
+
+    const rows = await db.select().from(inboxes).where(eq(inboxes.id, receiverId)).limit(1);
+    const inbox = rows[0];
+    if (!inbox) return null;
+    return { id: inbox.id, email: inbox.email, provider: inbox.provider };
+  }
+
   private async sendReply(
-    receiverInbox: typeof inboxes.$inferSelect,
+    receiverSource: ReceiverSource,
+    receiver: ReceiverIdentity,
     originalMessageId: string,
     fetched: { envelope?: { subject?: string } } | null,
   ): Promise<void> {
@@ -147,9 +180,12 @@ export class WarmupReceiveProcessor extends WorkerHost {
       html: '',
     };
     const reply = await this.contentService.generateReply(original, { warmupDay: 0 });
-    const transporter = await this.smtpClientService.getTransporter(receiverInbox.id);
+    const transporter =
+      receiverSource === 'private'
+        ? await this.smtpClientService.getPoolInboxTransporter(receiver.id)
+        : await this.smtpClientService.getTransporter(receiver.id);
     await transporter.sendMail({
-      from: receiverInbox.email,
+      from: receiver.email,
       subject: reply.subject,
       text: reply.text,
       html: reply.html,

@@ -61,7 +61,10 @@ describe('WarmupService', () => {
 
     rampService = { getDailyVolume: jest.fn().mockReturnValue(10) };
     pairingService = {
-      selectPartner: jest.fn().mockResolvedValue({ id: 'pool-partner-1', inboxId: 'inbox-2' }),
+      selectPartner: jest.fn().mockResolvedValue({
+        source: 'shared',
+        poolMember: { id: 'pool-partner-1', inboxId: 'inbox-2' },
+      }),
     };
     queueService = {
       add: jest.fn().mockResolvedValue(undefined),
@@ -101,7 +104,7 @@ describe('WarmupService', () => {
       expect(sendJobs).toHaveLength(10);
     });
 
-    it('calls selectPartner once per send slot and passes its .id as partnerInboxId', async () => {
+    it('calls selectPartner once per send slot with the sender userId, and passes the winner as partnerId', async () => {
       mockSelectChain([activeInbox]);
       mockUpdate();
       rampService.getDailyVolume.mockReturnValue(3);
@@ -109,11 +112,12 @@ describe('WarmupService', () => {
       await service.scheduleAllInboxes();
 
       expect(pairingService.selectPartner).toHaveBeenCalledTimes(3);
-      expect(pairingService.selectPartner).toHaveBeenCalledWith('inbox-1');
+      expect(pairingService.selectPartner).toHaveBeenCalledWith('inbox-1', 'user-1');
 
       const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
       for (const [, payload] of sendJobs) {
-        expect(payload.partnerInboxId).toBe('pool-partner-1');
+        expect(payload.partnerSource).toBe('shared');
+        expect(payload.partnerId).toBe('pool-partner-1');
         expect(payload.senderInboxId).toBe('inbox-1');
       }
     });
@@ -123,14 +127,63 @@ describe('WarmupService', () => {
       mockUpdate();
       rampService.getDailyVolume.mockReturnValue(3);
       pairingService.selectPartner
-        .mockResolvedValueOnce({ id: 'pool-1', inboxId: 'inbox-2' })
+        .mockResolvedValueOnce({
+          source: 'shared',
+          poolMember: { id: 'pool-1', inboxId: 'inbox-2' },
+        })
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'pool-3', inboxId: 'inbox-4' });
+        .mockResolvedValueOnce({
+          source: 'shared',
+          poolMember: { id: 'pool-3', inboxId: 'inbox-4' },
+        });
 
       await service.scheduleAllInboxes();
 
       const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
       expect(sendJobs).toHaveLength(2);
+    });
+
+    it('increments pool_inboxes.active_pairs when the winning partner is from the private pool', async () => {
+      mockSelectChain([activeInbox]);
+      const setMock = jest.fn().mockReturnThis();
+      (db.update as jest.Mock).mockReturnValue({
+        set: setMock,
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+      rampService.getDailyVolume.mockReturnValue(1);
+      pairingService.selectPartner.mockResolvedValueOnce({
+        source: 'private',
+        poolInbox: { id: 'pi-1', activePairs: 2 },
+      });
+
+      await service.scheduleAllInboxes();
+
+      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
+      expect(sendJobs).toHaveLength(1);
+      expect(sendJobs[0][1].partnerSource).toBe('private');
+      expect(sendJobs[0][1].partnerId).toBe('pi-1');
+
+      // active_pairs increment uses the sql`... + 1` pattern, asserted via the
+      // update().set() call shape rather than the raw SQL fragment.
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ activePairs: expect.anything() }),
+      );
+    });
+
+    it('does not touch pool_inboxes.active_pairs when the winning partner is from the shared pool', async () => {
+      mockSelectChain([activeInbox]);
+      mockUpdate();
+      rampService.getDailyVolume.mockReturnValue(1);
+      pairingService.selectPartner.mockResolvedValueOnce({
+        source: 'shared',
+        poolMember: { id: 'pool-1', inboxId: 'inbox-2' },
+      });
+
+      await service.scheduleAllInboxes();
+
+      // Only the inboxes.warmup_day update should have happened — no extra
+      // db.update call for pool_inboxes.
+      expect((db.update as jest.Mock).mock.calls.length).toBe(1);
     });
 
     it('applies non-zero jitter to every job (no job fires at the exact base slot time)', async () => {
