@@ -13,6 +13,7 @@ export const QUEUE_NAMES = [
   'token-refresh',
   'readiness-report',
   'diagnostics',
+  'inbox-analysis',
 ] as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];

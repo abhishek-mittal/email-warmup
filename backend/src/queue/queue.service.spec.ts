@@ -27,6 +27,7 @@ describe('QueueService', () => {
           'token-refresh',
           'readiness-report',
           'diagnostics',
+          'inbox-analysis',
         ].map((name) => ({
           provide: getQueueToken(name),
           useValue: mockQueue,
@@ -59,6 +60,11 @@ describe('QueueService', () => {
       { inboxId: '123', triggerType: 'auto_blacklist' },
       undefined,
     );
+  });
+
+  it('adds a job to inbox-analysis queue', async () => {
+    await service.add('inbox-analysis', { inboxId: '123' });
+    expect(mockQueue.add).toHaveBeenCalledWith('inbox-analysis', { inboxId: '123' }, undefined);
   });
 
   describe('removeJobsForSender', () => {

@@ -7,6 +7,7 @@ import {
   boolean,
   jsonb,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -72,6 +73,32 @@ export const poolMembers = pgTable(
   }),
 );
 
+// Tenant-owned private pool. These are inboxes the tenant controls that act as
+// the other side of all warmup conversations. They are never warmed themselves
+// — they only send, receive, open, reply, and rescue.
+export const poolInboxes = pgTable(
+  'pool_inboxes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id').notNull(),
+    email: text('email').notNull(),
+    provider: text('provider').notNull(), // 'gmail' | 'outlook' | 'custom'
+    status: text('status').notNull().default('pending'), // 'pending' | 'active' | 'error'
+    displayName: text('display_name'),
+    encryptedCredentials: jsonb('encrypted_credentials').notNull(), // same AES-256-GCM structure as inboxes table
+    lastUsedAt: timestamp('last_used_at'),
+    activePairs: integer('active_pairs').notNull().default(0), // count of inboxes currently paired with this pool inbox
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (t) => ({
+    userIdIdx: index('idx_pool_inboxes_user_id').on(t.userId),
+    statusIdx: index('idx_pool_inboxes_status').on(t.status),
+    emailIdx: uniqueIndex('idx_pool_inboxes_email').on(t.email),
+  }),
+);
+
 export const warmupSends = pgTable(
   'warmup_sends',
   {
@@ -79,9 +106,12 @@ export const warmupSends = pgTable(
     senderInboxId: uuid('sender_inbox_id')
       .notNull()
       .references(() => inboxes.id),
-    receiverInboxId: uuid('receiver_inbox_id')
-      .notNull()
-      .references(() => inboxes.id),
+    receiverInboxId: uuid('receiver_inbox_id').references(() => inboxes.id),
+    // Set when the receiver is a private pool inbox (pool_inboxes.id) instead of
+    // a warmed inbox (inboxes.id). No FK — pool_inboxes doesn't need a hard
+    // reference here. Application-level invariant (enforced in T022, not by a
+    // DB constraint): exactly one of receiverInboxId / receiverPoolInboxId is set.
+    receiverPoolInboxId: uuid('receiver_pool_inbox_id'),
     messageId: text('message_id'),
     subject: text('subject'),
     bodyHash: text('body_hash'),
@@ -100,6 +130,31 @@ export const warmupSends = pgTable(
   (t) => ({
     senderIdx: index('warmup_sends_sender_inbox_id_idx').on(t.senderInboxId),
     createdAtIdx: index('warmup_sends_created_at_idx').on(t.createdAt),
+  }),
+);
+
+// Result of the initial health analysis that runs automatically when any
+// inbox (to-warm or pool) is added. Exactly one of inboxId / poolInboxId is
+// set (no DB constraint — pool inboxes have no inboxes.id and vice versa).
+export const inboxAnalysis = pgTable(
+  'inbox_analysis',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    inboxId: uuid('inbox_id'), // references inboxes.id (nullable — pool inboxes have no inboxes.id)
+    poolInboxId: uuid('pool_inbox_id'), // references pool_inboxes.id (nullable — only set for pool inboxes)
+    spfValid: boolean('spf_valid'),
+    dkimValid: boolean('dkim_valid'),
+    dmarcValid: boolean('dmarc_valid'),
+    mxValid: boolean('mx_valid'),
+    rdnsValid: boolean('rdns_valid'),
+    placementEstimate: text('placement_estimate'), // 'inbox' | 'promotions' | 'spam' | 'unknown'
+    healthScore: integer('health_score'), // 0-100 composite of DNS fields
+    issues: text('issues').array(), // array of issue code strings
+    analysedAt: timestamp('analysed_at').defaultNow().notNull(),
+  },
+  (t) => ({
+    inboxIdIdx: index('idx_inbox_analysis_inbox_id').on(t.inboxId),
+    poolInboxIdIdx: index('idx_inbox_analysis_pool_inbox_id').on(t.poolInboxId),
   }),
 );
 

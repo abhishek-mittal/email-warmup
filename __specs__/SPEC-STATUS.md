@@ -147,6 +147,20 @@ Replaced the third-party Clerk SaaS with self-hosted [better-auth](https://bette
 - No real OAuth round-trip was tested (requires real Google + Microsoft credentials); structurally complete.
 - Better-auth is mounted on the frontend (`:3000`) and the backend (`:3001`) only share the HMAC secret. The session cookie is httpOnly and not shared cross-origin — `useApi`/`serverApi` carry the bearer token explicitly so no cookie plumbing is needed.
 
+## Wave 7 — Private Pool Architecture
+
+| Task | Title | Status | Started | Completed | Notes |
+|---|---|---|---|---|---|
+| T019 | Pool inboxes table + schema migration | `done` | 2026-06-22 | 2026-06-22 | `pool_inboxes` + `inbox_analysis` tables added, `inbox-analysis` queue wired into QueueService; expansion: `warmup_sends.receiver_inbox_id` made nullable + `receiver_pool_inbox_id` (nullable, no FK) added so T022 can pair to private pool inboxes — migration `0003_colorful_rick_jones.sql` applied cleanly |
+| T020 | Inbox batch upload (CSV + wizard) | `pending` | — | — | — |
+| T021 | Initial inbox analysis job | `pending` | — | — | — |
+| T022 | Private pool pairing engine pivot | `pending` | — | — | — |
+| T023 | Pool management frontend | `pending` | — | — | — |
+
+**Wave 7 gate:** Tenant uploads pool + inbox CSVs, DNS analysis appears in grids, warming runs closed-loop with private pool only
+
+---
+
 ## Phase 1 completion gate
 
 All of the following must be true before Phase 1 is declared done:

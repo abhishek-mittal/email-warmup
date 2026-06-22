@@ -18,6 +18,7 @@ export class QueueService {
     @InjectQueue('token-refresh') private readonly tokenRefreshQueue: Queue,
     @InjectQueue('readiness-report') private readonly readinessReportQueue: Queue,
     @InjectQueue('diagnostics') private readonly diagnosticsQueue: Queue,
+    @InjectQueue('inbox-analysis') private readonly inboxAnalysisQueue: Queue,
   ) {}
 
   private getQueue(name: QueueName): Queue {
@@ -42,6 +43,8 @@ export class QueueService {
         return this.readinessReportQueue;
       case 'diagnostics':
         return this.diagnosticsQueue;
+      case 'inbox-analysis':
+        return this.inboxAnalysisQueue;
       default:
         throw new Error(`Unknown queue: ${name}`);
     }
