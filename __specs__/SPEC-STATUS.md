@@ -158,6 +158,7 @@ Replaced the third-party Clerk SaaS with self-hosted [better-auth](https://bette
 | T023 | Pool management frontend | `pending` | — | — | — |
 
 **Wave 7 gate:** Tenant uploads pool + inbox CSVs, DNS analysis appears in grids, warming runs closed-loop with private pool only
+**Integration (controller-applied, fb80e59):** `AnalysisModule` + `PoolInboxModule` wired into `app.module.ts` after T020/T021/T022 landed. Avoided a real module-import cycle (`InboxModule` → `AnalysisModule` → `MonitorModule` → `WarmupModule` → `InboxModule`) by exposing `AnalysisService`'s read methods as plain functions (`getLatestAnalysisFor{Inbox,Inboxes,PoolInbox,PoolInboxes}`) that `InboxController`/`PoolInboxController` import directly instead of via Nest DI — `AnalysisService` delegates to the same functions so T021's tests are untouched. `GET /inboxes`, `GET /inboxes/:id`, and `GET /pool-inboxes` now all attach the latest `inbox_analysis` row as `analysis` (closing T021's two deferred acceptance criteria). Verified: full module graph boots cleanly (live `Nest application successfully started`, all routes mapped, `GET /health` 200), 491/491 tests, typecheck + build clean. T023 (frontend) is the only remaining Wave 7 task.
 
 ---
 
