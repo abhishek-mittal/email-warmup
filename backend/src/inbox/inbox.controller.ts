@@ -25,26 +25,35 @@ import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { normalizeAliases } from './dto/connect-custom-smtp.dto';
 import { BatchUploadDto } from '@/pool-inbox/dto/batch-inbox-entry.dto';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
+import { getLatestAnalysisForInbox, getLatestAnalysisForInboxes } from '@/analysis/analysis.service';
 
 @Controller('inboxes')
 @UseGuards(BetterAuthGuard)
 export class InboxController {
   constructor(private readonly inboxService: InboxService) {}
 
+  /**
+   * Attaches each inbox's latest `inbox_analysis` row (or null if analysis
+   * hasn't completed yet) as `analysis` — T023's grid needs the DNS
+   * Health/Issues columns sourced from here.
+   */
   @Get()
-  findAll(@Req() req: Request & { userId?: string }) {
-    return this.inboxService.findByUser(req.userId!);
+  async findAll(@Req() req: Request & { userId?: string }) {
+    const inboxes = await this.inboxService.findByUser(req.userId!);
+    const analysisByInboxId = await getLatestAnalysisForInboxes(inboxes.map((inbox) => inbox.id));
+    return inboxes.map((inbox) => ({
+      ...inbox,
+      analysis: analysisByInboxId.get(inbox.id) ?? null,
+    }));
   }
 
-  /**
-   * Ownership-checked single-row lookup (T020 addendum). No analysis join
-   * yet — a later step attaches the latest `inbox_analysis` row here.
-   */
+  /** Ownership-checked single-row lookup (T020 addendum), with the latest `inbox_analysis` row attached. */
   @Get(':id')
   async findOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
     const inbox = await this.inboxService.findById(req.userId!, id);
     if (!inbox) throw new NotFoundException();
-    return inbox;
+    const analysis = await getLatestAnalysisForInbox(id);
+    return { ...inbox, analysis };
   }
 
   /**

@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PoolInboxController } from './pool-inbox.controller';
 import { PoolInboxService } from './pool-inbox.service';
+import { getLatestAnalysisForPoolInboxes } from '@/analysis/analysis.service';
+
+jest.mock('@/analysis/analysis.service', () => ({
+  getLatestAnalysisForPoolInboxes: jest.fn(),
+}));
 
 describe('PoolInboxController', () => {
   let controller: PoolInboxController;
@@ -16,6 +21,9 @@ describe('PoolInboxController', () => {
   }
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    (getLatestAnalysisForPoolInboxes as jest.Mock).mockResolvedValue(new Map());
+
     service = {
       batchUpload: jest.fn(),
       create: jest.fn(),
@@ -120,14 +128,29 @@ describe('PoolInboxController', () => {
   });
 
   describe('GET /pool-inboxes', () => {
-    it('returns pool inboxes for the authenticated user', async () => {
+    it('returns pool inboxes for the authenticated user with their latest analysis attached', async () => {
       const rows = [{ id: 'pi-1', userId: 'user-1' }];
+      const analysisRow = { id: 'analysis-1', poolInboxId: 'pi-1', healthScore: 80 };
       service.findByUser.mockResolvedValue(rows);
+      (getLatestAnalysisForPoolInboxes as jest.Mock).mockResolvedValue(
+        new Map([['pi-1', analysisRow]]),
+      );
 
       const result = await controller.findAll(makeReq('user-1'));
 
       expect(service.findByUser).toHaveBeenCalledWith('user-1');
-      expect(result).toEqual(rows);
+      expect(getLatestAnalysisForPoolInboxes).toHaveBeenCalledWith(['pi-1']);
+      expect(result).toEqual([{ ...rows[0], analysis: analysisRow }]);
+    });
+
+    it('attaches analysis: null when no analysis row exists yet', async () => {
+      const rows = [{ id: 'pi-1', userId: 'user-1' }];
+      service.findByUser.mockResolvedValue(rows);
+      (getLatestAnalysisForPoolInboxes as jest.Mock).mockResolvedValue(new Map());
+
+      const result = await controller.findAll(makeReq('user-1'));
+
+      expect(result).toEqual([{ ...rows[0], analysis: null }]);
     });
   });
 

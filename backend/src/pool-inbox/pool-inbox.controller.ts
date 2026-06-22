@@ -16,6 +16,7 @@ import { Request } from 'express';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { BatchInboxEntry } from '@/inbox/inbox.service';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
+import { getLatestAnalysisForPoolInboxes } from '@/analysis/analysis.service';
 import { PoolInboxService } from './pool-inbox.service';
 import { BatchUploadDto, BatchInboxEntryDto } from './dto/batch-inbox-entry.dto';
 
@@ -73,10 +74,21 @@ export class PoolInboxController {
     return this.poolInboxService.create(req.userId!, body as BatchInboxEntry);
   }
 
-  /** Lists pool inboxes for the authenticated user (no analysis join — deferred). */
+  /**
+   * Lists pool inboxes for the authenticated user, each with its latest
+   * `inbox_analysis` row (or null if analysis hasn't completed yet)
+   * attached as `analysis`.
+   */
   @Get()
   async findAll(@Req() req: Request & { userId?: string }) {
-    return this.poolInboxService.findByUser(req.userId!);
+    const poolInboxes = await this.poolInboxService.findByUser(req.userId!);
+    const analysisByPoolInboxId = await getLatestAnalysisForPoolInboxes(
+      poolInboxes.map((poolInbox) => poolInbox.id),
+    );
+    return poolInboxes.map((poolInbox) => ({
+      ...poolInbox,
+      analysis: analysisByPoolInboxId.get(poolInbox.id) ?? null,
+    }));
   }
 
   /** Soft delete: status='removed', irreversible, ownership-checked. */

@@ -85,9 +85,7 @@ export class PlacementTestProcessor extends WorkerHost {
     // email landed. Report as 'missing' rather than blowing up the whole
     // batch with an unhandled decrypt/undefined error.
     if (!seed.imapHost || !seed.imapPort || !seed.imapUser || !seed.imapPass) {
-      this.logger.warn(
-        `Seed ${seed.id} (${seed.email}) missing IMAP creds — treating as missing`,
-      );
+      this.logger.warn(`Seed ${seed.id} (${seed.email}) missing IMAP creds — treating as missing`);
       return 'missing';
     }
 

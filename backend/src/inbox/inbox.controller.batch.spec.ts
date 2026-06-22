@@ -2,6 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { InboxController } from './inbox.controller';
 import { InboxService } from './inbox.service';
+import {
+  getLatestAnalysisForInbox,
+  getLatestAnalysisForInboxes,
+} from '@/analysis/analysis.service';
+
+jest.mock('@/analysis/analysis.service', () => ({
+  getLatestAnalysisForInbox: jest.fn(),
+  getLatestAnalysisForInboxes: jest.fn(),
+}));
 
 describe('InboxController — batch + GET :id', () => {
   let controller: InboxController;
@@ -17,6 +26,10 @@ describe('InboxController — batch + GET :id', () => {
   }
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    (getLatestAnalysisForInbox as jest.Mock).mockResolvedValue(null);
+    (getLatestAnalysisForInboxes as jest.Mock).mockResolvedValue(new Map());
+
     inboxService = {
       batchUpload: jest.fn(),
       findById: jest.fn(),
@@ -115,14 +128,27 @@ describe('InboxController — batch + GET :id', () => {
   });
 
   describe('GET /inboxes/:id', () => {
-    it('returns the inbox row when owned by the requesting user', async () => {
+    it('returns the inbox row with its latest analysis attached when owned by the requesting user', async () => {
       const inboxRow = { id: 'inbox-1', userId: 'user-1', email: 'a@domain.com' };
+      const analysisRow = { id: 'analysis-1', inboxId: 'inbox-1', healthScore: 90 };
       inboxService.findById.mockResolvedValue(inboxRow);
+      (getLatestAnalysisForInbox as jest.Mock).mockResolvedValue(analysisRow);
 
       const result = await controller.findOne(makeReq('user-1'), 'inbox-1');
 
       expect(inboxService.findById).toHaveBeenCalledWith('user-1', 'inbox-1');
-      expect(result).toEqual(inboxRow);
+      expect(getLatestAnalysisForInbox).toHaveBeenCalledWith('inbox-1');
+      expect(result).toEqual({ ...inboxRow, analysis: analysisRow });
+    });
+
+    it('attaches analysis: null when no analysis row exists yet', async () => {
+      const inboxRow = { id: 'inbox-1', userId: 'user-1', email: 'a@domain.com' };
+      inboxService.findById.mockResolvedValue(inboxRow);
+      (getLatestAnalysisForInbox as jest.Mock).mockResolvedValue(null);
+
+      const result = await controller.findOne(makeReq('user-1'), 'inbox-1');
+
+      expect(result).toEqual({ ...inboxRow, analysis: null });
     });
 
     it('throws NotFoundException when the inbox does not exist or is not owned by the user', async () => {
@@ -131,6 +157,29 @@ describe('InboxController — batch + GET :id', () => {
       await expect(controller.findOne(makeReq('user-1'), 'inbox-404')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('GET /inboxes', () => {
+    it('returns every inbox with its latest analysis attached', async () => {
+      const rows = [
+        { id: 'inbox-1', userId: 'user-1', email: 'a@domain.com' },
+        { id: 'inbox-2', userId: 'user-1', email: 'b@domain.com' },
+      ];
+      const analysisRow = { id: 'analysis-1', inboxId: 'inbox-1', healthScore: 90 };
+      inboxService.findByUser.mockResolvedValue(rows);
+      (getLatestAnalysisForInboxes as jest.Mock).mockResolvedValue(
+        new Map([['inbox-1', analysisRow]]),
+      );
+
+      const result = await controller.findAll(makeReq('user-1'));
+
+      expect(inboxService.findByUser).toHaveBeenCalledWith('user-1');
+      expect(getLatestAnalysisForInboxes).toHaveBeenCalledWith(['inbox-1', 'inbox-2']);
+      expect(result).toEqual([
+        { ...rows[0], analysis: analysisRow },
+        { ...rows[1], analysis: null },
+      ]);
     });
   });
 });

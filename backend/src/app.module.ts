@@ -14,6 +14,8 @@ import { ScoringModule } from './scoring/scoring.module';
 import { PlacementModule } from './placement/placement.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { NotifyModule } from './notify/notify.module';
+import { AnalysisModule } from './analysis/analysis.module';
+import { PoolInboxModule } from './pool-inbox/pool-inbox.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -40,6 +42,8 @@ import { validate } from './config/env.validation';
     PlacementModule,
     DiagnosticsModule,
     NotifyModule,
+    AnalysisModule,
+    PoolInboxModule,
   ],
   controllers: [AppController],
   providers: [AppService],

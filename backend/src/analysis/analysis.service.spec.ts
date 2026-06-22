@@ -296,7 +296,9 @@ describe('AnalysisService', () => {
       mockInsert();
       const { setMock } = mockUpdate();
 
-      await expect(service.analyse({ inboxId: 'inbox-1', userId: 'user-1' })).resolves.not.toThrow();
+      await expect(
+        service.analyse({ inboxId: 'inbox-1', userId: 'user-1' }),
+      ).resolves.not.toThrow();
       expect(setMock).toHaveBeenCalledWith({ status: 'active' });
     });
   });
@@ -305,9 +307,9 @@ describe('AnalysisService', () => {
     it('throws UnrecoverableError when the pool inbox cannot be found', async () => {
       mockSelectSequence([[]]);
 
-      await expect(
-        service.analyse({ poolInboxId: 'missing', userId: 'user-1' }),
-      ).rejects.toThrow(UnrecoverableError);
+      await expect(service.analyse({ poolInboxId: 'missing', userId: 'user-1' })).rejects.toThrow(
+        UnrecoverableError,
+      );
     });
 
     it('uses dkimSelector "default" and never calls checkRdns for pool inboxes (no sendingIp column)', async () => {

@@ -94,25 +94,11 @@ export class AnalysisService {
   }
 
   async getLatestForInbox(inboxId: string): Promise<AnalysisRow | null> {
-    const rows = await db
-      .select()
-      .from(inboxAnalysis)
-      .where(eq(inboxAnalysis.inboxId, inboxId))
-      .orderBy(desc(inboxAnalysis.analysedAt))
-      .limit(1);
-
-    return rows[0] ?? null;
+    return getLatestAnalysisForInbox(inboxId);
   }
 
   async getLatestForPoolInbox(poolInboxId: string): Promise<AnalysisRow | null> {
-    const rows = await db
-      .select()
-      .from(inboxAnalysis)
-      .where(eq(inboxAnalysis.poolInboxId, poolInboxId))
-      .orderBy(desc(inboxAnalysis.analysedAt))
-      .limit(1);
-
-    return rows[0] ?? null;
+    return getLatestAnalysisForPoolInbox(poolInboxId);
   }
 
   /**
@@ -121,27 +107,7 @@ export class AnalysisService {
    * to "latest per poolInboxId" by analysedAt.
    */
   async getLatestForPoolInboxes(poolInboxIds: string[]): Promise<Map<string, AnalysisRow>> {
-    const result = new Map<string, AnalysisRow>();
-    if (poolInboxIds.length === 0) {
-      return result;
-    }
-
-    const rows = await db
-      .select()
-      .from(inboxAnalysis)
-      .where(inArray(inboxAnalysis.poolInboxId, poolInboxIds));
-
-    for (const row of rows) {
-      if (!row.poolInboxId) {
-        continue;
-      }
-      const existing = result.get(row.poolInboxId);
-      if (!existing || (row.analysedAt && existing.analysedAt && row.analysedAt > existing.analysedAt)) {
-        result.set(row.poolInboxId, row);
-      }
-    }
-
-    return result;
+    return getLatestAnalysisForPoolInboxes(poolInboxIds);
   }
 
   private async loadSource(
@@ -190,7 +156,9 @@ export class AnalysisService {
       this.safeCheck(() => this.dnsService.checkMx(domain)),
     ]);
 
-    const rdns = sendingIp ? await this.safeCheck(() => this.dnsService.checkRdns(sendingIp)) : null;
+    const rdns = sendingIp
+      ? await this.safeCheck(() => this.dnsService.checkRdns(sendingIp))
+      : null;
 
     return { spf, dkim, dmarc, mx, rdns };
   }
@@ -200,9 +168,7 @@ export class AnalysisService {
    * the field is recorded as null (unknown) and every other check still runs and
    * is written. See T021 spec step 8.
    */
-  private async safeCheck(
-    fn: () => Promise<DnsCheckOutcome>,
-  ): Promise<DnsCheckOutcome | null> {
+  private async safeCheck(fn: () => Promise<DnsCheckOutcome>): Promise<DnsCheckOutcome | null> {
     try {
       return await fn();
     } catch {
@@ -243,4 +209,82 @@ export class AnalysisService {
     if (healthScore >= 20) return 'spam';
     return 'unknown';
   }
+}
+
+/**
+ * Plain, dependency-free query functions (no DnsService, no NestJS DI) so
+ * controllers in other modules can read the latest analysis row without
+ * importing AnalysisModule. AnalysisModule transitively imports MonitorModule
+ * -> WarmupModule -> InboxModule, so InboxModule importing AnalysisModule
+ * back would be a circular module dependency; importing these plain
+ * functions directly from this file avoids that entirely. AnalysisService's
+ * methods above delegate to these for its own (DI-based) consumers.
+ */
+export async function getLatestAnalysisForInbox(inboxId: string): Promise<AnalysisRow | null> {
+  const rows = await db
+    .select()
+    .from(inboxAnalysis)
+    .where(eq(inboxAnalysis.inboxId, inboxId))
+    .orderBy(desc(inboxAnalysis.analysedAt))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getLatestAnalysisForPoolInbox(
+  poolInboxId: string,
+): Promise<AnalysisRow | null> {
+  const rows = await db
+    .select()
+    .from(inboxAnalysis)
+    .where(eq(inboxAnalysis.poolInboxId, poolInboxId))
+    .orderBy(desc(inboxAnalysis.analysedAt))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+function latestPerKey(
+  rows: AnalysisRow[],
+  keyOf: (row: AnalysisRow) => string | null,
+): Map<string, AnalysisRow> {
+  const result = new Map<string, AnalysisRow>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!key) continue;
+    const existing = result.get(key);
+    if (
+      !existing ||
+      (row.analysedAt && existing.analysedAt && row.analysedAt > existing.analysedAt)
+    ) {
+      result.set(key, row);
+    }
+  }
+  return result;
+}
+
+export async function getLatestAnalysisForPoolInboxes(
+  poolInboxIds: string[],
+): Promise<Map<string, AnalysisRow>> {
+  if (poolInboxIds.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(inboxAnalysis)
+    .where(inArray(inboxAnalysis.poolInboxId, poolInboxIds));
+  return latestPerKey(rows, (row) => row.poolInboxId);
+}
+
+/**
+ * Same batched-latest-per-id pattern, for the GET /inboxes list endpoint
+ * (T023's DNS Health / Issues grid columns need this).
+ */
+export async function getLatestAnalysisForInboxes(
+  inboxIds: string[],
+): Promise<Map<string, AnalysisRow>> {
+  if (inboxIds.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(inboxAnalysis)
+    .where(inArray(inboxAnalysis.inboxId, inboxIds));
+  return latestPerKey(rows, (row) => row.inboxId);
 }

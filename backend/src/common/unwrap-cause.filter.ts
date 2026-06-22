@@ -33,10 +33,7 @@ export class UnwrapCauseExceptionFilter implements ExceptionFilter {
 
     const { status, body } = this.toResponse(exception);
     if (status >= 500) {
-      this.logger.error(
-        `[${req.method} ${req.url}] -> ${status}`,
-        this.formatChain(exception),
-      );
+      this.logger.error(`[${req.method} ${req.url}] -> ${status}`, this.formatChain(exception));
     }
     res.status(status).json(body);
   }
