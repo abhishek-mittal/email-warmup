@@ -7,17 +7,20 @@ import {
   Redirect,
   Req,
   UseGuards,
-  UsePipes,
-  ValidationPipe,
   UnprocessableEntityException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { validateSync } from 'class-validator';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { Public } from '@/auth/public.decorator';
 import { InboxService } from './inbox.service';
 import { GoogleOAuthService } from './oauth/google-oauth.service';
 import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
-import { ConnectCustomSmtpDto } from './dto/connect-custom-smtp.dto';
+import {
+  ConnectCustomSmtpDto,
+  normalizeAliases,
+} from './dto/connect-custom-smtp.dto';
 
 @Controller('inboxes')
 @UseGuards(BetterAuthGuard)
@@ -30,11 +33,26 @@ export class InboxController {
   }
 
   @Post('connect/smtp')
-  @UsePipes(new ValidationPipe({ transform: true }))
   async connectCustomSmtp(
     @Req() req: Request & { userId?: string },
-    @Body() dto: ConnectCustomSmtpDto,
+    @Body() body: Record<string, unknown>,
   ) {
+    // Normalize wire-format aliases (smtpPassword / imapPassword) into
+    // the canonical DTO field names (smtpPass / imapPass) BEFORE
+    // class-validator runs. Using a custom normalization helper here
+    // instead of the framework ValidationPipe so the form's
+    // user-friendly field names work without changing the DTO.
+    const dto = normalizeAliases(body ?? {});
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errors.length > 0) {
+      const messages = errors.flatMap((e) =>
+        e.constraints ? Object.values(e.constraints) : [],
+      );
+      throw new BadRequestException(messages);
+    }
     try {
       return await this.inboxService.connectCustomSmtp(req.userId!, dto);
     } catch (err: any) {

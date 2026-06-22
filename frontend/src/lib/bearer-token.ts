@@ -40,8 +40,17 @@ async function hmac(message: string, secret: string): Promise<string> {
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
+  // In the browser, prefer the manual encoder — `Buffer` may be polyfilled
+  // by some bundlers but the polyfill often throws on `'base64url'` (the
+  // encoding name isn't always supported, or it isn't a function on the
+  // returned Buffer). We always have `btoa` and `Uint8Array` available,
+  // so fall through to that path if Buffer is missing or throws.
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(bytes).toString('base64url');
+    try {
+      return Buffer.from(bytes).toString('base64url');
+    } catch {
+      // fall through
+    }
   }
   let bin = '';
   bytes.forEach((b) => (bin += String.fromCharCode(b)));
@@ -50,8 +59,14 @@ function bytesToBase64Url(bytes: Uint8Array): string {
 
 function b64u(input: string): string {
   // btoa works for ASCII. For arbitrary bytes from hmac, we use a manual encoder.
+  // Same fallback logic as bytesToBase64Url — Buffer may exist in a polyfill
+  // form that throws on 'base64url', so prefer the manual path.
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(input, 'utf8').toString('base64url');
+    try {
+      return Buffer.from(input, 'utf8').toString('base64url');
+    } catch {
+      // fall through
+    }
   }
   // Browser: convert string -> utf8 bytes -> base64url
   const bytes = new TextEncoder().encode(input);
