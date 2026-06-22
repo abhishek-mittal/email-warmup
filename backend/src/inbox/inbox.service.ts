@@ -12,6 +12,39 @@ import { QueueService } from '@/queue/queue.service';
 import * as dns from 'dns';
 
 /**
+ * Columns safe to return to the frontend — excludes oauthAccessToken,
+ * oauthRefreshToken, smtpPass, imapPass, oauthClientSecret (all
+ * AES-256-GCM ciphertext, but there's no reason to ship ciphertext blobs
+ * to the browser at all). Used by findByUser/findById (T020/Wave 7
+ * read endpoints) — the pre-existing connectGmail/connectOutlook/
+ * connectCustomSmtp responses are unchanged, out of this task's scope.
+ */
+const SAFE_INBOX_COLUMNS = {
+  id: inboxes.id,
+  userId: inboxes.userId,
+  email: inboxes.email,
+  provider: inboxes.provider,
+  oauthProvider: inboxes.oauthProvider,
+  oauthClientId: inboxes.oauthClientId,
+  oauthTokenExpiry: inboxes.oauthTokenExpiry,
+  smtpHost: inboxes.smtpHost,
+  smtpPort: inboxes.smtpPort,
+  smtpUser: inboxes.smtpUser,
+  imapHost: inboxes.imapHost,
+  imapPort: inboxes.imapPort,
+  imapUser: inboxes.imapUser,
+  dkimSelector: inboxes.dkimSelector,
+  sendingIp: inboxes.sendingIp,
+  warmupSpeed: inboxes.warmupSpeed,
+  warmupDay: inboxes.warmupDay,
+  status: inboxes.status,
+  poolConsentAt: inboxes.poolConsentAt,
+  enrolledInPoolAt: inboxes.enrolledInPoolAt,
+  graduatedAt: inboxes.graduatedAt,
+  createdAt: inboxes.createdAt,
+};
+
+/**
  * Per-entry shape accepted by both `POST /inboxes/batch` (this service) and
  * `POST /pool-inboxes/batch` (PoolInboxService). Loosely typed (not the
  * class-validator DTO) because both the JSON-body path (already validated
@@ -230,7 +263,7 @@ export class InboxService {
   }
 
   async findByUser(userId: string) {
-    return db.select().from(inboxes).where(eq(inboxes.userId, userId));
+    return db.select(SAFE_INBOX_COLUMNS).from(inboxes).where(eq(inboxes.userId, userId));
   }
 
   /** Ownership-checked single-row lookup for `GET /inboxes/:id`. Returns
@@ -238,7 +271,11 @@ export class InboxService {
    * to a 404. No analysis join here; a later step attaches the latest
    * `inbox_analysis` row at the controller layer. */
   async findById(userId: string, inboxId: string) {
-    const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const rows = await db
+      .select(SAFE_INBOX_COLUMNS)
+      .from(inboxes)
+      .where(eq(inboxes.id, inboxId))
+      .limit(1);
     const inbox = rows[0];
     if (!inbox || inbox.userId !== userId) return null;
     return inbox;

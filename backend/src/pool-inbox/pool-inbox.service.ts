@@ -37,6 +37,25 @@ export interface CustomEncryptedCredentials {
 
 export type EncryptedCredentials = OAuthEncryptedCredentials | CustomEncryptedCredentials;
 
+/**
+ * Columns safe to return to the frontend — excludes encryptedCredentials
+ * (AES-256-GCM ciphertext blob; there's no reason to ship ciphertext to
+ * the browser at all).
+ */
+const SAFE_POOL_INBOX_COLUMNS = {
+  id: poolInboxes.id,
+  userId: poolInboxes.userId,
+  email: poolInboxes.email,
+  provider: poolInboxes.provider,
+  status: poolInboxes.status,
+  displayName: poolInboxes.displayName,
+  lastUsedAt: poolInboxes.lastUsedAt,
+  activePairs: poolInboxes.activePairs,
+  errorMessage: poolInboxes.errorMessage,
+  createdAt: poolInboxes.createdAt,
+  updatedAt: poolInboxes.updatedAt,
+};
+
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 function getPgErrorCode(err: any): string | undefined {
@@ -152,7 +171,7 @@ export class PoolInboxService {
           status: 'pending',
           encryptedCredentials: buildEncryptedCredentials(entry),
         })
-        .returning();
+        .returning(SAFE_POOL_INBOX_COLUMNS);
 
       await this.queue.add('inbox-analysis', { poolInboxId: row.id, userId });
       return row;
@@ -168,7 +187,7 @@ export class PoolInboxService {
 
   /** Plain rows for `GET /pool-inboxes` — no analysis join (deferred). */
   async findByUser(userId: string) {
-    return db.select().from(poolInboxes).where(eq(poolInboxes.userId, userId));
+    return db.select(SAFE_POOL_INBOX_COLUMNS).from(poolInboxes).where(eq(poolInboxes.userId, userId));
   }
 
   /**
