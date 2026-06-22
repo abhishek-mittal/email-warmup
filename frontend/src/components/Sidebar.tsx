@@ -42,6 +42,11 @@ const NAV: NavItem[] = [
     icon: <Icon d="M12 5v14M5 12h14" />,
   },
   {
+    href: '/pool',
+    label: 'Warming Pool',
+    icon: <Icon d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96 12 12l8.73-5.04 M12 22.08V12" />,
+  },
+  {
     href: '/billing',
     label: 'Billing',
     icon: <Icon d="M3 10h18M5 6h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />,

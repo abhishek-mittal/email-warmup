@@ -1,5 +1,5 @@
 import { serverApi } from '@/lib/api-server';
-import type { ScoreResponse, DiagnosticsResponse } from '@/lib/types';
+import type { ScoreResponse, DiagnosticsResponse, InboxAnalysis, PoolInbox } from '@/lib/types';
 
 export type InboxListItem = {
   id: string;
@@ -11,12 +11,27 @@ export type InboxListItem = {
   score: number | null;
   trend: 'up' | 'down' | 'stable' | null;
   lastPlacementAt: string | null;
+  // Added by T023 — latest `inbox_analysis` row for this inbox, or null if
+  // analysis hasn't run yet. NOTE: `score`/`lastPlacementAt`/`warmupSpeed`'s
+  // 'normal'|'aggressive' values above are a pre-existing Wave 6 bug (the
+  // real backend never returns those on this endpoint) — deliberately left
+  // alone, not this task's scope to fix.
+  analysis: InboxAnalysis | null;
 };
 
 /** List the user's inboxes (with score + last placement, if known). */
 export async function getInboxes(): Promise<InboxListItem[]> {
   try {
     return await serverApi<InboxListItem[]>('/inboxes');
+  } catch {
+    return [];
+  }
+}
+
+/** List the user's pool inboxes, each with its latest analysis attached. */
+export async function getPoolInboxes(): Promise<PoolInbox[]> {
+  try {
+    return await serverApi<PoolInbox[]>('/pool-inboxes');
   } catch {
     return [];
   }

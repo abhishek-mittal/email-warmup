@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { currentUserId } from '@/lib/api-server';
 import { getInboxes } from '@/app/(dashboard)/_lib/data';
 import { InboxActions } from '@/app/(dashboard)/inboxes/_components/InboxActions';
+import { BatchUploadCsv } from '@/app/(dashboard)/_components/BatchUploadCsv';
+import { BatchUploadWizard } from '@/app/(dashboard)/_components/BatchUploadWizard';
+import { HealthChip, IssuesCell } from '@/app/(dashboard)/_components/AnalysisCells';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,12 +22,16 @@ export default async function Page() {
             <h1 className="text-2xl font-semibold text-slate-900">Inboxes</h1>
             <p className="text-sm text-slate-600">All inboxes connected to your account.</p>
           </div>
-          <Link
-            href="/inboxes/connect"
-            className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            Connect inbox
-          </Link>
+          <div className="flex gap-2">
+            <BatchUploadCsv endpoint="/inboxes/batch/csv" />
+            <BatchUploadWizard endpoint="/inboxes/batch" />
+            <Link
+              href="/inboxes/connect"
+              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Connect inbox
+            </Link>
+          </div>
         </header>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -37,6 +44,8 @@ export default async function Page() {
                 <th className="px-4 py-3">Speed</th>
                 <th className="px-4 py-3">Day</th>
                 <th className="px-4 py-3">Last placement</th>
+                <th className="px-4 py-3">DNS Health</th>
+                <th className="px-4 py-3">Issues</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -53,6 +62,12 @@ export default async function Page() {
                   <td className="px-4 py-3 text-slate-600 capitalize">{i.warmupSpeed ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{i.warmupDay ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{i.lastPlacementAt ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <HealthChip analysis={i.analysis} />
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <IssuesCell analysis={i.analysis} status={i.status} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <InboxActions inboxId={i.id} status={i.status} />
                   </td>

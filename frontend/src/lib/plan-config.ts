@@ -126,6 +126,57 @@ export function inboxStatusColor(status: string): {
   }
 }
 
+/**
+ * 3-tier health-score chip for the analysis-derived DNS Health column on
+ * `/inboxes` and `/pool`. Deliberately distinct from `scoreColor`'s 5-tier
+ * reputation-score palette — this maps `inbox_analysis.health_score`
+ * (0-100, DNS-only signal), not the multi-factor reputation score.
+ */
+export function healthScoreChipColor(score: number | null): {
+  bg: string;
+  text: string;
+  label: string;
+} {
+  if (score === null) {
+    return { bg: 'bg-zinc-100', text: 'text-zinc-600', label: 'Unknown' };
+  }
+  if (score >= 80) {
+    return { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Healthy' };
+  }
+  if (score >= 50) {
+    return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Needs attention' };
+  }
+  return { bg: 'bg-rose-100', text: 'text-rose-700', label: 'At risk' };
+}
+
+/**
+ * Status badge for `pool_inboxes.status` (`pending|active|removed|error`) —
+ * a distinct enum from `inboxes.status` (`pending|active|paused|graduated|
+ * error`), so `inboxStatusColor`'s existing `default` case would otherwise
+ * just echo the raw string for 'removed'. Kept as a sibling helper rather
+ * than overloading `inboxStatusColor`, since the two status sets only
+ * partially overlap and mean different things ('active' here = enrolled in
+ * the pool, not currently warming).
+ */
+export function poolInboxStatusColor(status: string): {
+  bg: string;
+  text: string;
+  label: string;
+} {
+  switch (status) {
+    case 'active':
+      return { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Active' };
+    case 'pending':
+      return { bg: 'bg-zinc-100', text: 'text-zinc-700', label: 'Pending' };
+    case 'error':
+      return { bg: 'bg-rose-100', text: 'text-rose-700', label: 'Error' };
+    case 'removed':
+      return { bg: 'bg-zinc-200', text: 'text-zinc-700', label: 'Removed' };
+    default:
+      return { bg: 'bg-zinc-100', text: 'text-zinc-700', label: status };
+  }
+}
+
 export function dnsStatusColor(valid: boolean | null): {
   bg: string;
   text: string;

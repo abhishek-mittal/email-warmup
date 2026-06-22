@@ -17,6 +17,38 @@ export interface Inbox {
   createdAt: string;
 }
 
+export interface InboxAnalysis {
+  id: string;
+  inboxId: string | null;
+  poolInboxId: string | null;
+  spfValid: boolean | null;
+  dkimValid: boolean | null;
+  dmarcValid: boolean | null;
+  mxValid: boolean | null;
+  rdnsValid: boolean | null;
+  placementEstimate: 'inbox' | 'promotions' | 'spam' | 'unknown';
+  healthScore: number;
+  issues: string[];
+  analysedAt: string;
+}
+
+export type PoolInboxStatus = 'pending' | 'active' | 'removed' | 'error';
+
+export interface PoolInbox {
+  id: string;
+  userId: string;
+  email: string;
+  provider: Provider;
+  status: PoolInboxStatus;
+  displayName: string | null;
+  lastUsedAt: string | null;
+  activePairs: number;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  analysis: InboxAnalysis | null;
+}
+
 export interface DnsCheckLatest {
   spfValid: boolean | null;
   dkimValid: boolean | null;

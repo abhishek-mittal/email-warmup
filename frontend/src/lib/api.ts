@@ -75,8 +75,14 @@ export function useApi() {
         }
       }
 
+      // When the body is a FormData (multipart upload), don't set
+      // Content-Type at all — fetch/the browser will set it automatically
+      // with the correct multipart boundary. Setting it ourselves (even to
+      // the default 'application/json') breaks the upload, since the
+      // backend can no longer parse the multipart parts without a boundary.
+      const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(init?.headers as Record<string, string> | undefined),
       };
       if (token) {
