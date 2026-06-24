@@ -4,6 +4,7 @@ import { AnalysisService } from './analysis.service';
 import { DnsService } from '../monitor/dns.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -87,7 +88,8 @@ describe('AnalysisService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AnalysisService, { provide: DnsService, useValue: dnsService }],
+      providers: [...pinoLoggerStubsFor(UnrecoverableError, AnalysisService, DnsService, db, Error, Date),
+      AnalysisService, { provide: DnsService, useValue: dnsService }],
     }).compile();
 
     service = module.get<AnalysisService>(AnalysisService);

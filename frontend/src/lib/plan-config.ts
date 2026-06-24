@@ -177,6 +177,90 @@ export function poolInboxStatusColor(status: string): {
   }
 }
 
+/**
+ * Pool-inbox warming-readiness label — the user-facing question
+ * "is this inbox actually safe to warm with?". A pool inbox can be in
+ * `status='active'` (the analysis job has completed) and still have
+ * failing DNS checks (DKIM missing, etc.) that would cause real
+ * warmup emails to land in Spam rather than the inbox. This helper
+ * returns a 4-state verdict that the badge and detail panel use to
+ * surface that distinction.
+ *
+ *   - 'eligible'      → status='active' AND all critical DNS checks pass
+ *                        (SPF + DKIM + DMARC + MX all `true`).
+ *   - 'not-eligible'  → status='active' but at least one critical DNS
+ *                        check is `false`. The inbox is "Active" in the
+ *                        DB but it's NOT safe to use as a warmup peer.
+ *   - 'analyzing'     → status='pending' (analysis job hasn't run yet
+ *                        or just completed but no row yet). Display
+ *                        as "Analysing…".
+ *   - 'error'         → status='error' (analysis job failed). The
+ *                        `errorMessage` field carries the reason.
+ *
+ * Critical DNS checks are SPF + DKIM + DMARC + MX. rDNS is excluded —
+ * it's info-severity per the T011 addendum and doesn't affect
+ * deliverability for the receiving inbox. Health score is
+ * deliberately not used as the criterion (a 60 health score is
+ * "Needs attention" but might still be safe to warm with; what
+ * actually matters for the receiving inbox is whether the critical
+ * authentication records are in place).
+ */
+export type PoolInboxReadiness = 'eligible' | 'not-eligible' | 'analyzing' | 'error';
+
+export function poolInboxReadiness(
+  status: string | null | undefined,
+  analysis: { spfValid: boolean | null; dkimValid: boolean | null; dmarcValid: boolean | null; mxValid: boolean | null; rdnsValid: boolean | null } | null | undefined,
+): PoolInboxReadiness {
+  if (status === 'error') return 'error';
+  if (status === 'pending' || !analysis) return 'analyzing';
+  const allCritical =
+    analysis.spfValid === true &&
+    analysis.dkimValid === true &&
+    analysis.dmarcValid === true &&
+    analysis.mxValid === true;
+  return allCritical ? 'eligible' : 'not-eligible';
+}
+
+export function poolInboxReadinessStyle(r: PoolInboxReadiness): {
+  bg: string;
+  text: string;
+  label: string;
+  /** Plain-language explanation shown in the detail panel and the
+   *  tooltip on the badge. */
+  hint: string;
+} {
+  switch (r) {
+    case 'eligible':
+      return {
+        bg: 'bg-emerald-100',
+        text: 'text-emerald-700',
+        label: 'Ready',
+        hint: 'All critical DNS records are in place. Safe to use as a warmup peer.',
+      };
+    case 'not-eligible':
+      return {
+        bg: 'bg-amber-100',
+        text: 'text-amber-700',
+        label: 'Needs attention',
+        hint: 'One or more critical DNS records are missing. Warmup emails may land in Spam.',
+      };
+    case 'analyzing':
+      return {
+        bg: 'bg-zinc-100',
+        text: 'text-zinc-600',
+        label: 'Analysing…',
+        hint: 'DNS analysis is running. This usually takes a few seconds.',
+      };
+    case 'error':
+      return {
+        bg: 'bg-rose-100',
+        text: 'text-rose-700',
+        label: 'Error',
+        hint: 'Analysis failed. Re-analyze to retry, or check the error message.',
+      };
+  }
+}
+
 export function dnsStatusColor(valid: boolean | null): {
   bg: string;
   text: string;

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
 import { randomUUID, createHash } from 'crypto';
@@ -31,9 +32,9 @@ interface ReceiverIdentity {
 @Injectable()
 @Processor('warmup-send')
 export class WarmupSendProcessor extends WorkerHost {
-  private readonly logger = new Logger(WarmupSendProcessor.name);
-
   constructor(
+    @InjectPinoLogger(WarmupSendProcessor.name)
+    private readonly logger: PinoLogger,
     private readonly contentService: ContentService,
     private readonly smtpClientService: SmtpClientService,
     private readonly queueService: QueueService,
@@ -43,6 +44,13 @@ export class WarmupSendProcessor extends WorkerHost {
 
   async process(job: Job<WarmupSendJobData>): Promise<void> {
     const { senderInboxId, partnerSource, partnerId, warmupDay } = job.data;
+    const jobId = String(job.id);
+    const startedAt = Date.now();
+
+    this.logger.info(
+      { jobId, senderInboxId, partnerSource, partnerId, warmupDay },
+      'warmup-send job started',
+    );
 
     const senderRows = await db
       .select()
@@ -51,20 +59,53 @@ export class WarmupSendProcessor extends WorkerHost {
       .limit(1);
     const sender = senderRows[0];
     if (!sender) {
+      this.logger.warn(
+        { jobId, senderInboxId },
+        'warmup-send: sender inbox not found',
+      );
       throw new UnrecoverableError(`Sender inbox ${senderInboxId} not found`);
     }
     if (sender.status !== 'active') {
+      this.logger.warn(
+        { jobId, senderInboxId, status: sender.status },
+        'warmup-send: sender inbox not active',
+      );
       throw new UnrecoverableError(
         `Sender inbox ${senderInboxId} is not active (status=${sender.status})`,
       );
     }
 
-    if (partnerSource === 'private') {
-      await this.processPrivatePoolSend(job, sender, partnerId, warmupDay);
-      return;
+    try {
+      if (partnerSource === 'private') {
+        await this.processPrivatePoolSend(job, sender, partnerId, warmupDay);
+      } else {
+        await this.processSharedPoolSend(job, sender, partnerId, warmupDay);
+      }
+      this.logger.info(
+        {
+          jobId,
+          senderInboxId,
+          partnerSource,
+          partnerId,
+          warmupDay,
+          durationMs: Date.now() - startedAt,
+        },
+        'warmup-send job succeeded',
+      );
+    } catch (err: any) {
+      this.logger.error(
+        {
+          jobId,
+          senderInboxId,
+          partnerSource,
+          partnerId,
+          err: err?.message,
+          errCode: err?.code,
+        },
+        'warmup-send job failed',
+      );
+      throw err;
     }
-
-    await this.processSharedPoolSend(job, sender, partnerId, warmupDay);
   }
 
   /** Shared pool_members path — exact existing logic, unchanged behavior. */
@@ -112,6 +153,7 @@ export class WarmupSendProcessor extends WorkerHost {
 
     const transporter = await this.smtpClientService.getTransporter(senderInboxId);
     const messageId = `<${randomUUID()}@emailwarm.io>`;
+    const sendStart = Date.now();
 
     await transporter.sendMail({
       from: sender.email,
@@ -124,6 +166,18 @@ export class WarmupSendProcessor extends WorkerHost {
         'X-WarmupHub': 'true',
       },
     });
+
+    this.logger.info(
+      {
+        jobId: String(job.id),
+        senderInboxId,
+        to: receiver.email,
+        messageId,
+        warmupDay,
+        durationMs: Date.now() - sendStart,
+      },
+      'warmup send succeeded',
+    );
 
     const bodyHash = createHash('sha256').update(email.text).digest('hex');
     const sentAt = new Date();
@@ -183,6 +237,7 @@ export class WarmupSendProcessor extends WorkerHost {
 
     const transporter = await this.smtpClientService.getTransporter(senderInboxId);
     const messageId = `<${randomUUID()}@emailwarm.io>`;
+    const sendStart = Date.now();
 
     await transporter.sendMail({
       from: sender.email,
@@ -195,6 +250,18 @@ export class WarmupSendProcessor extends WorkerHost {
         'X-WarmupHub': 'true',
       },
     });
+
+    this.logger.info(
+      {
+        jobId: String(job.id),
+        senderInboxId,
+        to: poolInbox.email,
+        messageId,
+        warmupDay,
+        durationMs: Date.now() - sendStart,
+      },
+      'warmup send succeeded',
+    );
 
     const bodyHash = createHash('sha256').update(email.text).digest('hex');
     const sentAt = new Date();
@@ -274,6 +341,15 @@ export class WarmupSendProcessor extends WorkerHost {
     }
 
     await this.queueService.add('warmup-receive', payload, { delay });
+    this.logger.debug(
+      {
+        receiverSource,
+        receiverId: receiver.id,
+        actions,
+        delayMs: delay,
+      },
+      'warmup-receive job enqueued',
+    );
   }
 
   private async didPreviousSendLandInSpam(

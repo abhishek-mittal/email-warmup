@@ -106,6 +106,72 @@ This file defines the exact build sequence for Phase 1. Follow it. Do not skip w
 
 ---
 
+## Wave 7 — Private Pool Architecture
+**Goal:** A tenant can upload their own inboxes to warm and their own pool inboxes, warm them in a fully self-contained closed loop with no other users required.
+
+| Task | Description | Parallelizable? |
+|---|---|---|
+| T019 | `pool_inboxes` + `inbox_analysis` tables, `inbox-analysis` queue | — (must run first in W7) |
+| T020 | Batch upload endpoints (JSON + CSV) for both inbox lists | Yes (with T021, after T019) |
+| T021 | Initial analysis BullMQ job: DNS + health score + status update | Yes (with T020, after T019) |
+| T022 | PairingService pivot: private pool first, shared pool fallback | Yes (with T020, T021, after T019) |
+| T023 | Frontend: /pool page + DNS analysis columns + upload UI | — (after T019, T020, T021, T022 all done) |
+
+**Wave 7 gate:**
+- A tenant can upload a CSV of pool inboxes and see them appear in `/pool` with DNS health analysis
+- A tenant can upload a CSV of inboxes to warm and see initial analysis results in the `/inboxes` grid
+- Warming runs automatically using the tenant's own pool inboxes — no other users required
+- Same-domain pairing is still blocked within the private pool
+
+---
+
+## Wave 8 — Auth Hotfix
+**Goal:** Fix the `403 User not found` error that blocks every new user from connecting an inbox.
+
+| Task | Description | Parallelizable? |
+|---|---|---|
+| T024 | Wire `UserSyncService.upsertUser()` on first sign-in | — (single task) |
+
+**Wave 8 gate:** A new user can sign in and immediately call `POST /inboxes/connect/smtp` — receives 200, not 403. A `users` row exists in the DB after first authenticated request.
+
+**Run command:**
+```bash
+cd projects/email-warmup && claude --dangerously-skip-permissions \
+  "Read __specs__/ORCHESTRATOR.md. All waves W0–W7 are already done — do NOT re-run them. \
+   Execute Wave 8 only (T024). \
+   Read __specs__/tasks/T024-user-sync-wiring.md completely before writing any code. \
+   Load docs/05-agent-skills/02-skill-auth.md before starting. \
+   Mark T024 in_progress in __specs__/SPEC-STATUS.md before starting, done when all criteria pass."
+```
+
+---
+
+## Wave 9 — Structured Logging
+**Goal:** Every SMTP, IMAP, BullMQ, and auth event emits a structured JSON log line with consistent fields. Dev terminal shows coloured pino-pretty output. Agents and humans can diagnose failures by grepping `inboxId`, `errCode`, `jobId`.
+
+| Task | Description | Parallelizable? |
+|---|---|---|
+| T025 | Install pino+nestjs-pino, wire globally, add logs to all silent services | — (single task, touches many files) |
+
+**Wave 9 gate:**
+- `POST /inboxes/connect/smtp` with wrong credentials → terminal shows `level=error`, `smtpHost`, `smtpPort`, `errCode`
+- Warmup send job → logs `level=info` on start and on success with `messageId`+`durationMs`
+- Auth 401 → logs `level=warn` with `reason`
+- `npm run logs:smtp` filters to SMTP lines only
+- No Authorization header or password value in any log output
+
+**Run command:**
+```bash
+cd projects/email-warmup && claude --dangerously-skip-permissions \
+  "Read __specs__/ORCHESTRATOR.md. All waves W0–W8 are already done — do NOT re-run them. \
+   Execute Wave 9 only (T025). \
+   Read __specs__/tasks/T025-structured-logging.md completely before writing any code. \
+   Load docs/05-agent-skills/11-skill-logging.md before starting. \
+   Mark T025 in_progress in __specs__/SPEC-STATUS.md before starting, done when all criteria pass."
+```
+
+---
+
 ## Subagent prompt template
 
 Use this template when spawning a task agent:

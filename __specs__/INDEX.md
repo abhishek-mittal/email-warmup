@@ -18,6 +18,9 @@ Track all progress in **SPEC-STATUS.md**.
 | W4 | Placement + Diagnostics | T014–T015 | W2, W3 |
 | W5 | Billing + Notifications | T016–T017 | W1 |
 | W6 | Frontend | T018 | W2, W3, W4, W5 |
+| W7 | Private Pool Architecture | T019–T023 | W0–W6 (all done) |
+| W8 | Auth Hotfix | T024 | T004 |
+| W9 | Structured Logging | T025 | T024 |
 
 ---
 
@@ -43,6 +46,13 @@ Track all progress in **SPEC-STATUS.md**.
 | T016 | Stripe billing + trial | W5 | services/billing.md |
 | T017 | Notification dispatch | W5 | — |
 | T018 | Next.js frontend dashboard | W6 | domains/frontend.md |
+| T019 | Pool inboxes table + schema migration | W7 | — |
+| T020 | Inbox batch upload (CSV + wizard) | W7 | — |
+| T021 | Initial inbox analysis job | W7 | — |
+| T022 | Private pool pairing engine pivot | W7 | — |
+| T023 | Pool management frontend | W7 | domains/frontend.md |
+| T024 | Wire user sync on first sign-in | W8 | docs/05-agent-skills/02-skill-auth.md |
+| T025 | Structured logging system (pino) | W9 | docs/05-agent-skills/11-skill-logging.md |
 
 ---
 

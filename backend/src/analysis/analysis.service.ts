@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UnrecoverableError } from 'bullmq';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
@@ -42,7 +43,11 @@ const ISSUE_CODE_BY_FIELD: Record<keyof DnsFieldOutcomes, IssueCode> = {
 
 @Injectable()
 export class AnalysisService {
-  constructor(private readonly dnsService: DnsService) {}
+  constructor(
+    @InjectPinoLogger(AnalysisService.name)
+    private readonly logger: PinoLogger,
+    private readonly dnsService: DnsService,
+  ) {}
 
   /**
    * Runs the lightweight DNS-derived health analysis for either an inbox-to-warm
@@ -53,6 +58,14 @@ export class AnalysisService {
    */
   async analyse(data: AnalysisJobData): Promise<AnalysisRow> {
     const source = await this.loadSource(data);
+    this.logger.info(
+      {
+        jobId: data.inboxId ?? data.poolInboxId,
+        inboxId: data.inboxId,
+        poolInboxId: data.poolInboxId,
+      },
+      'analysis started',
+    );
 
     const domain = source.email.split('@')[1];
     const selector = source.dkimSelector ?? 'default';
@@ -83,12 +96,31 @@ export class AnalysisService {
     // regardless of DNS result — see T021 spec step 7 / acceptance criterion.
     if (data.inboxId) {
       await db.update(inboxes).set({ status: 'active' }).where(eq(inboxes.id, data.inboxId));
+      this.logger.info(
+        { inboxId: data.inboxId, fromStatus: 'pending', toStatus: 'active' },
+        'inbox status changed',
+      );
     } else if (data.poolInboxId) {
       await db
         .update(poolInboxes)
         .set({ status: 'active' })
         .where(eq(poolInboxes.id, data.poolInboxId));
+      this.logger.info(
+        { poolInboxId: data.poolInboxId, fromStatus: 'pending', toStatus: 'active' },
+        'pool inbox status changed',
+      );
     }
+
+    this.logger.info(
+      {
+        inboxId: data.inboxId,
+        poolInboxId: data.poolInboxId,
+        healthScore,
+        issues,
+        placementEstimate,
+      },
+      'analysis: health score computed',
+    );
 
     return inserted;
   }

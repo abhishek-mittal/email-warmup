@@ -4,6 +4,7 @@ import { PlacementController } from './placement.controller';
 import { PlacementService } from './placement.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -47,7 +48,8 @@ describe('PlacementController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PlacementController],
-      providers: [{ provide: PlacementService, useValue: placementService }],
+      providers: [...pinoLoggerStubsFor(HttpException, HttpStatus, NotFoundException, PlacementController, PlacementService, db, Date),
+      { provide: PlacementService, useValue: placementService }],
     }).compile();
 
     controller = module.get<PlacementController>(PlacementController);

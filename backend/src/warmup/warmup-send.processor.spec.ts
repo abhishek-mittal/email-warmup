@@ -6,6 +6,7 @@ import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
 import { QueueService } from '../queue/queue.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -94,7 +95,8 @@ describe('WarmupSendProcessor', () => {
     sendMailMock.mockResolvedValue({ messageId: 'whatever' });
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(UnrecoverableError, WarmupSendProcessor, ContentService, SmtpClientService, QueueService, db),
+      
         WarmupSendProcessor,
         { provide: ContentService, useValue: contentService },
         { provide: SmtpClientService, useValue: smtpClientService },

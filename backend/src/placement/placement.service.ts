@@ -62,6 +62,18 @@ export class PlacementService {
     await this.assertTestQuota(userId, quota.perMonth);
 
     const seeds = await this.seedListService.getSeedAddresses(quota.seedType);
+    if (seeds.length === 0) {
+      // Sending with bcc: [] and no other recipients would otherwise reach
+      // nodemailer's SMTP envelope builder and throw an opaque
+      // "No recipients defined" (EENVELOPE) error, surfaced to the caller
+      // as an unhandled 500. Fail fast here with a message that actually
+      // explains the platform-operational cause (no seed_inboxes rows
+      // provisioned yet), not a client-side bug.
+      throw new HttpException(
+        'Placement testing is not available yet — no seed inboxes are configured on this platform. Contact support.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
     const testId = randomUUID();
     const messageId = `<${randomUUID()}@emailwarm.io>`;

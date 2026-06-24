@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { validateSync, IsString, IsNotEmpty } from 'class-validator';
+import { validateSync, IsString, IsNotEmpty, MinLength } from 'class-validator';
 
 class EnvironmentVariables {
   @IsString()
@@ -20,6 +20,15 @@ class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   BETTER_AUTH_SECRET: string;
+
+  // Shared secret between the frontend's better-auth databaseHooks callback
+  // and the backend's `POST /internal/user-sync` endpoint. The frontend
+  // includes it as `X-Internal-Secret`; the backend compares it in
+  // constant time. Without this, no first-time user can be created in the
+  // backend's `users` table on sign-in (see T024).
+  @IsString()
+  @MinLength(16)
+  INTERNAL_SECRET: string;
 
   @IsString()
   @IsNotEmpty()

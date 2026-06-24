@@ -9,6 +9,7 @@ import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
 import { encrypt } from '@/common/crypto';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/db', () => ({
   db: {
     select: jest.fn(),
@@ -47,7 +48,8 @@ describe('InboxService.batchUpload', () => {
     queueService = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(InboxService, GoogleOAuthService, MicrosoftOAuthService, BillingService, ImapClientService, SmtpClientService, QueueService, db, encrypt),
+      
         InboxService,
         { provide: GoogleOAuthService, useValue: {} },
         { provide: MicrosoftOAuthService, useValue: {} },

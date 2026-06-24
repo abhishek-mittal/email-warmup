@@ -7,6 +7,7 @@ import {
   getLatestAnalysisForInboxes,
 } from '@/analysis/analysis.service';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/analysis/analysis.service', () => ({
   getLatestAnalysisForInbox: jest.fn(),
   getLatestAnalysisForInboxes: jest.fn(),
@@ -39,7 +40,8 @@ describe('InboxController — batch + GET :id', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InboxController],
-      providers: [{ provide: InboxService, useValue: inboxService }],
+      providers: [...pinoLoggerStubsFor(NotFoundException, InboxController, InboxService, getLatestAnalysisForInbox, getLatestAnalysisForInboxes, Map),
+      { provide: InboxService, useValue: inboxService }],
     }).compile();
 
     controller = module.get<InboxController>(InboxController);

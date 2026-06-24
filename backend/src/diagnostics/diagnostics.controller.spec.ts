@@ -5,6 +5,7 @@ import { BillingService } from '../billing/billing.service';
 import { QueueService } from '../queue/queue.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -47,7 +48,8 @@ describe('DiagnosticsController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DiagnosticsController],
-      providers: [
+      providers: [...pinoLoggerStubsFor(ForbiddenException, NotFoundException, DiagnosticsController, BillingService, QueueService, db, Date),
+      
         { provide: BillingService, useValue: billingService },
         { provide: QueueService, useValue: queueService },
       ],

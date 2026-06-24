@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InboxAnalysisProcessor } from './inbox-analysis.processor';
 import { AnalysisService } from './analysis.service';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 describe('InboxAnalysisProcessor', () => {
   let processor: InboxAnalysisProcessor;
   let analysisService: { analyse: jest.Mock };
@@ -16,7 +17,8 @@ describe('InboxAnalysisProcessor', () => {
     analysisService = { analyse: jest.fn().mockResolvedValue({ id: 'analysis-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [InboxAnalysisProcessor, { provide: AnalysisService, useValue: analysisService }],
+      providers: [...pinoLoggerStubsFor(InboxAnalysisProcessor, AnalysisService, Error),
+      InboxAnalysisProcessor, { provide: AnalysisService, useValue: analysisService }],
     }).compile();
 
     processor = module.get<InboxAnalysisProcessor>(InboxAnalysisProcessor);

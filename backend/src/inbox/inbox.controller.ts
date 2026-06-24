@@ -25,7 +25,10 @@ import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { normalizeAliases } from './dto/connect-custom-smtp.dto';
 import { BatchUploadDto } from '@/pool-inbox/dto/batch-inbox-entry.dto';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
-import { getLatestAnalysisForInbox, getLatestAnalysisForInboxes } from '@/analysis/analysis.service';
+import {
+  getLatestAnalysisForInbox,
+  getLatestAnalysisForInboxes,
+} from '@/analysis/analysis.service';
 
 @Controller('inboxes')
 @UseGuards(BetterAuthGuard)

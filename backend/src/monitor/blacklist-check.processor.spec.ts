@@ -7,6 +7,7 @@ import { WarmupService } from '../warmup/warmup.service';
 import { db } from '../db';
 import { RBL_LIST } from './rbl-list';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -77,7 +78,8 @@ describe('BlacklistCheckProcessor', () => {
     warmupService = { pauseInbox: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(UnrecoverableError, BlacklistCheckProcessor, BlacklistService, QueueService, WarmupService, db, RBL_LIST),
+      
         BlacklistCheckProcessor,
         { provide: BlacklistService, useValue: blacklistService },
         { provide: QueueService, useValue: queueService },

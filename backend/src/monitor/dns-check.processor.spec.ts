@@ -5,6 +5,7 @@ import { DnsService } from './dns.service';
 import { QueueService } from '../queue/queue.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -86,7 +87,8 @@ describe('DnsCheckProcessor', () => {
     queueService = { add: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(UnrecoverableError, DnsCheckProcessor, DnsService, QueueService, db),
+      
         DnsCheckProcessor,
         { provide: DnsService, useValue: dnsService },
         { provide: QueueService, useValue: queueService },

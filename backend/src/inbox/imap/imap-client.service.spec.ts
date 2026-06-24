@@ -4,6 +4,7 @@ import { GoogleOAuthService } from '../oauth/google-oauth.service';
 import { MicrosoftOAuthService } from '../oauth/microsoft-oauth.service';
 import { db } from '../../db';
 
+import { pinoLoggerStubsFor } from '../../common/test-module';
 jest.mock('../../db', () => ({
   db: {
     select: jest.fn(),
@@ -51,7 +52,8 @@ describe('ImapClientService', () => {
     microsoftOAuthService = { refreshToken: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(ImapClientService, ImapNotConfiguredError, GoogleOAuthService, MicrosoftOAuthService, db),
+      
         ImapClientService,
         { provide: GoogleOAuthService, useValue: googleOAuthService },
         { provide: MicrosoftOAuthService, useValue: microsoftOAuthService },

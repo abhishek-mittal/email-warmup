@@ -3,8 +3,9 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { poolInboxes } from '@/db/schema';
 import { encrypt } from '@/common/crypto';
@@ -187,7 +188,65 @@ export class PoolInboxService {
 
   /** Plain rows for `GET /pool-inboxes` — no analysis join (deferred). */
   async findByUser(userId: string) {
-    return db.select(SAFE_POOL_INBOX_COLUMNS).from(poolInboxes).where(eq(poolInboxes.userId, userId));
+    return db
+      .select(SAFE_POOL_INBOX_COLUMNS)
+      .from(poolInboxes)
+      .where(eq(poolInboxes.userId, userId));
+  }
+
+  /**
+   * Re-runs the DNS analysis for one pool inbox (the per-row "Re-analyze"
+   * button). Enqueues a fresh `inbox-analysis` BullMQ job; the
+   * `InboxAnalysisProcessor` writes the new `inbox_analysis` row, which
+   * the frontend picks up via the existing `GET /pool-inboxes`
+   * analysis-join (controller in this module).
+   *
+   * The row is reset to `status='pending'` first so the frontend's
+   * readiness badge flips to "Analysing…" immediately (instead of
+   * staying "Active" with stale data while the new analysis is in
+   * flight). The status flips back to `'active'` when the processor
+   * writes the result row — see `AnalysisService.analyse`.
+   *
+   * Idempotency: clicking the button twice in a row enqueues two
+   * analysis jobs. Both write to the same `inbox_analysis` table
+   * (keyed by `poolInboxId`); the second overwrites the first. No
+   * dedup is done at this layer because the cost of a duplicate DNS
+   * lookup is trivial (~50ms) and deduping would require an
+   * in-flight job tracker.
+   */
+  async reanalyze(userId: string, poolInboxId: string): Promise<{ jobId: string }> {
+    const rows = await db
+      .select()
+      .from(poolInboxes)
+      .where(eq(poolInboxes.id, poolInboxId))
+      .limit(1);
+    const row = rows[0];
+    if (!row || row.userId !== userId) {
+      // Don't distinguish "doesn't exist" from "not yours" — same as
+      // the rest of the GET/:id endpoints in the codebase. The frontend
+      // treats the resulting 404 as "row gone, refresh the list".
+      throw new NotFoundException();
+    }
+    if (row.status === 'removed') {
+      // Soft-deleted rows can't be re-analyzed — that would let a
+      // user resurrect a removed pool inbox without going through
+      // the create flow. Throw 403 (forbidden) rather than 404
+      // because the row *does* exist, the caller just can't act on it.
+      throw new ForbiddenException('Pool inbox has been removed.');
+    }
+
+    // Reset status so the readiness badge flips to "Analysing…"
+    // immediately, before the processor even picks the job up. The
+    // processor's success path flips it back to 'active' on row
+    // insert; the failure path (UnrecoverableError) leaves it on
+    // 'error'. See AnalysisService.analyse.
+    await db
+      .update(poolInboxes)
+      .set({ status: 'pending', errorMessage: null })
+      .where(and(eq(poolInboxes.id, poolInboxId), eq(poolInboxes.userId, userId)));
+
+    const job = await this.queue.add('inbox-analysis', { poolInboxId, userId });
+    return { jobId: String(job.id) };
   }
 
   /**

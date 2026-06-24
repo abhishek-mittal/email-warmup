@@ -4,6 +4,7 @@ import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
 import { encrypt } from '@/common/crypto';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/db', () => ({
   db: {
     select: jest.fn(),
@@ -46,7 +47,11 @@ describe('PoolInboxService', () => {
     queueService = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PoolInboxService, { provide: QueueService, useValue: queueService }],
+      providers: [
+        PoolInboxService,
+        { provide: QueueService, useValue: queueService },
+        ...pinoLoggerStubsFor(PoolInboxService, QueueService, db),
+      ],
     }).compile();
 
     service = module.get<PoolInboxService>(PoolInboxService);
@@ -296,6 +301,59 @@ describe('PoolInboxService', () => {
       await service.softDelete('user-1', 'pi-1');
       const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
       expect(setCall.status).toBe('removed');
+    });
+  });
+
+  describe('reanalyze', () => {
+    function mockSelectOne(row: any) {
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue(row ? [row] : []),
+      });
+    }
+
+    function mockUpdate() {
+      (db.update as jest.Mock).mockReturnValue({
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+    }
+
+    it('throws NotFoundException when the inbox does not exist', async () => {
+      mockSelectOne(null);
+
+      await expect(service.reanalyze('user-1', 'pi-missing')).rejects.toThrow(/not found/i);
+      expect(queueService.add).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the inbox belongs to a different user (no info-leak)', async () => {
+      mockSelectOne({ id: 'pi-1', userId: 'someone-else', status: 'active' });
+
+      await expect(service.reanalyze('user-1', 'pi-1')).rejects.toThrow(/not found/i);
+      expect(queueService.add).not.toHaveBeenCalled();
+    });
+
+    it('throws ForbiddenException when the inbox is in status=removed', async () => {
+      mockSelectOne({ id: 'pi-1', userId: 'user-1', status: 'removed' });
+
+      await expect(service.reanalyze('user-1', 'pi-1')).rejects.toThrow(/removed/i);
+      expect(queueService.add).not.toHaveBeenCalled();
+    });
+
+    it('resets status=pending, enqueues inbox-analysis, and returns the new job id', async () => {
+      mockSelectOne({ id: 'pi-1', userId: 'user-1', status: 'active' });
+      mockUpdate();
+
+      const result = await service.reanalyze('user-1', 'pi-1');
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
+      expect(setCall.status).toBe('pending');
+      expect(queueService.add).toHaveBeenCalledWith('inbox-analysis', {
+        poolInboxId: 'pi-1',
+        userId: 'user-1',
+      });
     });
   });
 });

@@ -3,18 +3,14 @@ import { PoolInboxController } from './pool-inbox.controller';
 import { PoolInboxService } from './pool-inbox.service';
 import { getLatestAnalysisForPoolInboxes } from '@/analysis/analysis.service';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/analysis/analysis.service', () => ({
   getLatestAnalysisForPoolInboxes: jest.fn(),
 }));
 
 describe('PoolInboxController', () => {
   let controller: PoolInboxController;
-  let service: {
-    batchUpload: jest.Mock;
-    create: jest.Mock;
-    findByUser: jest.Mock;
-    softDelete: jest.Mock;
-  };
+  let service: Record<string, jest.Mock>;
 
   function makeReq(userId: string) {
     return { userId } as any;
@@ -29,11 +25,13 @@ describe('PoolInboxController', () => {
       create: jest.fn(),
       findByUser: jest.fn(),
       softDelete: jest.fn(),
+      reanalyze: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PoolInboxController],
-      providers: [{ provide: PoolInboxService, useValue: service }],
+      providers: [...pinoLoggerStubsFor(PoolInboxController, PoolInboxService, getLatestAnalysisForPoolInboxes, Map),
+      { provide: PoolInboxService, useValue: service }],
     }).compile();
 
     controller = module.get<PoolInboxController>(PoolInboxController);
@@ -162,6 +160,23 @@ describe('PoolInboxController', () => {
 
       expect(service.softDelete).toHaveBeenCalledWith('user-1', 'pi-1');
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe('POST /pool-inboxes/:id/analyze', () => {
+    it('delegates to PoolInboxService.reanalyze and returns nothing (204)', async () => {
+      service.reanalyze.mockResolvedValue({ jobId: 'job-42' });
+
+      const result = await controller.reanalyze(makeReq('user-1'), 'pi-1');
+
+      expect(service.reanalyze).toHaveBeenCalledWith('user-1', 'pi-1');
+      expect(result).toBeUndefined();
+    });
+
+    it('propagates ForbiddenException when the inbox is removed', async () => {
+      service.reanalyze.mockRejectedValue(new Error('Pool inbox has been removed.'));
+
+      await expect(controller.reanalyze(makeReq('user-1'), 'pi-1')).rejects.toThrow(/removed/i);
     });
   });
 });

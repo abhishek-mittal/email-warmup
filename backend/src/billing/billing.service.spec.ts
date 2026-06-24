@@ -4,6 +4,7 @@ import { BillingService, PLAN_LIMITS } from './billing.service';
 import { QueueService } from '../queue/queue.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -68,7 +69,8 @@ describe('BillingService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(BadRequestException, ForbiddenException, BillingService, PLAN_LIMITS, QueueService, db),
+      
         BillingService,
         {
           provide: QueueService,
@@ -166,6 +168,18 @@ describe('BillingService', () => {
       });
 
       await expect(service.assertInboxLimit('u1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('never rejects an enterprise-plan user (inboxes: -1 is the unlimited sentinel)', async () => {
+      // Regression test: `count >= -1` is always true, so before the fix this
+      // threw ForbiddenException for an enterprise user with zero inboxes.
+      expect(PLAN_LIMITS.enterprise.inboxes).toBe(-1);
+      mockSelectChain([{ id: 'u1', plan: 'enterprise' }]);
+
+      await expect(service.assertInboxLimit('u1')).resolves.toBeUndefined();
+      // Only one db.select call (the user lookup) — the inbox count query is
+      // skipped entirely for the unlimited sentinel.
+      expect(db.select).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -8,6 +8,7 @@ import { SmtpClientService } from './smtp/smtp-client.service';
 import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/db', () => ({
   db: {
     select: jest.fn(),
@@ -74,7 +75,8 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(InboxService, GoogleOAuthService, MicrosoftOAuthService, BillingService, ImapClientService, ImapNotConfiguredError, SmtpClientService, QueueService, db, Error),
+      
         InboxService,
         { provide: GoogleOAuthService, useValue: {} },
         { provide: MicrosoftOAuthService, useValue: {} },

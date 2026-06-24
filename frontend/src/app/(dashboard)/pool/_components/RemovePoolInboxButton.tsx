@@ -17,10 +17,12 @@ export function RemovePoolInboxButton({ poolInboxId, email, onRemoved }: Props) 
   const router = useRouter();
   const { toast, show, clear } = useToasts();
   const [busy, setBusy] = useState(false);
+  // In-page confirm step instead of window.confirm() — native dialogs block
+  // the whole page (and any automated browser testing of this flow).
+  const [confirming, setConfirming] = useState(false);
 
   async function remove(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!window.confirm(`Remove ${email} from the warming pool?`)) return;
     setBusy(true);
     try {
       await api(`/pool-inboxes/${poolInboxId}`, { method: 'DELETE' });
@@ -32,18 +34,48 @@ export function RemovePoolInboxButton({ poolInboxId, email, onRemoved }: Props) 
       show(msg || 'Failed to remove pool inbox', 'error');
     } finally {
       setBusy(false);
+      setConfirming(false);
     }
+  }
+
+  if (confirming) {
+    return (
+      <span className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span className="text-xs text-slate-600">Remove {email}?</span>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={busy}
+          className="rounded-full bg-rose-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
+        >
+          {busy ? 'Removing…' : 'Confirm'}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirming(false);
+          }}
+          disabled={busy}
+          className="rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </span>
+    );
   }
 
   return (
     <>
       <button
         type="button"
-        onClick={remove}
-        disabled={busy}
-        className="rounded-full border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-50"
+        onClick={(e) => {
+          e.stopPropagation();
+          setConfirming(true);
+        }}
+        className="rounded-full border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50"
       >
-        {busy ? 'Removing…' : 'Remove'}
+        Remove
       </button>
       {toast ? <Toast message={toast.message} kind={toast.kind} onDone={clear} /> : null}
     </>

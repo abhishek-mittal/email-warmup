@@ -3,12 +3,20 @@
 #
 # Usage:
 #   .bin/dev up        # start infra (postgres + redis) + backend + frontend
+#                       #   and (on macOS) auto-open a live log TUI in a new
+#                       #   Terminal window — uses `multitail` if installed
+#                       #   (split columns, search, scroll), or `tail -F` of
+#                       #   both log files in one window as a fallback.
 #   .bin/dev start     # alias for `up`
 #   .bin/dev stop      # stop backend + frontend (keeps infra running)
 #   .bin/dev down      # stop everything including infra containers
 #   .bin/dev restart   # stop backend + frontend, then start them again
 #   .bin/dev status    # show what's running and where
-#   .bin/dev logs [backend|frontend|infra]  # tail logs
+#   .bin/dev logs [backend|frontend|infra]  # tail logs in the current terminal
+#
+# Environment:
+#   LOG_TUI=auto (default)  open a live log TUI in a new Terminal window
+#   LOG_TUI=none            skip the auto-opened TUI; use `.bin/dev logs` instead
 #
 # PIDs and ports are tracked in .bin/.runtime/ so stop/restart/status are reliable.
 # This script is intentionally self-contained — no Node deps, no global tools beyond
@@ -119,6 +127,55 @@ cmd_up() {
   fi
 
   cmd_status
+  cmd_open_log_tui
+}
+
+cmd_open_log_tui() {
+  # If the user disabled the auto-launch (CI, single-shot CLI, or they
+  # just want plain tail -f), bail. Set LOG_TUI=none to opt out.
+  if [[ "${LOG_TUI:-auto}" == "none" ]]; then
+    return 0
+  fi
+
+  # If neither process actually came up, don't open a window showing
+  # nothing — cmd_up already printed the failure.
+  if ! is_running "$PID_BACKEND" && ! is_running "$PID_FRONTEND"; then
+    return 0
+  fi
+
+  # Prefer multitail (split columns, search, scroll). Fall back to
+  # `tail -f` of both logs in a single new Terminal tab if multitail
+  # isn't installed — keeps the script useful on a fresh machine
+  # without forcing a brew dependency.
+  local command_str
+  if command -v multitail >/dev/null 2>&1; then
+    # -j: just-in-time column resizing on terminal resize
+    # -s 2: split into 2 columns
+    # Each -l runs the given command in its own column.
+    # `--label` gives each column a colored header strip.
+    command_str="multitail -j -s 2 \
+      -l 'tail -n 80 -F $LOG_BACKEND'  --label 'backend (3001)' \
+      -l 'tail -n 80 -F $LOG_FRONTEND' --label 'frontend (3000)'"
+  else
+    # tail -F (capital) follows the file by name, so a `.bin/dev restart`
+    # that truncates and reopens the log doesn't break the follow.
+    command_str="tail -n 80 -F $LOG_BACKEND $LOG_FRONTEND"
+  fi
+
+  # Open in a new Terminal.app window (macOS-only — this script already
+  # assumes macOS via `lsof -nP -iTCP` and `nohup` style usage).
+  if ! command -v osascript >/dev/null 2>&1; then
+    warn "osascript not found; can't auto-open the log TUI. Run '.bin/dev logs' in your own terminal."
+    return 0
+  fi
+
+  log "opening live log TUI in a new Terminal window (LOG_TUI=none to skip)"
+  osascript <<EOF >/dev/null 2>&1 &
+tell application "Terminal"
+  activate
+  do script "clear; printf '\\\\033[1;34m[dev]\\\\033[0m EmailWarm live logs — close this window to stop.\\\\n'; $command_str"
+end tell
+EOF
 }
 
 cmd_stop() {

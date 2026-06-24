@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ImapFlow } from 'imapflow';
 import { decrypt } from '../../common/crypto';
 import { db } from '../../db';
@@ -32,13 +33,18 @@ export class ImapClientService {
   private pool = new Map<string, ImapFlow>();
 
   constructor(
+    @InjectPinoLogger(ImapClientService.name)
+    private readonly logger: PinoLogger,
     private readonly googleOAuthService: GoogleOAuthService,
     private readonly microsoftOAuthService: MicrosoftOAuthService,
   ) {}
 
   async getConnection(inboxId: string): Promise<ImapFlow> {
     const existing = this.pool.get(inboxId);
-    if (existing?.usable) return existing;
+    if (existing?.usable) {
+      this.logger.debug({ inboxId }, 'IMAP connection reused from pool');
+      return existing;
+    }
 
     const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
     const inbox = rows[0];
@@ -47,6 +53,10 @@ export class ImapClientService {
     // No IMAP creds on this row at all — surface a typed error so the
     // warmup/placement consumers can no-op instead of throwing.
     if (!inbox.imapHost || !inbox.imapPort) {
+      this.logger.warn(
+        { inboxId },
+        'IMAP not configured — skipping receive action',
+      );
       throw new ImapNotConfiguredError(inboxId);
     }
 
@@ -61,16 +71,48 @@ export class ImapClientService {
               throw new ImapNotConfiguredError(inboxId);
             })();
 
+    this.logger.debug(
+      {
+        inboxId,
+        imapHost: inbox.imapHost,
+        imapPort: inbox.imapPort,
+        provider: inbox.provider,
+      },
+      'opening new IMAP connection',
+    );
+
     const client = new ImapFlow({
       host: inbox.imapHost,
       port: inbox.imapPort,
       secure: inbox.imapPort === 993,
       auth,
-      logger: false,
+      // Enable the ImapFlow protocol logger only at debug level — it's
+      // extremely chatty and only useful when actively debugging an IMAP
+      // issue. Default (info) keeps the terminal clean.
+      logger: process.env.LOG_LEVEL === 'debug' ? undefined : false,
     });
 
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (err: any) {
+      this.logger.error(
+        {
+          inboxId,
+          imapHost: inbox.imapHost,
+          imapPort: inbox.imapPort,
+          provider: inbox.provider,
+          err: err?.message,
+          errCode: err?.code,
+        },
+        'IMAP connect failed',
+      );
+      throw err;
+    }
     this.pool.set(inboxId, client);
+    this.logger.info(
+      { inboxId, provider: inbox.provider },
+      'IMAP connection established',
+    );
     return client;
   }
 
@@ -86,7 +128,10 @@ export class ImapClientService {
   async getPoolInboxConnection(poolInboxId: string): Promise<ImapFlow> {
     const key = POOL_INBOX_KEY_PREFIX + poolInboxId;
     const existing = this.pool.get(key);
-    if (existing?.usable) return existing;
+    if (existing?.usable) {
+      this.logger.debug({ poolInboxId }, 'IMAP connection reused from pool (pool inbox)');
+      return existing;
+    }
 
     const rows = await db
       .select()
@@ -105,21 +150,27 @@ export class ImapClientService {
       const imapUser = creds.imapUser as string | undefined;
       const imapPassword = creds.imapPassword as string | undefined;
       if (!imapHost || !imapPort || !imapUser || !imapPassword) {
+        this.logger.warn({ poolInboxId }, 'IMAP not configured — skipping receive action');
         throw new ImapNotConfiguredError(poolInboxId);
       }
 
+      this.logger.debug(
+        { poolInboxId, imapHost, imapPort, provider: 'custom' },
+        'opening new IMAP connection (pool inbox)',
+      );
       client = new ImapFlow({
         host: imapHost,
         port: imapPort,
         secure: imapPort === 993,
         auth: { user: imapUser, pass: decrypt(imapPassword) },
-        logger: false,
+        logger: process.env.LOG_LEVEL === 'debug' ? undefined : false,
       });
     } else if (poolInbox.provider === 'gmail' || poolInbox.provider === 'outlook') {
       const clientId = creds.clientId as string | undefined;
       const clientSecretEncrypted = creds.clientSecret as string | undefined;
       const refreshTokenEncrypted = creds.refreshToken as string | undefined;
       if (!clientId || !clientSecretEncrypted || !refreshTokenEncrypted) {
+        this.logger.warn({ poolInboxId }, 'IMAP not configured — skipping receive action');
         throw new ImapNotConfiguredError(poolInboxId);
       }
 
@@ -132,19 +183,46 @@ export class ImapClientService {
         clientSecret,
       });
 
+      this.logger.debug(
+        {
+          poolInboxId,
+          imapHost: poolInbox.provider === 'gmail' ? 'imap.gmail.com' : 'outlook.office365.com',
+          imapPort: 993,
+          provider: poolInbox.provider,
+        },
+        'opening new IMAP connection (pool inbox)',
+      );
       client = new ImapFlow({
         host: poolInbox.provider === 'gmail' ? 'imap.gmail.com' : 'outlook.office365.com',
         port: 993,
         secure: true,
         auth: { user: poolInbox.email, accessToken: access_token },
-        logger: false,
+        logger: process.env.LOG_LEVEL === 'debug' ? undefined : false,
       });
     } else {
+      this.logger.warn({ poolInboxId }, 'IMAP not configured — skipping receive action');
       throw new ImapNotConfiguredError(poolInboxId);
     }
 
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (err: any) {
+      this.logger.error(
+        {
+          poolInboxId,
+          provider: poolInbox.provider,
+          err: err?.message,
+          errCode: err?.code,
+        },
+        'IMAP connect failed (pool inbox)',
+      );
+      throw err;
+    }
     this.pool.set(key, client);
+    this.logger.info(
+      { poolInboxId, provider: poolInbox.provider },
+      'IMAP connection established (pool inbox)',
+    );
     return client;
   }
 
@@ -158,6 +236,7 @@ export class ImapClientService {
 
     const client = this.pool.get(key);
     if (client) {
+      this.logger.debug({ id, key }, 'IMAP connection closed');
       await client.logout();
       this.pool.delete(key);
     }

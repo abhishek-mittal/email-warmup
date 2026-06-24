@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import { Job, UnrecoverableError } from 'bullmq';
@@ -21,9 +22,9 @@ type CriticalField = (typeof CRITICAL_FIELDS)[number];
 @Injectable()
 @Processor('dns-check')
 export class DnsCheckProcessor extends WorkerHost {
-  private readonly logger = new Logger(DnsCheckProcessor.name);
-
   constructor(
+    @InjectPinoLogger(DnsCheckProcessor.name)
+    private readonly logger: PinoLogger,
     private readonly dnsService: DnsService,
     private readonly queueService: QueueService,
   ) {
@@ -42,26 +43,46 @@ export class DnsCheckProcessor extends WorkerHost {
 
   async process(job: Job<DnsCheckJobData>): Promise<void> {
     const { inboxId } = job.data;
+    const jobId = String(job.id);
 
     const inboxRows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
     const inbox = inboxRows[0];
     if (!inbox) {
       throw new UnrecoverableError(`Inbox ${inboxId} not found`);
     }
-
     const domain = inbox.email.split('@')[1];
+    this.logger.info({ jobId, inboxId, domain }, 'DNS check started');
+
     const selector = inbox.dkimSelector ?? 'default';
 
     const [spf, dkim, dmarc, mx] = await Promise.all([
-      this.dnsService.checkSpf(domain),
-      this.dnsService.checkDkim(domain, selector),
-      this.dnsService.checkDmarc(domain),
-      this.dnsService.checkMx(domain),
+      this.dnsService.checkSpf(domain).then((r) => (this.logger.debug(
+        { jobId, check: 'spf', result: r.status === 'pass' },
+        'DNS check result',
+      ), r)),
+      this.dnsService.checkDkim(domain, selector).then((r) => (this.logger.debug(
+        { jobId, check: 'dkim', result: r.status === 'pass' },
+        'DNS check result',
+      ), r)),
+      this.dnsService.checkDmarc(domain).then((r) => (this.logger.debug(
+        { jobId, check: 'dmarc', result: r.status === 'pass' },
+        'DNS check result',
+      ), r)),
+      this.dnsService.checkMx(domain).then((r) => (this.logger.debug(
+        { jobId, check: 'mx', result: r.status === 'pass' },
+        'DNS check result',
+      ), r)),
     ]);
 
     // rDNS is best-effort and only meaningful when the inbox has a known sending IP
     // (e.g. anything sent via Gmail/Outlook OAuth never has one) — see addendum #6.
     const rdns = inbox.sendingIp ? await this.dnsService.checkRdns(inbox.sendingIp) : null;
+    if (rdns) {
+      this.logger.debug(
+        { jobId, check: 'rdns', result: rdns.status === 'pass' },
+        'DNS check result',
+      );
+    }
 
     // Read the previous check BEFORE inserting the new row, so the comparison is
     // against the prior state rather than the row we're about to write.
@@ -85,6 +106,7 @@ export class DnsCheckProcessor extends WorkerHost {
     await this.maybeAlert(inbox, previous, { spf, dkim, mx });
 
     await this.queueService.add('score-compute', { inboxId });
+    this.logger.info({ jobId, inboxId, domain }, 'DNS check completed');
   }
 
   private async getPreviousCheck(

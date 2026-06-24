@@ -119,7 +119,7 @@ export interface BillingStatus {
   plan: Plan;
   trialEndsAt: string | null;
   inboxesUsed: number;
-  inboxLimit: number;
+  inboxLimit: number | 'unlimited';
   billingPortalUrl: string | null;
 }
 

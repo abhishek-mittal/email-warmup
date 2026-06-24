@@ -7,9 +7,12 @@ export default async function Page() {
   const userId = await currentUserId();
   if (!userId) redirect('/sign-in');
 
-  const status = await serverApi<{ plan: string; inboxesUsed: number; inboxLimit: number; trialEndsAt: string | null }>(
-    '/billing/status',
-  );
+  const status = await serverApi<{
+    plan: string;
+    inboxesUsed: number;
+    inboxLimit: number | 'unlimited';
+    trialEndsAt: string | null;
+  }>('/billing/status');
 
   return (
     <div className="space-y-6">
@@ -21,7 +24,8 @@ export default async function Page() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-sm font-semibold text-slate-700">Usage</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Inboxes: {status.inboxesUsed} / {status.inboxLimit}
+            Inboxes: {status.inboxesUsed} /{' '}
+            {status.inboxLimit === 'unlimited' ? 'Unlimited' : status.inboxLimit}
           </p>
           {status.trialEndsAt ? (
             <p className="mt-2 text-sm text-slate-600">

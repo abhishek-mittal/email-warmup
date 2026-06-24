@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   Req,
+  HttpCode,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -96,5 +97,19 @@ export class PoolInboxController {
   async remove(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
     await this.poolInboxService.softDelete(req.userId!, id);
     return { success: true };
+  }
+
+  /**
+   * Re-run DNS analysis for one pool inbox (per-row "Re-analyze" button).
+   * Returns 204 — the analysis itself happens asynchronously in the
+   * `inbox-analysis` BullMQ worker, the result is observed by the
+   * frontend via the `GET /pool-inboxes` analysis join. The service
+   * resets `status='pending'` first so the readiness badge flips to
+   * "Analysing…" immediately, before the worker even picks the job up.
+   */
+  @Post(':id/analyze')
+  @HttpCode(204)
+  async reanalyze(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
+    await this.poolInboxService.reanalyze(req.userId!, id);
   }
 }

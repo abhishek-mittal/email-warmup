@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -48,9 +49,9 @@ interface LocatedMessage {
 @Processor('warmup-receive')
 @Injectable()
 export class WarmupReceiveProcessor extends WorkerHost {
-  private readonly logger = new Logger(WarmupReceiveProcessor.name);
-
   constructor(
+    @InjectPinoLogger(WarmupReceiveProcessor.name)
+    private readonly logger: PinoLogger,
     private readonly imapClientService: ImapClientService,
     private readonly smtpClientService: SmtpClientService,
     private readonly contentService: ContentService,
@@ -60,9 +61,19 @@ export class WarmupReceiveProcessor extends WorkerHost {
 
   async process(job: Job<WarmupReceiveJobPayload>): Promise<void> {
     const { receiverSource, receiverId, messageId, actions } = job.data;
+    const jobId = String(job.id);
+
+    this.logger.info(
+      { jobId, receiverSource, receiverId, messageId, actions },
+      'warmup-receive job started',
+    );
 
     const receiver = await this.loadReceiver(receiverSource, receiverId);
     if (!receiver) {
+      this.logger.warn(
+        { jobId, receiverSource, receiverId },
+        'warmup-receive: receiver not found',
+      );
       throw new Error(`Receiver not found: ${receiverSource}:${receiverId}`);
     }
 
@@ -78,7 +89,8 @@ export class WarmupReceiveProcessor extends WorkerHost {
     } catch (err: any) {
       if (err instanceof ImapNotConfiguredError) {
         this.logger.warn(
-          `warmup-receive skipped for ${receiverSource}:${receiver.id}: IMAP not configured`,
+          { jobId, receiverSource, receiverId: receiver.id },
+          'warmup-receive skipped: IMAP not configured',
         );
         return;
       }
@@ -88,8 +100,16 @@ export class WarmupReceiveProcessor extends WorkerHost {
 
     const located = await this.locateMessage(client, messageId, receiver.provider);
     if (!located) {
+      this.logger.warn(
+        { jobId, receiverId: receiver.id, messageId },
+        'warmup-receive: message not found in any folder',
+      );
       throw new Error(`Message ${messageId} not found in any folder for receiver ${receiver.id}`);
     }
+    this.logger.info(
+      { jobId, receiverId: receiver.id, messageId, found: true, isSpam: located.isSpam },
+      'warmup-receive: message located',
+    );
 
     const updates: Partial<typeof warmupSends.$inferInsert> = {};
     let current = located;
@@ -100,6 +120,10 @@ export class WarmupReceiveProcessor extends WorkerHost {
 
     if (located.isSpam && actions.includes('rescue')) {
       await client.messageMove(current.seq, 'INBOX');
+      this.logger.info(
+        { jobId, receiverId: receiver.id, rescued: true, messageId },
+        'rescued message from spam to INBOX',
+      );
       updates.rescuedAt = new Date();
       const relocated = await this.locateInMailbox(client, 'INBOX', messageId, false);
       if (!relocated) {
@@ -123,26 +147,50 @@ export class WarmupReceiveProcessor extends WorkerHost {
 
     if (actions.includes('open')) {
       await client.messageFlagsAdd(current.seq, ['\\Seen']);
+      this.logger.debug(
+        { jobId, action: 'open', receiverId: receiver.id, messageId },
+        'action completed',
+      );
       updates.openedAt = new Date();
     }
 
     if (actions.includes('star')) {
       await client.messageFlagsAdd(current.seq, ['\\Flagged']);
+      this.logger.debug(
+        { jobId, action: 'star', receiverId: receiver.id, messageId },
+        'action completed',
+      );
       updates.starredAt = new Date();
     }
 
     if (actions.includes('reply')) {
       await this.sendReply(receiverSource, receiver, messageId, fetched);
+      this.logger.debug(
+        { jobId, action: 'reply', receiverId: receiver.id, messageId },
+        'action completed',
+      );
       updates.repliedAt = new Date();
     }
 
     await this.fileToWarmupHub(client, current.seq);
+    this.logger.debug(
+      { jobId, action: 'file', receiverId: receiver.id, messageId },
+      'action completed',
+    );
     updates.filedAt = new Date();
 
     await db.update(warmupSends).set(updates).where(eq(warmupSends.messageId, messageId));
 
-    this.logger.log(
-      `Processed warmup-receive for ${messageId} (${receiverSource}:${receiver.id}): actions=[${actions.join(',')}]${located.isSpam ? ' rescued-from-spam' : ''}`,
+    this.logger.info(
+      {
+        jobId,
+        receiverSource,
+        receiverId: receiver.id,
+        messageId,
+        actions,
+        rescued: located.isSpam && actions.includes('rescue'),
+      },
+      'warmup-receive job succeeded',
     );
   }
 

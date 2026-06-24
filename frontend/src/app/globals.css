@@ -32,6 +32,17 @@ body {
   border-color: var(--border);
 }
 
+input,
+textarea,
+select {
+  color: var(--foreground);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
 button {
   cursor: pointer;
 }

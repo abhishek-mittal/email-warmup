@@ -2,13 +2,36 @@ import { useMemo } from 'react';
 import { createAuthClient } from 'better-auth/react';
 import { mintBearerToken } from './bearer-token';
 
+/**
+ * Nest's default error body is JSON (`{statusCode, message, error}`), where
+ * `message` is either a string or — for class-validator failures — a
+ * string[]. Every call site across the app does `e.body` directly to show
+ * the user what went wrong, so `body` holds this extracted, human-readable
+ * text rather than the raw response text. Falls back to the raw text
+ * unchanged when it isn't JSON or has no `message` field.
+ */
+function extractErrorMessage(rawBody: string): string {
+  try {
+    const parsed = JSON.parse(rawBody);
+    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+      const { message } = parsed as { message: unknown };
+      if (typeof message === 'string') return message;
+      if (Array.isArray(message)) return message.join(', ');
+    }
+  } catch {
+    // Not JSON — fall through to the raw text.
+  }
+  return rawBody;
+}
+
 export class ApiError extends Error {
   status: number;
   body: string;
   constructor(status: number, body: string) {
-    super(`API ${status}: ${body}`);
+    const message = extractErrorMessage(body);
+    super(`API ${status}: ${message}`);
     this.status = status;
-    this.body = body;
+    this.body = message;
     this.name = 'ApiError';
   }
 }

@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ScoringController } from './scoring.controller';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -38,6 +39,7 @@ describe('ScoringController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ScoringController],
+      providers: [...pinoLoggerStubsFor(NotFoundException, ScoringController, db, Date)],
     }).compile();
     controller = module.get<ScoringController>(ScoringController);
   });

@@ -39,7 +39,7 @@ export class BillingController {
     plan: string;
     trialEndsAt: string | null;
     inboxesUsed: number;
-    inboxLimit: number;
+    inboxLimit: number | 'unlimited';
     billingPortalUrl: string | null;
   }> {
     const userId = req.userId as string;
@@ -65,7 +65,10 @@ export class BillingController {
       .where(eq(inboxes.userId, userId));
 
     const inboxesUsed = countRow?.count ?? 0;
-    const inboxLimit = PLAN_LIMITS[user.plan]?.inboxes ?? 0;
+    const rawInboxLimit = PLAN_LIMITS[user.plan]?.inboxes ?? 0;
+    // -1 is the "unlimited" sentinel (enterprise plan) — surface it to the
+    // frontend as 'unlimited' rather than the literal -1.
+    const inboxLimit = rawInboxLimit === -1 ? 'unlimited' : rawInboxLimit;
 
     // Only attempt a portal session when we actually have a Stripe customer;
     // createPortalSession throws BadRequestException otherwise, and we

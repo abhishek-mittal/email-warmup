@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import { Job, UnrecoverableError } from 'bullmq';
@@ -17,6 +18,8 @@ export interface BlacklistCheckJobData {
 @Processor('blacklist-check')
 export class BlacklistCheckProcessor extends WorkerHost {
   constructor(
+    @InjectPinoLogger(BlacklistCheckProcessor.name)
+    private readonly logger: PinoLogger,
     private readonly blacklistService: BlacklistService,
     private readonly queueService: QueueService,
     private readonly warmupService: WarmupService,
@@ -41,6 +44,7 @@ export class BlacklistCheckProcessor extends WorkerHost {
 
   async process(job: Job<BlacklistCheckJobData>): Promise<void> {
     const { inboxId } = job.data;
+    const jobId = String(job.id);
 
     const inboxRows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
     const inbox = inboxRows[0];
@@ -49,6 +53,7 @@ export class BlacklistCheckProcessor extends WorkerHost {
     }
 
     const domain = inbox.email.split('@')[1];
+    this.logger.info({ jobId, inboxId, domain }, 'blacklist check started');
     const result = await this.blacklistService.checkDomain(domain);
 
     await db.insert(blacklistChecks).values({
@@ -63,6 +68,10 @@ export class BlacklistCheckProcessor extends WorkerHost {
       // and the monitoring skill file's "never fire blacklist alert without pausing
       // warmup first" rule.
       await this.warmupService.pauseInbox(inboxId);
+      this.logger.warn(
+        { jobId, inboxId, listed: result.listed, rbl: Object.keys(result.rblResults ?? {}) },
+        'inbox paused due to blacklist hit',
+      );
 
       await this.queueService.add('notify', {
         userId: inbox.userId,
@@ -79,5 +88,9 @@ export class BlacklistCheckProcessor extends WorkerHost {
     }
 
     await this.queueService.add('score-compute', { inboxId });
+    this.logger.info(
+      { jobId, inboxId, domain, isClean: result.isClean, listedCount: result.listedCount },
+      'blacklist check completed',
+    );
   }
 }

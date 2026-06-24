@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { Pool as PgPool } from 'pg';
+import { syncUserToBackend } from './user-sync';
 
 let _pool: PgPool | undefined;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,6 +47,33 @@ function makeAuth() {
       cookieCache: { enabled: true, maxAge: 60 * 5 },
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // refresh once a day
+    },
+    /**
+     * Fires after better-auth writes a row to its `user` table. We use
+     * it to mirror the user into the backend's `users` table (which
+     * holds the plan/trial fields Stripe writes to) so the very first
+     * authenticated request from a new user can find their row and
+     * not 403 with "User not found". See T024.
+     *
+     * Fire-and-forget: errors are logged inside `syncUserToBackend` and
+     * never thrown, so a transient backend hiccup can't break signup.
+     */
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user: { id: string; email: string }) => {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+            const secret = process.env.INTERNAL_SECRET ?? '';
+            // Intentionally not awaited — better-auth's hook contract
+            // allows returning a promise but we don't want to block the
+            // signup response on a cross-process HTTP call.
+            void syncUserToBackend(
+              { id: user.id, email: user.email },
+              { apiUrl, secret },
+            );
+          },
+        },
+      },
     },
   });
 }

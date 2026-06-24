@@ -77,9 +77,12 @@ function parseCsvPreview(csv: string): PreviewRow[] {
 interface Props {
   endpoint: '/inboxes/batch/csv' | '/pool-inboxes/batch/csv';
   label?: string;
+  /** Called after a successful upload so the parent can start polling
+   *  for the analysis rows to appear. */
+  onUploaded?: () => void;
 }
 
-export function BatchUploadCsv({ endpoint, label = 'Add via CSV' }: Props) {
+export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: Props) {
   const api = useApi();
   const router = useRouter();
   const { toast, show, clear } = useToasts();
@@ -129,6 +132,9 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV' }: Props) {
       );
       setResult(res);
       show(`${res.created} added successfully, ${res.failed.length} failed.`, res.failed.length ? 'info' : 'success');
+      // Tell the parent page to start polling for analysis completion
+      // (the DNS / OAuth checks run async in a BullMQ worker).
+      onUploaded?.();
       router.refresh();
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to upload CSV';

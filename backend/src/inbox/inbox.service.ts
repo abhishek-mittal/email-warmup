@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { inboxes, dnsChecks, poolMembers } from '@/db/schema';
@@ -142,6 +143,8 @@ export function buildInboxInsertValues(userId: string, entry: BatchInboxEntry) {
 @Injectable()
 export class InboxService {
   constructor(
+    @InjectPinoLogger(InboxService.name)
+    private readonly logger: PinoLogger,
     private readonly googleOAuth: GoogleOAuthService,
     private readonly microsoftOAuth: MicrosoftOAuthService,
     private readonly billing: BillingService,
@@ -151,6 +154,7 @@ export class InboxService {
   ) {}
 
   async connectGmail(userId: string, code: string) {
+    this.logger.info({ userId, provider: 'gmail' }, 'inbox connect attempt');
     const tokens = await this.googleOAuth.exchangeCode(code);
     const userinfo = await this.fetchGoogleUserinfo(tokens.access_token);
     await this.billing.assertInboxLimit(userId);
@@ -168,6 +172,10 @@ export class InboxService {
         status: 'pending',
       })
       .returning();
+    this.logger.info(
+      { userId, inboxId: inbox.id, provider: 'gmail', email: userinfo.email },
+      'inbox connect attempt',
+    );
 
     const precheck = await this.runPrecheck(inbox.id, 'gmail');
 
@@ -177,6 +185,7 @@ export class InboxService {
   }
 
   async connectOutlook(userId: string, code: string) {
+    this.logger.info({ userId, provider: 'outlook' }, 'inbox connect attempt');
     const tokens = await this.microsoftOAuth.exchangeCode(code);
     const userinfo = await this.fetchMicrosoftUserinfo(tokens.access_token);
     await this.billing.assertInboxLimit(userId);
@@ -198,6 +207,10 @@ export class InboxService {
         status: 'pending',
       })
       .returning();
+    this.logger.info(
+      { userId, inboxId: inbox.id, provider: 'outlook', email: userinfo.email },
+      'inbox connect attempt',
+    );
 
     const precheck = await this.runPrecheck(inbox.id, 'outlook');
 
@@ -222,6 +235,10 @@ export class InboxService {
       dkimSelector?: string;
     },
   ) {
+    this.logger.info(
+      { userId, provider: 'custom', email: dto.email, smtpHost: dto.smtpHost, smtpPort: dto.smtpPort },
+      'inbox connect attempt',
+    );
     await this.billing.assertInboxLimit(userId);
 
     // Normalize: an all-or-nothing IMAP block. If the user opted in, all
@@ -354,6 +371,7 @@ export class InboxService {
   }
 
   private async runPrecheck(inboxId: string, provider: string) {
+    this.logger.info({ inboxId, provider }, 'precheck started');
     // Each step is one of:
     //   true  — step passed
     //   false — step attempted and failed (terminal — precheck throws)
@@ -365,8 +383,13 @@ export class InboxService {
     try {
       await this.smtp.verify(inboxId);
       steps.smtp = true;
+      this.logger.info({ inboxId, provider }, 'precheck passed: smtp');
     } catch (err: any) {
       steps.smtp = false;
+      this.logger.error(
+        { inboxId, provider, err: err?.message, errCode: err?.code },
+        'precheck failed: smtp',
+      );
       throw Object.assign(new Error(err.message || 'SMTP verification failed'), { step: 'smtp' });
     }
 
@@ -432,7 +455,15 @@ export class InboxService {
         .update(inboxes)
         .set({ status: 'active', poolConsentAt: new Date() })
         .where(eq(inboxes.id, inboxId));
+      this.logger.info(
+        { inboxId, provider, fromStatus: 'pending', toStatus: 'active' },
+        'inbox status changed',
+      );
     }
+    this.logger.info(
+      { inboxId, provider, activationPass, steps },
+      'precheck completed',
+    );
 
     // Enroll in the warmup pool ONLY if IMAP is actually configured and
     // passed. The warmup engine needs to confirm delivery via IMAP,

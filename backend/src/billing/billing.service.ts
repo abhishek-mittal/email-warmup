@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { eq, count } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { db } from '../db';
@@ -24,7 +25,11 @@ type CheckoutPlan = (typeof CHECKOUT_PLANS)[number];
 
 @Injectable()
 export class BillingService {
-  constructor(private readonly queueService: QueueService) {}
+  constructor(
+    @InjectPinoLogger(BillingService.name)
+    private readonly logger: PinoLogger,
+    private readonly queueService: QueueService,
+  ) {}
 
   private get stripe(): Stripe {
     return new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -54,6 +59,10 @@ export class BillingService {
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user || !allowedPlans.includes(user.plan)) {
+      this.logger.warn(
+        { userId, allowedPlans, currentPlan: user?.plan },
+        'assertPlan rejected',
+      );
       throw new ForbiddenException(`This feature requires plan: ${allowedPlans.join(' or ')}`);
     }
   }
@@ -62,14 +71,25 @@ export class BillingService {
     const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = userRows[0];
     if (!user) {
+      this.logger.warn({ userId }, 'assertInboxLimit rejected: User not found');
       throw new ForbiddenException('User not found');
     }
     const limit = PLAN_LIMITS[user.plan]?.inboxes ?? 0;
+    // -1 is the "unlimited" sentinel (enterprise plan) — never count-check it,
+    // otherwise `count >= -1` is always true and unlimited plans get rejected
+    // on their very first inbox.
+    if (limit === -1) {
+      return;
+    }
     const [result] = await db
       .select({ count: count() })
       .from(inboxes)
       .where(eq(inboxes.userId, userId));
     if (result.count >= limit) {
+      this.logger.warn(
+        { userId, plan: user.plan, inboxesUsed: result.count, inboxLimit: limit },
+        'assertInboxLimit rejected: inbox limit reached',
+      );
       throw new ForbiddenException(`Inbox limit reached for ${user.plan} plan (${limit} inboxes)`);
     }
   }

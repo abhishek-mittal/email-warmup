@@ -3,7 +3,8 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createHmac } from 'crypto';
 import { BetterAuthGuard } from './better-auth.guard';
-
+import { makePinoLoggerStub } from '../common/pino-logger.stub';
+import { pinoLoggerStubsFor } from '../common/test-module';
 function mintToken(userId: string, secret: string, ttlMs = 60_000): string {
   const exp = Date.now() + ttlMs;
   const u = Buffer.from(userId, 'utf8').toString('base64url');
@@ -16,6 +17,7 @@ function mintToken(userId: string, secret: string, ttlMs = 60_000): string {
 describe('BetterAuthGuard', () => {
   let guard: BetterAuthGuard;
   let reflector: Reflector;
+  let logger: ReturnType<typeof makePinoLoggerStub>;
   const SECRET = 'test-secret-please-do-not-use-in-prod-32chars';
 
   beforeAll(() => {
@@ -27,8 +29,14 @@ describe('BetterAuthGuard', () => {
   });
 
   beforeEach(async () => {
+    logger = makePinoLoggerStub();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BetterAuthGuard, Reflector],
+      providers: [
+        ...pinoLoggerStubsFor(BetterAuthGuard, Reflector),
+        BetterAuthGuard,
+        Reflector,
+        { provide: 'PinoLogger:BetterAuthGuard', useValue: logger },
+      ],
     }).compile();
     guard = module.get<BetterAuthGuard>(BetterAuthGuard);
     reflector = module.get<Reflector>(Reflector);
@@ -103,5 +111,56 @@ describe('BetterAuthGuard', () => {
     } finally {
       process.env.BETTER_AUTH_SECRET = old;
     }
+  });
+
+  // ─── T025 structured-logging assertions ─────────────────────────────────
+  it('logs warn with reason=missing when no token is present', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const ctx = createContext({}) as ExecutionContext;
+    await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'missing' }),
+      expect.stringContaining('missing'),
+    );
+  });
+
+  it('logs warn with reason=expired when the token is past its exp', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const tok = mintToken('user_123', SECRET, -1_000);
+    await expect(
+      guard.canActivate(createContext({ authorization: `Bearer ${tok}` })),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'expired' }),
+      expect.any(String),
+    );
+  });
+
+  it('logs warn with reason=invalid when the HMAC is wrong', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const tok = mintToken('user_123', 'wrong-secret');
+    await expect(
+      guard.canActivate(createContext({ authorization: `Bearer ${tok}` })),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'invalid' }),
+      expect.any(String),
+    );
+  });
+
+  it('logs debug with userId on a successful verification', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const tok = mintToken('user_123', SECRET);
+    const req: any = { headers: { authorization: `Bearer ${tok}` } };
+    const ctx = {
+      switchToHttp: () => ({ getRequest: () => req }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
+    } as ExecutionContext;
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user_123' }),
+      expect.stringContaining('verified'),
+    );
   });
 });

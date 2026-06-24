@@ -1,4 +1,10 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Reflector } from '@nestjs/core';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -16,7 +22,17 @@ const TOKEN_VERSION = 'v1';
 
 @Injectable()
 export class BetterAuthGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    // The logger is injected by Nest's DI container at runtime when the
+    // guard is resolved by the global guard mechanism. It's optional in
+    // the constructor because main.ts constructs one explicit instance
+    // for `app.useGlobalGuards(...)` outside the DI container (the DI
+    // container's BetterAuthGuard instance is never actually invoked in
+    // that path) — passing the Reflector is enough there.
+    @InjectPinoLogger(BetterAuthGuard.name)
+    private readonly logger: PinoLogger,
+    private reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -26,17 +42,25 @@ export class BetterAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest();
+    const path = request?.url as string | undefined;
+    const method = request?.method as string | undefined;
     const token = this.extractBearerToken(request);
 
     if (!token) {
+      this.logger.warn({ path, method, reason: 'missing' }, 'auth rejected: missing token');
       throw new UnauthorizedException('Missing auth token');
     }
 
-    const userId = this.verifyToken(token);
-    if (!userId) {
+    const verify = this.verifyTokenDetailed(token);
+    if (!verify.ok) {
+      this.logger.warn(
+        { path, method, reason: verify.reason },
+        `auth rejected: ${verify.reason}`,
+      );
       throw new UnauthorizedException('Invalid or expired token');
     }
-    request.userId = userId;
+    request.userId = verify.userId;
+    this.logger.debug({ userId: verify.userId, path, method }, 'auth verified');
     return true;
   }
 
@@ -45,15 +69,28 @@ export class BetterAuthGuard implements CanActivate {
     return auth?.startsWith('Bearer ') ? auth.slice(7) : null;
   }
 
-  private verifyToken(token: string): string | null {
+  /**
+   * Same HMAC + expiry verification as before, but returns a structured
+   * `{ ok: false, reason: 'expired' | 'invalid' | 'malformed' | 'misconfigured' }`
+   * on failure so the caller can log a useful reason. The 401-vs-403
+   * mapping (ForbiddenException vs UnauthorizedException) is preserved
+   * for the misconfigured-secret path so a missing BETTER_AUTH_SECRET
+   * still produces 403 — see the 403 acceptance criterion in T025.
+   */
+  private verifyTokenDetailed(
+    token: string,
+  ):
+    | { ok: true; userId: string }
+    | { ok: false; reason: 'misconfigured' | 'malformed' | 'invalid' | 'expired' } {
     const secret = process.env.BETTER_AUTH_SECRET;
     if (!secret) {
-      // No secret configured — fail closed rather than silently accepting.
-      return null;
+      return { ok: false, reason: 'misconfigured' };
     }
 
     const parts = token.split('.');
-    if (parts.length !== 4 || parts[0] !== TOKEN_VERSION) return null;
+    if (parts.length !== 4 || parts[0] !== TOKEN_VERSION) {
+      return { ok: false, reason: 'malformed' };
+    }
 
     const [version, userPart, expPart, sigPart] = parts;
     const payload = `${version}.${userPart}.${expPart}`;
@@ -64,24 +101,24 @@ export class BetterAuthGuard implements CanActivate {
     try {
       provided = Buffer.from(sigPart, 'base64url');
     } catch {
-      return null;
+      return { ok: false, reason: 'malformed' };
     }
-    if (provided.length !== expected.length) return null;
-    if (!timingSafeEqual(provided, expected)) return null;
+    if (provided.length !== expected.length) return { ok: false, reason: 'malformed' };
+    if (!timingSafeEqual(provided, expected)) return { ok: false, reason: 'invalid' };
 
     // Expiry check.
     let exp: number;
     try {
       exp = Number(Buffer.from(expPart, 'base64url').toString('utf8'));
     } catch {
-      return null;
+      return { ok: false, reason: 'malformed' };
     }
-    if (!Number.isFinite(exp) || exp < Date.now()) return null;
+    if (!Number.isFinite(exp) || exp < Date.now()) return { ok: false, reason: 'expired' };
 
     try {
-      return Buffer.from(userPart, 'base64url').toString('utf8');
+      return { ok: true, userId: Buffer.from(userPart, 'base64url').toString('utf8') };
     } catch {
-      return null;
+      return { ok: false, reason: 'malformed' };
     }
   }
 }

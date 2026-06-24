@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WarmupReceiveProcessor } from './warmup-receive.processor';
-import { ImapClientService } from '../inbox/imap/imap-client.service';
+import { ImapClientService, ImapNotConfiguredError } from '../inbox/imap/imap-client.service';
 import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
 import { ContentService } from './content.service';
 import { db } from '../db';
 
+import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('../db', () => ({
   db: {
     select: jest.fn(),
@@ -96,7 +97,8 @@ describe('WarmupReceiveProcessor', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers: [...pinoLoggerStubsFor(WarmupReceiveProcessor, ImapClientService, SmtpClientService, ContentService, db, Set, Error, ImapNotConfiguredError),
+      
         WarmupReceiveProcessor,
         { provide: ImapClientService, useValue: imapClientService },
         { provide: SmtpClientService, useValue: smtpClientService },

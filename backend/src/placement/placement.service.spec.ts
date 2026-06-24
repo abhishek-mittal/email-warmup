@@ -128,6 +128,27 @@ describe('PlacementService', () => {
       expect(result.estimatedReadyAt).toEqual(expect.any(String));
     });
 
+    it('throws a clear 503 instead of letting an empty seed list reach sendMail', async () => {
+      // Regression test: previously, an empty seed list (e.g. no rows in
+      // seed_inboxes yet) fell through to `transporter.sendMail({ bcc: [] })`
+      // with no `to`/`cc` either, which nodemailer rejects with an opaque
+      // "No recipients defined" EENVELOPE error — surfaced to API callers as
+      // an unhandled 500 with no actionable message.
+      mockSelectSequence([
+        [inboxRow], // inbox lookup
+        [{ plan: 'starter' }], // user plan lookup
+        [], // quota count this month (none yet)
+      ]);
+      seedListService.getSeedAddresses.mockResolvedValue([]);
+      const sendMailMock = jest.fn().mockResolvedValue({});
+      smtpClientService.getTransporter.mockResolvedValue({ sendMail: sendMailMock });
+
+      await expect(service.runTest('inbox-1', 'user-1')).rejects.toMatchObject({
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      });
+      expect(sendMailMock).not.toHaveBeenCalled();
+    });
+
     it('does not embed seed credentials in the queue job payload', async () => {
       mockSelectSequence([[inboxRow], [{ plan: 'starter' }], []]);
       mockInsert();

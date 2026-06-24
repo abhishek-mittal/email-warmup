@@ -92,9 +92,14 @@ function toApiEntry(entry: BatchEntry): Record<string, unknown> {
 interface Props {
   endpoint: '/inboxes/batch' | '/pool-inboxes/batch';
   label?: string;
+  /** Called after a successful upload so the parent can start polling
+   *  for the analysis rows to appear (the actual DNS / OAuth analysis
+   *  runs async in a BullMQ worker — `router.refresh()` alone fires
+   *  before the result is in the DB). */
+  onUploaded?: () => void;
 }
 
-export function BatchUploadWizard({ endpoint, label = 'Add via wizard' }: Props) {
+export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUploaded }: Props) {
   const api = useApi();
   const router = useRouter();
   const { toast, show, clear } = useToasts();
@@ -156,6 +161,11 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard' }: Props)
         },
       );
       show(`${res.created} added successfully, ${res.failed.length} failed.`, res.failed.length ? 'info' : 'success');
+      // Tell the parent page to start polling for the analysis rows —
+      // the actual DNS / OAuth analysis is async (BullMQ worker, takes
+      // a few seconds) so a plain `router.refresh()` here would re-fetch
+      // before any `inbox_analysis` rows exist.
+      onUploaded?.();
       router.refresh();
       closeModal();
     } catch (e) {
