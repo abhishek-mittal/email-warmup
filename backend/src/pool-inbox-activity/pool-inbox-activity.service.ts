@@ -561,13 +561,26 @@ export class PoolInboxActivityService {
 
     const withState: Array<PoolLiveJob & { _job: any }> = [];
     for (const job of jobs as any[]) {
-      const state = (await job.getState()) as 'active' | 'delayed' | 'waiting';
+      const rawState = await job.getState();
+      // `getJobsForReceiver` fetched these jobs by state in a prior
+      // round-trip; by the time we call `getState()` here a job can have
+      // legitimately moved on (e.g. delayed -> active -> completed, or a
+      // fast job finishing in between). `getState()` is typed to return
+      // the full BullMQ `JobState` union (or 'unknown'), not just our
+      // three expected buckets, so we validate rather than cast. A job
+      // whose state has drifted outside the three buckets we asked for is
+      // no longer "in flight" or "upcoming" in any meaningful sense for
+      // this panel — skip it rather than miscategorize it under a `state`
+      // value the `PoolLiveJob` contract doesn't allow.
+      if (rawState !== 'active' && rawState !== 'delayed' && rawState !== 'waiting') {
+        continue;
+      }
       withState.push({
         jobId: String(job.id),
         actions: Array.isArray(job.data?.actions) ? job.data.actions : [],
         senderEmail: senderEmailByMessageId.get(job.data?.messageId) ?? null,
         executeAt: job.data?.executeAt ?? new Date().toISOString(),
-        state,
+        state: rawState,
         _job: job,
       });
     }

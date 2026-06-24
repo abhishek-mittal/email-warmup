@@ -398,5 +398,52 @@ describe('PoolInboxActivityService', () => {
       expect(result.upcoming[0].jobId).toBe('job-up-5');
       expect(result.upcoming[4].jobId).toBe('job-up-1');
     });
+
+    it('excludes a job whose getState() resolves outside the active/delayed/waiting contract, while a normal job in the same batch still appears', async () => {
+      mockSelectChain([{ id: POOL_ID, userId: USER_ID }]); // ownership
+
+      function makeJob(id: string, state: string, executeAt: string, messageId: string) {
+        return {
+          id,
+          getState: jest.fn().mockResolvedValue(state),
+          data: { actions: ['open'], executeAt, messageId },
+        };
+      }
+      const now = Date.now();
+      // Raced job: fetched as 'active'/'delayed'/'waiting' by getJobsForReceiver,
+      // but by the time getState() resolves it has already completed.
+      const racedJob = makeJob('job-raced', 'completed', new Date(now).toISOString(), '<m-raced>');
+      const normalJob = makeJob('job-normal', 'active', new Date(now).toISOString(), '<m-normal>');
+      queueService.getJobsForReceiver.mockResolvedValue([racedJob, normalJob]);
+
+      // Batched lookup: warmup_sends rows for all messageIds, then inboxes for senderInboxId -> email.
+      mockSelectChain(
+        [racedJob, normalJob].map((j) => ({
+          messageId: j.data.messageId,
+          senderInboxId: `sender-${j.id}`,
+        })),
+      );
+      mockSelectChain(
+        [racedJob, normalJob].map((j) => ({
+          id: `sender-${j.id}`,
+          email: `${j.id}@example.com`,
+        })),
+      );
+
+      const result = await service.getLiveStatus(POOL_ID, USER_ID);
+
+      // The raced job lands in neither bucket.
+      expect(result.active.find((j) => j.jobId === 'job-raced')).toBeUndefined();
+      expect(result.upcoming.find((j) => j.jobId === 'job-raced')).toBeUndefined();
+
+      // The normal job is unaffected and still appears as active.
+      expect(result.active).toHaveLength(1);
+      expect(result.active[0]).toMatchObject({
+        jobId: 'job-normal',
+        senderEmail: 'job-normal@example.com',
+        state: 'active',
+      });
+      expect(result.upcoming).toHaveLength(0);
+    });
   });
 });
