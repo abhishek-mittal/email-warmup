@@ -112,4 +112,30 @@ describe('QueueService', () => {
       expect(other.remove).not.toHaveBeenCalled();
     });
   });
+
+  describe('getJobsForReceiver', () => {
+    it('returns only jobs whose data.receiverId matches, for the given states', async () => {
+      const matching = { id: 'job-1', data: { receiverId: 'pool-1' } };
+      const other = { id: 'job-2', data: { receiverId: 'pool-2' } };
+      mockQueue.getJobs.mockResolvedValue([matching, other]);
+
+      const result = await service.getJobsForReceiver('warmup-receive', 'pool-1', [
+        'active',
+        'delayed',
+        'waiting',
+      ]);
+
+      expect(mockQueue.getJobs).toHaveBeenCalledWith(['active', 'delayed', 'waiting']);
+      expect(result).toEqual([matching]);
+    });
+
+    it('returns an empty array when no jobs match', async () => {
+      const other = { id: 'job-2', data: { receiverId: 'pool-2' } };
+      mockQueue.getJobs.mockResolvedValue([other]);
+
+      const result = await service.getJobsForReceiver('warmup-receive', 'pool-1', ['active']);
+
+      expect(result).toEqual([]);
+    });
+  });
 });

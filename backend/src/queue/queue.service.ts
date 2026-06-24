@@ -88,4 +88,21 @@ export class QueueService {
       jobs.filter((job) => job.data.receiverInboxId === receiverInboxId).map((job) => job.remove()),
     );
   }
+
+  /**
+   * Returns the raw BullMQ jobs from `queueName` in the given states whose
+   * payload identifies `receiverId` as the receiver. Read-only — unlike
+   * `removeJobsForReceiver`, this does not remove anything. Used by the
+   * pool inbox "Live Status" panel to show in-flight/upcoming
+   * warmup-receive activity (T028 follow-up: live status panel).
+   */
+  async getJobsForReceiver(
+    queueName: QueueName,
+    receiverId: string,
+    states: Parameters<Queue['getJobs']>[0],
+  ): Promise<ReturnType<Queue['getJobs']> extends Promise<infer T> ? T : never> {
+    const queue = this.getQueue(queueName);
+    const jobs = await queue.getJobs(states);
+    return jobs.filter((job) => job.data.receiverId === receiverId) as any;
+  }
 }
