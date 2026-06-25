@@ -44,7 +44,7 @@ function formatRelativeFuture(iso: string): string {
 export function LiveStatusPanel({ poolInboxId }: Props) {
   const api = useApi();
 
-  const { state, data, error } = usePolling<PoolLiveStatus>({
+  const { data, error } = usePolling<PoolLiveStatus>({
     fetcher: () => api<PoolLiveStatus>(`/pool-inboxes/${poolInboxId}/live-status`),
     intervalMs: 3000,
     // Never "stop" — this is a continuous live indicator, not a
@@ -56,7 +56,12 @@ export function LiveStatusPanel({ poolInboxId }: Props) {
 
   const active = data?.active ?? [];
   const upcoming = data?.upcoming ?? [];
-  const pulseState = error ? 'error' : active.length > 0 ? 'live' : state === 'busy' ? 'busy' : 'idle';
+  // Derived from data, not usePolling's internal `state`: with
+  // shouldStop always false, `state` sits at 'busy' permanently after
+  // the first tick (including the 3s gaps between polls), so it can't
+  // tell us "a fetch is in flight" — only `error` (last attempt's
+  // outcome) and the active-jobs list are meaningful signals here.
+  const pulseState = error ? 'error' : active.length > 0 ? 'live' : 'idle';
 
   return (
     <section
