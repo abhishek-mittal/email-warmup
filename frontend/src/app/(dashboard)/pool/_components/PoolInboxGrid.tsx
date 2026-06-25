@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { poolInboxStatusColor } from '@/lib/plan-config';
 import { formatDate } from '@/lib/format';
@@ -10,7 +9,6 @@ import { PulseDot, type PulseState } from '@/components/PulseDot';
 import { RemovePoolInboxButton } from './RemovePoolInboxButton';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { ReadinessBadge } from './ReadinessBadge';
-import { PoolInboxDetailPanel } from './PoolInboxDetailPanel';
 
 interface Props {
   poolInboxes: PoolInbox[];
@@ -25,7 +23,6 @@ interface Props {
 }
 
 export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
-  const [selected, setSelected] = useState<PoolInbox | null>(null);
   const router = useRouter();
 
   return (
@@ -73,7 +70,7 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
               return (
                 <tr
                   key={p.id}
-                  onClick={() => setSelected(p)}
+                  onClick={() => router.push(`/pool/${p.id}`)}
                   className="cursor-pointer hover:bg-slate-50"
                 >
                   <td className="px-4 py-3 font-medium text-slate-900">{p.email}</td>
@@ -112,9 +109,6 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
         </table>
       </div>
 
-      {selected ? (
-        <PoolInboxDetailPanel poolInbox={selected} onClose={() => setSelected(null)} />
-      ) : null}
     </>
   );
 }
