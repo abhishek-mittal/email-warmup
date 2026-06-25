@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useApi } from '@/lib/api';
 import { usePolling } from '@/lib/use-polling';
 import { PulseDot } from '@/components/PulseDot';
@@ -40,8 +41,38 @@ function formatRelativeFuture(iso: string): string {
  * jittered delay after each warmup send (see warmup-send.processor.ts),
  * so an empty panel most of the time is expected, not broken — the copy
  * below says so explicitly.
+ *
+ * `usePolling` deliberately stops retrying after a fetch error (see
+ * use-polling.ts:133-144) — for most callers that's correct (poll until
+ * done, let the caller decide whether to restart). But this panel is a
+ * continuous live indicator meant to be left open for a long session, so
+ * a single transient error (a momentary 502, network blip, etc.) must
+ * not permanently freeze it. `usePolling`'s own `start()` is a no-op
+ * stub whose comment says callers should "remount the component (toggle
+ * a key) to restart" — so `LiveStatusPanel` is a thin wrapper that owns
+ * a `pollKey` and remounts `LiveStatusPollerInner` (which is the only
+ * thing that calls `usePolling`) on every Retry click. Remounting tears
+ * down and re-runs `usePolling`'s internal `useEffect` (use-polling.ts:88)
+ * from scratch, which calls `tick()` again and actually resumes polling —
+ * not just clearing the error message in the UI.
  */
 export function LiveStatusPanel({ poolInboxId }: Props) {
+  const [pollKey, setPollKey] = useState(0);
+
+  return (
+    <LiveStatusPollerInner
+      key={pollKey}
+      poolInboxId={poolInboxId}
+      onRetry={() => setPollKey((k) => k + 1)}
+    />
+  );
+}
+
+interface InnerProps extends Props {
+  onRetry: () => void;
+}
+
+function LiveStatusPollerInner({ poolInboxId, onRetry }: InnerProps) {
   const api = useApi();
 
   const { data, error } = usePolling<PoolLiveStatus>({
@@ -74,7 +105,16 @@ export function LiveStatusPanel({ poolInboxId }: Props) {
       </div>
 
       {error ? (
-        <p className="mt-2 text-xs text-rose-600">{error}</p>
+        <div className="mt-2 flex items-center gap-2">
+          <p className="text-xs text-rose-600">{error}</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-md border border-rose-300 px-2 py-0.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50"
+          >
+            Retry
+          </button>
+        </div>
       ) : active.length === 0 && upcoming.length === 0 ? (
         <p className="mt-2 text-xs text-slate-500">
           No warmup activity scheduled right now — jobs run on a jittered 2&ndash;240 minute
