@@ -11,13 +11,17 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { BatchInboxEntry } from '@/inbox/inbox.service';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
-import { getLatestAnalysisForPoolInboxes } from '@/analysis/analysis.service';
+import {
+  getLatestAnalysisForPoolInboxes,
+  getLatestAnalysisForPoolInbox,
+} from '@/analysis/analysis.service';
 import { PoolInboxService } from './pool-inbox.service';
 import { BatchUploadDto, BatchInboxEntryDto } from './dto/batch-inbox-entry.dto';
 
@@ -90,6 +94,19 @@ export class PoolInboxController {
       ...poolInbox,
       analysis: analysisByPoolInboxId.get(poolInbox.id) ?? null,
     }));
+  }
+
+  /**
+   * Single pool-inbox lookup with its latest analysis attached.
+   * Ownership-checked — 404 if not found or belongs to another user.
+   * Mirrors `InboxController.findOne`.
+   */
+  @Get(':id')
+  async findOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
+    const row = await this.poolInboxService.findById(req.userId!, id);
+    if (!row) throw new NotFoundException();
+    const analysis = await getLatestAnalysisForPoolInbox(id);
+    return { ...row, analysis };
   }
 
   /** Soft delete: status='removed', irreversible, ownership-checked. */

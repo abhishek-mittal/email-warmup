@@ -1,11 +1,16 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PoolInboxController } from './pool-inbox.controller';
 import { PoolInboxService } from './pool-inbox.service';
-import { getLatestAnalysisForPoolInboxes } from '@/analysis/analysis.service';
+import {
+  getLatestAnalysisForPoolInboxes,
+  getLatestAnalysisForPoolInbox,
+} from '@/analysis/analysis.service';
 
 import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/analysis/analysis.service', () => ({
   getLatestAnalysisForPoolInboxes: jest.fn(),
+  getLatestAnalysisForPoolInbox: jest.fn(),
 }));
 
 describe('PoolInboxController', () => {
@@ -24,14 +29,22 @@ describe('PoolInboxController', () => {
       batchUpload: jest.fn(),
       create: jest.fn(),
       findByUser: jest.fn(),
+      findById: jest.fn(),
       softDelete: jest.fn(),
       reanalyze: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PoolInboxController],
-      providers: [...pinoLoggerStubsFor(PoolInboxController, PoolInboxService, getLatestAnalysisForPoolInboxes, Map),
-      { provide: PoolInboxService, useValue: service }],
+      providers: [
+        ...pinoLoggerStubsFor(
+          PoolInboxController,
+          PoolInboxService,
+          getLatestAnalysisForPoolInboxes,
+          Map,
+        ),
+        { provide: PoolInboxService, useValue: service },
+      ],
     }).compile();
 
     controller = module.get<PoolInboxController>(PoolInboxController);
@@ -149,6 +162,39 @@ describe('PoolInboxController', () => {
       const result = await controller.findAll(makeReq('user-1'));
 
       expect(result).toEqual([{ ...rows[0], analysis: null }]);
+    });
+  });
+
+  describe('GET /pool-inboxes/:id', () => {
+    it('returns the pool inbox row with its latest analysis attached when owned by the requesting user', async () => {
+      const row = { id: 'pi-1', userId: 'user-1', email: 'a@domain.com' };
+      const analysisRow = { id: 'analysis-1', poolInboxId: 'pi-1', healthScore: 90 };
+      service.findById.mockResolvedValue(row);
+      (getLatestAnalysisForPoolInbox as jest.Mock).mockResolvedValue(analysisRow);
+
+      const result = await controller.findOne(makeReq('user-1'), 'pi-1');
+
+      expect(service.findById).toHaveBeenCalledWith('user-1', 'pi-1');
+      expect(getLatestAnalysisForPoolInbox).toHaveBeenCalledWith('pi-1');
+      expect(result).toEqual({ ...row, analysis: analysisRow });
+    });
+
+    it('attaches analysis: null when no analysis row exists yet', async () => {
+      const row = { id: 'pi-1', userId: 'user-1', email: 'a@domain.com' };
+      service.findById.mockResolvedValue(row);
+      (getLatestAnalysisForPoolInbox as jest.Mock).mockResolvedValue(null);
+
+      const result = await controller.findOne(makeReq('user-1'), 'pi-1');
+
+      expect(result).toEqual({ ...row, analysis: null });
+    });
+
+    it('throws NotFoundException when the pool inbox does not exist or is not owned by the user', async () => {
+      service.findById.mockResolvedValue(null);
+
+      await expect(controller.findOne(makeReq('user-1'), 'pi-404')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
