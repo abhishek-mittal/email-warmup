@@ -195,6 +195,22 @@ export class PoolInboxService {
   }
 
   /**
+   * Ownership-checked single-row lookup for `GET /pool-inboxes/:id`.
+   * Returns null (not throw) when not found/not owned — the controller
+   * maps that to a 404. Mirrors `InboxService.findById`.
+   */
+  async findById(userId: string, id: string) {
+    const rows = await db
+      .select(SAFE_POOL_INBOX_COLUMNS)
+      .from(poolInboxes)
+      .where(eq(poolInboxes.id, id))
+      .limit(1);
+    const row = rows[0];
+    if (!row || row.userId !== userId) return null;
+    return row;
+  }
+
+  /**
    * Re-runs the DNS analysis for one pool inbox (the per-row "Re-analyze"
    * button). Enqueues a fresh `inbox-analysis` BullMQ job; the
    * `InboxAnalysisProcessor` writes the new `inbox_analysis` row, which

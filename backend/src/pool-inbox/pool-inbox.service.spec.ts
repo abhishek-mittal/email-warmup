@@ -250,6 +250,42 @@ describe('PoolInboxService', () => {
     });
   });
 
+  describe('findById', () => {
+    it('returns null when the pool inbox does not exist', async () => {
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.findById('user-1', 'missing-id');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when the pool inbox belongs to another user', async () => {
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([{ id: 'pi-1', userId: 'other-user' }]),
+      });
+
+      const result = await service.findById('user-1', 'pi-1');
+      expect(result).toBeNull();
+    });
+
+    it('returns the row when owned by the requesting user', async () => {
+      const row = { id: 'pi-1', userId: 'user-1', email: 'pool@example.com' };
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([row]),
+      });
+
+      const result = await service.findById('user-1', 'pi-1');
+      expect(result).toEqual(row);
+    });
+  });
+
   describe('softDelete', () => {
     function mockSelectOne(row: any) {
       (db.select as jest.Mock).mockReturnValue({
