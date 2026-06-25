@@ -37,6 +37,15 @@ export async function getPoolInboxes(): Promise<PoolInbox[]> {
   }
 }
 
+/** Single pool inbox by id, with its latest analysis attached, or null if not found/not owned. */
+export async function getPoolInbox(id: string): Promise<PoolInbox | null> {
+  try {
+    return await serverApi<PoolInbox>(`/pool-inboxes/${id}`);
+  } catch {
+    return null;
+  }
+}
+
 /** Roll up counts for the dashboard summary bar. */
 export async function getInboxSummaries(): Promise<{
   total: number;
