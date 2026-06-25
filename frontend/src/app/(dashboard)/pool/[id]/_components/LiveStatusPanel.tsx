@@ -1,0 +1,98 @@
+'use client';
+
+import { useApi } from '@/lib/api';
+import { usePolling } from '@/lib/use-polling';
+import { PulseDot } from '@/components/PulseDot';
+import type { PoolLiveStatus, PoolLiveJob } from '@/lib/pool-activity-types';
+
+interface Props {
+  poolInboxId: string;
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  open: 'open',
+  star: 'star',
+  reply: 'reply',
+  rescue: 'rescue from spam',
+};
+
+function describeActions(actions: string[]): string {
+  if (actions.length === 0) return 'process';
+  return actions.map((a) => ACTION_LABEL[a] ?? a).join(' + ');
+}
+
+function formatRelativeFuture(iso: string): string {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 0) return 'any moment now';
+  const mins = Math.round(diffMs / 60_000);
+  if (mins < 1) return 'in under a minute';
+  if (mins === 1) return 'in 1 min';
+  if (mins < 60) return `in ${mins} min`;
+  const hours = Math.round(mins / 60);
+  return hours === 1 ? 'in 1 hour' : `in ${hours} hours`;
+}
+
+/**
+ * Polls `GET /pool-inboxes/:id/live-status` every 3s and shows real
+ * BullMQ job state for this pool inbox's warmup-receive queue — what's
+ * processing right now, and what's queued/delayed next. Sourced from
+ * the actual queue, not a simulation: jobs run on a 2-240 minute
+ * jittered delay after each warmup send (see warmup-send.processor.ts),
+ * so an empty panel most of the time is expected, not broken — the copy
+ * below says so explicitly.
+ */
+export function LiveStatusPanel({ poolInboxId }: Props) {
+  const api = useApi();
+
+  const { state, data, error } = usePolling<PoolLiveStatus>({
+    fetcher: () => api<PoolLiveStatus>(`/pool-inboxes/${poolInboxId}/live-status`),
+    intervalMs: 3000,
+    // Never "stop" — this is a continuous live indicator, not a
+    // poll-until-done task. shouldStop always false plus a very high
+    // maxAttempts keeps it polling indefinitely while the page is open.
+    shouldStop: () => false,
+    maxAttempts: Number.MAX_SAFE_INTEGER,
+  });
+
+  const active = data?.active ?? [];
+  const upcoming = data?.upcoming ?? [];
+  const pulseState = error ? 'error' : active.length > 0 ? 'live' : state === 'busy' ? 'busy' : 'idle';
+
+  return (
+    <section
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      data-testid="live-status-panel"
+    >
+      <div className="flex items-center gap-2">
+        <PulseDot state={pulseState} label="Live warmup-receive status" />
+        <h2 className="text-sm font-semibold text-slate-900">Live status</h2>
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-xs text-rose-600">{error}</p>
+      ) : active.length === 0 && upcoming.length === 0 ? (
+        <p className="mt-2 text-xs text-slate-500">
+          No warmup activity scheduled right now — jobs run on a jittered 2&ndash;240 minute
+          delay after each send, so this is normal between sends.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {active.map((job: PoolLiveJob) => (
+            <p key={job.jobId} className="text-sm text-slate-800">
+              <span className="font-medium text-emerald-700">Processing now</span> &mdash;{' '}
+              {describeActions(job.actions)} email from{' '}
+              <span className="font-mono text-xs">{job.senderEmail ?? 'unknown sender'}</span>
+            </p>
+          ))}
+          {upcoming.map((job: PoolLiveJob) => (
+            <p key={job.jobId} className="text-sm text-slate-600">
+              Will {describeActions(job.actions)} email from{' '}
+              <span className="font-mono text-xs">{job.senderEmail ?? 'unknown sender'}</span>{' '}
+              {formatRelativeFuture(job.executeAt)}
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
