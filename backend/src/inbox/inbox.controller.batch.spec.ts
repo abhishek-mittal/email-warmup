@@ -40,8 +40,17 @@ describe('InboxController — batch + GET :id', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InboxController],
-      providers: [...pinoLoggerStubsFor(NotFoundException, InboxController, InboxService, getLatestAnalysisForInbox, getLatestAnalysisForInboxes, Map),
-      { provide: InboxService, useValue: inboxService }],
+      providers: [
+        ...pinoLoggerStubsFor(
+          NotFoundException,
+          InboxController,
+          InboxService,
+          getLatestAnalysisForInbox,
+          getLatestAnalysisForInboxes,
+          Map,
+        ),
+        { provide: InboxService, useValue: inboxService },
+      ],
     }).compile();
 
     controller = module.get<InboxController>(InboxController);
@@ -159,6 +168,49 @@ describe('InboxController — batch + GET :id', () => {
       await expect(controller.findOne(makeReq('user-1'), 'inbox-404')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('POST /inboxes/connect/smtp', () => {
+    const validBody = {
+      email: 'a@domain.com',
+      smtpHost: 'smtp.domain.com',
+      smtpPort: 587,
+      smtpUser: 'a@domain.com',
+      smtpPassword: 'pw',
+      useImap: false,
+    };
+
+    it('returns the inbox + precheck on success', async () => {
+      const payload = { inbox: { id: 'inbox-1' }, precheck: { smtp: true, dns: true } };
+      inboxService.connectCustomSmtp.mockResolvedValue(payload);
+
+      const result = await controller.connectCustomSmtp(makeReq('user-1'), validBody as any);
+
+      expect(result).toEqual(payload);
+    });
+
+    it('maps a precheck failure with step/errCode/host/port into the 422 body', async () => {
+      const err = Object.assign(new Error('Invalid login'), {
+        step: 'smtp',
+        errCode: 'EAUTH',
+        host: 'smtp.domain.com',
+        port: 587,
+      });
+      inboxService.connectCustomSmtp.mockRejectedValue(err);
+
+      await expect(
+        controller.connectCustomSmtp(makeReq('user-1'), validBody as any),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: {
+          step: 'smtp',
+          errCode: 'EAUTH',
+          host: 'smtp.domain.com',
+          port: 587,
+          error: 'Invalid login',
+        },
+      });
     });
   });
 

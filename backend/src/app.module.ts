@@ -17,6 +17,9 @@ import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { NotifyModule } from './notify/notify.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { PoolInboxModule } from './pool-inbox/pool-inbox.module';
+import { PoolInboxActivityModule } from './pool-inbox-activity/pool-inbox-activity.module';
+import { ActivityModule } from './activity/activity.module';
+import { InboxControlModule } from './inbox-control/inbox-control.module';
 import { validate } from './config/env.validation';
 
 @Module({
@@ -82,6 +85,9 @@ import { validate } from './config/env.validation';
     NotifyModule,
     AnalysisModule,
     PoolInboxModule,
+    PoolInboxActivityModule,
+    ActivityModule,
+    InboxControlModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Reflector } from '@nestjs/core';
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -53,10 +48,7 @@ export class BetterAuthGuard implements CanActivate {
 
     const verify = this.verifyTokenDetailed(token);
     if (!verify.ok) {
-      this.logger.warn(
-        { path, method, reason: verify.reason },
-        `auth rejected: ${verify.reason}`,
-      );
+      this.logger.warn({ path, method, reason: verify.reason }, `auth rejected: ${verify.reason}`);
       throw new UnauthorizedException('Invalid or expired token');
     }
     request.userId = verify.userId;

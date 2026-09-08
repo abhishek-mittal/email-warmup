@@ -38,9 +38,7 @@ async function bootstrap() {
   // The per-request `userId` is attached to the request by the guard
   // itself after token verification; `pino-http`'s `customProps` (set in
   // `AppModule.LoggerModule.forRoot`) reads it from there.
-  app.useGlobalGuards(
-    new BetterAuthGuard(app.get(PinoNestLogger), app.get(Reflector)),
-  );
+  app.useGlobalGuards(new BetterAuthGuard(app.get(PinoNestLogger), app.get(Reflector)));
   // Logs the *cause* chain of thrown errors (Drizzle wraps the real PG
   // error in `cause`, so the default Nest handler only logs the wrapper
   // message — see common/unwrap-cause.filter.ts).
@@ -50,5 +48,22 @@ async function bootstrap() {
   // messages (InstanceLoader, RoutesResolver, Mapped {/path, METHOD}).
   app.useLogger(app.get(PinoNestLogger));
   await app.listen(process.env.PORT || 3001);
+
+  // Process-level safety nets. Without these, an unhandled error from a
+  // third-party library (notably imapflow, which emits 'error' on the
+  // ImapFlow instance when its underlying socket drops mid-conversation)
+  // will crash the entire backend process — every concurrent job, every
+  // web request, everything. We saw exactly this happen in prod on
+  // 2026-06-24: a single ECONNRESET from a pool-inbox IMAP connection
+  // took the whole NestJS app down. Log + survive; the next health
+  // probe will reflect reality if the process really is broken.
+  process.on('unhandledRejection', (reason) => {
+    // eslint-disable-next-line no-console
+    console.error('[backend] unhandledRejection:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[backend] uncaughtException:', err);
+  });
 }
 bootstrap();

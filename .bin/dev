@@ -13,6 +13,9 @@
 #   .bin/dev restart   # stop backend + frontend, then start them again
 #   .bin/dev status    # show what's running and where
 #   .bin/dev logs [backend|frontend|infra]  # tail logs in the current terminal
+#   .bin/dev watchdog  # foreground loop: auto-restart backend/frontend if
+#                       #   either dies (e.g. uncaughtException from a
+#                       #   third-party library like imapflow). Polls every 5s.
 #
 # Environment:
 #   LOG_TUI=auto (default)  open a live log TUI in a new Terminal window
@@ -63,6 +66,21 @@ port_listening() {
 
 stop_pidfile() {
   local name="$1" pidfile="$2"
+  local port="${3:-}"
+  # Pattern to find ALL processes related to this service. We match by
+  # the long-running process names rather than the tracked parent PID
+  # because `pnpm run start:dev` and `next dev` both spawn child workers
+  # (`nest start --watch`, `next-server`) that get reparented to launchd
+  # if the parent dies. Killing only the PID in the file leaves the
+  # children alive — they don't own the port (the parent does that on
+  # their behalf), so the next `up` would see a free port, spawn a new
+  # parent, and end up with TWO competing process trees. We use pkill
+  # to clear the whole family by name as the primary cleanup.
+  local pattern=""
+  case "$name" in
+    backend)  pattern="pnpm run start:dev|nest start --watch" ;;
+    frontend) pattern="pnpm run dev|next dev|next-server" ;;
+  esac
   if is_running "$pidfile"; then
     local pid
     pid="$(cat "$pidfile")"
@@ -82,6 +100,34 @@ stop_pidfile() {
     rm -f "$pidfile"
     log "$name already stopped"
   fi
+
+  # Sweep any survivors by name — covers orphaned next-server workers
+  # and nest --watch children whose parent died first. pkill -x matches
+  # the exact process name; -f matches against the full command line.
+  # We use the latter so we catch `node /path/to/.../nest start --watch`
+  # (a single node process whose basename is `node`, but whose args
+  # include the dev command).
+  if [[ -n "$pattern" ]]; then
+    # shellcheck disable=SC2086
+    pkill -f "$pattern" 2>/dev/null || true
+    sleep 0.5
+    # Anything still bound to the port gets SIGKILL — last-resort cleanup.
+    if [[ -n "$port" ]] && port_listening "$port"; then
+      local orphans
+      orphans="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+      if [[ -n "$orphans" ]]; then
+        warn "port $port still bound after name sweep — killing $(echo $orphans)"
+        # shellcheck disable=SC2086
+        kill -9 $orphans 2>/dev/null || true
+        sleep 0.5
+      fi
+    fi
+  fi
+
+  if [[ -n "$port" ]] && port_listening "$port"; then
+    err "port $port is still bound after stop_pidfile cleanup"
+    return 1
+  fi
 }
 
 # ----- subcommands -----------------------------------------------------------
@@ -91,11 +137,31 @@ cmd_up() {
   (cd "$ROOT" && docker compose up -d)
 
   # backend
-  if is_running "$PID_BACKEND"; then
+  if is_running "$PID_BACKEND" && port_listening "$PORT_BACKEND"; then
     log "backend already running (pid $(cat "$PID_BACKEND"))"
   else
+    # Stale PID file (parent died but the PID file was never cleaned up)
+    # or orphan listening on the port — both cases need a port-broom
+    # before we can bind a fresh nest process.
+    if port_listening "$PORT_BACKEND"; then
+      warn "port $PORT_BACKEND is bound but our PID file is stale — sweeping"
+      local orphans
+      orphans="$(lsof -nP -iTCP:"$PORT_BACKEND" -sTCP:LISTEN -t 2>/dev/null || true)"
+      [[ -n "$orphans" ]] && kill -9 $orphans 2>/dev/null || true
+      sleep 0.5
+    fi
+    rm -f "$PID_BACKEND"
     log "starting backend on :$PORT_BACKEND..."
-    ( cd "$ROOT/backend" && nohup pnpm run start:dev >"$LOG_BACKEND" 2>&1 & echo $! >"$PID_BACKEND" )
+    # Spawn the dev process with stdio fully detached. We use a plain
+    # background `&` (not a subshell `( ... & )`) so the parent shell
+    # owns the job and `disown` cleanly removes it from the job table
+    # — once disowned, the spawned dev is reparented to launchd and
+    # never receives SIGHUP when the parent shell exits.
+    cd "$ROOT/backend"
+    nohup pnpm run start:dev </dev/null >"$LOG_BACKEND" 2>&1 &
+    echo $! >"$PID_BACKEND"
+    disown 2>/dev/null || true
+    cd "$ROOT"
     for _ in {1..40}; do
       if port_listening "$PORT_BACKEND"; then break; fi
       sleep 0.25
@@ -109,11 +175,33 @@ cmd_up() {
   fi
 
   # frontend
-  if is_running "$PID_FRONTEND"; then
+  if is_running "$PID_FRONTEND" && port_listening "$PORT_FRONTEND"; then
     log "frontend already running (pid $(cat "$PID_FRONTEND"))"
   else
+    # Same orphan guard as backend. Without this, a surviving next-server
+    # worker from a previous run binds port 3000 silently, our new
+    # `next dev` falls back to 3002, and Turbopack then panics with
+    # "Another next dev server is already running" because the
+    # .next/dev/lock file is shared.
+    if port_listening "$PORT_FRONTEND"; then
+      warn "port $PORT_FRONTEND is bound but our PID file is stale — sweeping"
+      local orphans
+      orphans="$(lsof -nP -iTCP:"$PORT_FRONTEND" -sTCP:LISTEN -t 2>/dev/null || true)"
+      [[ -n "$orphans" ]] && kill -9 $orphans 2>/dev/null || true
+      # Also clear Turbopack's dev lock — without this, a new `next dev`
+      # refuses to start with "Another next dev server is already running"
+      # even if the actual processes are gone.
+      rm -f "$ROOT/frontend/.next/dev/lock" 2>/dev/null || true
+      sleep 0.5
+    fi
+    rm -f "$PID_FRONTEND"
     log "starting frontend on :$PORT_FRONTEND..."
-    ( cd "$ROOT/frontend" && nohup pnpm run dev >"$LOG_FRONTEND" 2>&1 & echo $! >"$PID_FRONTEND" )
+    # See backend note above.
+    cd "$ROOT/frontend"
+    nohup pnpm run dev </dev/null >"$LOG_FRONTEND" 2>&1 &
+    echo $! >"$PID_FRONTEND"
+    disown 2>/dev/null || true
+    cd "$ROOT"
     for _ in {1..60}; do
       if port_listening "$PORT_FRONTEND"; then break; fi
       sleep 0.25
@@ -124,6 +212,16 @@ cmd_up() {
       err "frontend failed to bind :$PORT_FRONTEND within 15s. Check $LOG_FRONTEND"
       return 1
     fi
+  fi
+
+  # Auto-start the watchdog in its own Terminal tab so a single
+  # `unhandledRejection` from a third-party library (the imapflow
+  # ECONNRESET case from 2026-06-24) doesn't silently take the whole
+  # backend down. The watchdog opens a new tab on macOS via osascript;
+  # if that fails (CI, no Terminal.app, etc.) it prints a hint to run
+  # `.bin/dev watchdog` manually. Set DEV_NO_WATCHDOG=1 to opt out.
+  if [[ "${DEV_NO_WATCHDOG:-0}" != "1" ]]; then
+    cmd_open_watchdog
   fi
 
   cmd_status
@@ -178,15 +276,32 @@ end tell
 EOF
 }
 
+# Open the watchdog loop in its own Terminal tab. Runs `.bin/dev watchdog`
+# as a foreground process in a new tab — when the user closes the tab
+# the watchdog stops. Mirrors cmd_open_log_tui's approach so both
+# "ambient" dev processes get the same Terminal-app treatment.
+cmd_open_watchdog() {
+  if ! command -v osascript >/dev/null 2>&1; then
+    warn "osascript not found; run '.bin/dev watchdog' manually to enable auto-restart"
+    return 0
+  fi
+  osascript <<EOF >/dev/null 2>&1 &
+tell application "Terminal"
+  activate
+  do script "clear; printf '\\\\033[1;34m[dev]\\\\033[0m EmailWarm watchdog — auto-restarts backend/frontend on crash.\\\\n\\\\033[1;33mClose this tab to stop the watchdog.\\\\n\\\\n'; cd '$ROOT' && '$ROOT/.bin/dev' watchdog"
+end tell
+EOF
+}
+
 cmd_stop() {
-  stop_pidfile "frontend" "$PID_FRONTEND"
-  stop_pidfile "backend"  "$PID_BACKEND"
+  stop_pidfile "frontend" "$PID_FRONTEND" "$PORT_FRONTEND"
+  stop_pidfile "backend"  "$PID_BACKEND"  "$PORT_BACKEND"
   log "infra (postgres + redis) left running. Use `.bin/dev down` to stop those too."
 }
 
 cmd_down() {
-  stop_pidfile "frontend" "$PID_FRONTEND"
-  stop_pidfile "backend"  "$PID_BACKEND"
+  stop_pidfile "frontend" "$PID_FRONTEND" "$PORT_FRONTEND"
+  stop_pidfile "backend"  "$PID_BACKEND"  "$PORT_BACKEND"
   log "stopping infra containers..."
   (cd "$ROOT" && docker compose down)
   log "all stopped."
@@ -194,7 +309,11 @@ cmd_down() {
 
 cmd_restart() {
   cmd_stop
-  sleep 1
+  # Give the OS a moment to release the port (TIME_WAIT for the prior
+  # socket) and pkill's signal to propagate to all survivors. 2s is
+  # generous; if a binding still races we surface it in cmd_up's
+  # "port bound but PID file stale — sweeping" branch.
+  sleep 2
   cmd_up
 }
 
@@ -248,6 +367,68 @@ cmd_logs() {
   esac
 }
 
+# Foreground watchdog. Polls both PID files every 5s; if a tracked
+# process is dead AND the port is unbound, restarts just that service
+# (full stop_pidfile sweep first to clear any orphaned children). The
+# 2026-06-24 ECONNRESET crash took the backend down silently — no
+# process-level uncaughtException handler in Nest, no process supervisor
+# to revive it. This watchdog is the process supervisor. It does NOT
+# auto-attach the log TUI; run it in its own Terminal tab with
+# `.bin/dev logs backend` open in another.
+#
+# Why polling instead of waitpid? `nohup ... &` with `disown` reparents
+# the child to launchd, so we lose the parent-child relationship and
+# can't trap SIGCHLD. The PID file is the source of truth.
+cmd_watchdog() {
+  log "watchdog started — polling :$PORT_BACKEND and :$PORT_FRONTEND every 5s"
+  log "  Ctrl-C to stop. Use '.bin/dev stop' to terminate services."
+  while true; do
+    # Backend check.
+    if [[ -f "$PID_BACKEND" ]] && ! is_running "$PID_BACKEND"; then
+      warn "backend pid $(cat "$PID_BACKEND") is dead — restarting"
+      # Best-effort cleanup of any orphan workers before respawning.
+      pkill -f "nest start --watch" 2>/dev/null || true
+      sleep 1
+      if port_listening "$PORT_BACKEND"; then
+        local orphans
+        orphans="$(lsof -nP -iTCP:"$PORT_BACKEND" -sTCP:LISTEN -t 2>/dev/null || true)"
+        [[ -n "$orphans" ]] && kill -9 $orphans 2>/dev/null || true
+        sleep 1
+      fi
+      rm -f "$PID_BACKEND"
+      cd "$ROOT/backend"
+      nohup pnpm run start:dev </dev/null >>"$LOG_BACKEND" 2>&1 &
+      echo $! >"$PID_BACKEND"
+      disown 2>/dev/null || true
+      cd "$ROOT"
+      log "backend respawned as pid $(cat "$PID_BACKEND")"
+    fi
+
+    # Frontend check (same logic).
+    if [[ -f "$PID_FRONTEND" ]] && ! is_running "$PID_FRONTEND"; then
+      warn "frontend pid $(cat "$PID_FRONTEND") is dead — restarting"
+      pkill -f "next dev|next-server" 2>/dev/null || true
+      sleep 1
+      if port_listening "$PORT_FRONTEND"; then
+        local orphans
+        orphans="$(lsof -nP -iTCP:"$PORT_FRONTEND" -sTCP:LISTEN -t 2>/dev/null || true)"
+        [[ -n "$orphans" ]] && kill -9 $orphans 2>/dev/null || true
+        rm -f "$ROOT/frontend/.next/dev/lock" 2>/dev/null || true
+        sleep 1
+      fi
+      rm -f "$PID_FRONTEND"
+      cd "$ROOT/frontend"
+      nohup pnpm run dev </dev/null >>"$LOG_FRONTEND" 2>&1 &
+      echo $! >"$PID_FRONTEND"
+      disown 2>/dev/null || true
+      cd "$ROOT"
+      log "frontend respawned as pid $(cat "$PID_FRONTEND")"
+    fi
+
+    sleep 5
+  done
+}
+
 # ----- dispatch --------------------------------------------------------------
 
 usage() {
@@ -261,6 +442,7 @@ case "${1:-}" in
   restart)      shift; cmd_restart "$@" ;;
   status|st)    shift; cmd_status "$@" ;;
   logs|log)     shift; cmd_logs "$@" ;;
+  watchdog|wd)  shift; cmd_watchdog "$@" ;;
   -h|--help|help|"") usage ;;
   *) err "unknown command: $1"; usage; exit 1 ;;
 esac

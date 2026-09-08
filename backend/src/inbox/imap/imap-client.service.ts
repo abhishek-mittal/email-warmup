@@ -53,10 +53,7 @@ export class ImapClientService {
     // No IMAP creds on this row at all — surface a typed error so the
     // warmup/placement consumers can no-op instead of throwing.
     if (!inbox.imapHost || !inbox.imapPort) {
-      this.logger.warn(
-        { inboxId },
-        'IMAP not configured — skipping receive action',
-      );
+      this.logger.warn({ inboxId }, 'IMAP not configured — skipping receive action');
       throw new ImapNotConfiguredError(inboxId);
     }
 
@@ -92,6 +89,35 @@ export class ImapClientService {
       logger: process.env.LOG_LEVEL === 'debug' ? undefined : false,
     });
 
+    // Attach a quiet 'error' listener BEFORE we hand the client out.
+    // imapflow emits 'error' on its ImapFlow instance when the underlying
+    // socket drops mid-conversation (ECONNRESET, idle timeout, server
+    // shutdown, etc.). Without a listener, Node escalates this to an
+    // uncaughtException and CRASHES the entire NestJS process — which
+    // is exactly what happened in prod on 2026-06-24. We:
+    //  1. Log the error so we know the connection died.
+    //  2. Evict it from the pool so the next getConnection() rebuilds
+    //     a fresh socket instead of handing out a dead one.
+    // The actual IMAP command that triggered the error has already
+    // failed (its promise rejected with the same error) — there is no
+    // in-flight call to "recover" here.
+    client.on('error', (err: unknown) => {
+      const e = err as { code?: string; message?: string };
+      this.logger.warn(
+        {
+          inboxId,
+          imapHost: inbox.imapHost,
+          imapPort: inbox.imapPort,
+          err: e?.message,
+          errCode: e?.code,
+        },
+        'IMAP socket error — evicting from pool',
+      );
+      if (this.pool.get(inboxId) === client) {
+        this.pool.delete(inboxId);
+      }
+    });
+
     try {
       await client.connect();
     } catch (err: any) {
@@ -109,10 +135,7 @@ export class ImapClientService {
       throw err;
     }
     this.pool.set(inboxId, client);
-    this.logger.info(
-      { inboxId, provider: inbox.provider },
-      'IMAP connection established',
-    );
+    this.logger.info({ inboxId, provider: inbox.provider }, 'IMAP connection established');
     return client;
   }
 
@@ -203,6 +226,35 @@ export class ImapClientService {
       this.logger.warn({ poolInboxId }, 'IMAP not configured — skipping receive action');
       throw new ImapNotConfiguredError(poolInboxId);
     }
+
+    // Same 'error' listener pattern as getConnection() above — see the
+    // comment there for the rationale (this exact path was the source of
+    // the 2026-06-24 ECONNRESET crash that took the whole backend down).
+    // Pool key uses the 'pool:' prefix; the eviction check below uses
+    // the same key so a dead pool-inbox connection doesn't get handed
+    // back out as "usable".
+    const hostForLog =
+      poolInbox.provider === 'gmail'
+        ? 'imap.gmail.com'
+        : poolInbox.provider === 'outlook'
+          ? 'outlook.office365.com'
+          : ((creds.imapHost as string | undefined) ?? 'unknown');
+    client.on('error', (err: unknown) => {
+      const e = err as { code?: string; message?: string };
+      this.logger.warn(
+        {
+          poolInboxId,
+          imapHost: hostForLog,
+          provider: poolInbox.provider,
+          err: e?.message,
+          errCode: e?.code,
+        },
+        'IMAP socket error (pool inbox) — evicting from pool',
+      );
+      if (this.pool.get(key) === client) {
+        this.pool.delete(key);
+      }
+    });
 
     try {
       await client.connect();

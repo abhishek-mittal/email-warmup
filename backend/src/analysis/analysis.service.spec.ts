@@ -88,8 +88,11 @@ describe('AnalysisService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(UnrecoverableError, AnalysisService, DnsService, db, Error, Date),
-      AnalysisService, { provide: DnsService, useValue: dnsService }],
+      providers: [
+        ...pinoLoggerStubsFor(UnrecoverableError, AnalysisService, DnsService, db, Error, Date),
+        AnalysisService,
+        { provide: DnsService, useValue: dnsService },
+      ],
     }).compile();
 
     service = module.get<AnalysisService>(AnalysisService);

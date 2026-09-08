@@ -78,8 +78,17 @@ describe('BlacklistCheckProcessor', () => {
     warmupService = { pauseInbox: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(UnrecoverableError, BlacklistCheckProcessor, BlacklistService, QueueService, WarmupService, db, RBL_LIST),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          UnrecoverableError,
+          BlacklistCheckProcessor,
+          BlacklistService,
+          QueueService,
+          WarmupService,
+          db,
+          RBL_LIST,
+        ),
+
         BlacklistCheckProcessor,
         { provide: BlacklistService, useValue: blacklistService },
         { provide: QueueService, useValue: queueService },

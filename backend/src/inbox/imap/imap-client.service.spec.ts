@@ -22,11 +22,16 @@ jest.mock('../../common/crypto', () => ({
 const connectMock = jest.fn().mockResolvedValue(undefined);
 const logoutMock = jest.fn().mockResolvedValue(undefined);
 
+// Each mocked ImapFlow instance exposes a no-op `on()` so the production
+// code's `client.on('error', …)` listener (added in 2026-06-24 to
+// swallow unhandled IMAP socket errors that would otherwise crash the
+// process — see imap-client.service.ts) doesn't throw in tests.
 jest.mock('imapflow', () => ({
   ImapFlow: jest.fn().mockImplementation((opts: any) => ({
     usable: true,
     connect: connectMock,
     logout: logoutMock,
+    on: jest.fn(),
     __opts: opts,
   })),
 }));
@@ -52,8 +57,15 @@ describe('ImapClientService', () => {
     microsoftOAuthService = { refreshToken: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(ImapClientService, ImapNotConfiguredError, GoogleOAuthService, MicrosoftOAuthService, db),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          ImapClientService,
+          ImapNotConfiguredError,
+          GoogleOAuthService,
+          MicrosoftOAuthService,
+          db,
+        ),
+
         ImapClientService,
         { provide: GoogleOAuthService, useValue: googleOAuthService },
         { provide: MicrosoftOAuthService, useValue: microsoftOAuthService },

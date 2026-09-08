@@ -87,8 +87,9 @@ describe('DnsCheckProcessor', () => {
     queueService = { add: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(UnrecoverableError, DnsCheckProcessor, DnsService, QueueService, db),
-      
+      providers: [
+        ...pinoLoggerStubsFor(UnrecoverableError, DnsCheckProcessor, DnsService, QueueService, db),
+
         DnsCheckProcessor,
         { provide: DnsService, useValue: dnsService },
         { provide: QueueService, useValue: queueService },

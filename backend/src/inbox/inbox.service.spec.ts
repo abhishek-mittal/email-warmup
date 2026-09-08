@@ -70,13 +70,26 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     imapClientService = {
       getConnection: jest.fn().mockResolvedValue({
         mailboxCreate: jest.fn().mockResolvedValue(undefined),
+        list: jest.fn().mockResolvedValue([{ path: 'INBOX' }]),
       }),
       close: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(InboxService, GoogleOAuthService, MicrosoftOAuthService, BillingService, ImapClientService, ImapNotConfiguredError, SmtpClientService, QueueService, db, Error),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          InboxService,
+          GoogleOAuthService,
+          MicrosoftOAuthService,
+          BillingService,
+          ImapClientService,
+          ImapNotConfiguredError,
+          SmtpClientService,
+          QueueService,
+          db,
+          Error,
+        ),
+
         InboxService,
         { provide: GoogleOAuthService, useValue: {} },
         { provide: MicrosoftOAuthService, useValue: {} },
@@ -215,5 +228,63 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     mockUpdate();
 
     await expect((service as any).runPrecheck('inbox-3', 'custom')).rejects.toThrow(/auth failed/);
+  });
+
+  it('attaches errCode, host, and port to the thrown error when SMTP verify fails', async () => {
+    const err = Object.assign(new Error('Invalid login'), { code: 'EAUTH' });
+    smtpClientService.verify.mockRejectedValue(err);
+    mockSelectChain([
+      { ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 },
+    ]);
+    mockInsert();
+    mockUpdate();
+
+    await expect((service as any).runPrecheck('inbox-1', 'gmail')).rejects.toMatchObject({
+      step: 'smtp',
+      errCode: 'EAUTH',
+      host: 'smtp.sendco.com',
+      port: 587,
+    });
+  });
+
+  it('attaches errCode, host, and port to the thrown error when IMAP verify fails for supplied creds', async () => {
+    const customInboxRowWithBadImap = {
+      id: 'inbox-3',
+      email: 'bad-imap@sendco.com',
+      provider: 'custom',
+      imapHost: 'imap.sendco.com',
+      imapPort: 993,
+    };
+    const err = Object.assign(new Error('auth failed'), { code: 'IMAP_EAUTH' });
+    imapClientService.getConnection.mockRejectedValue(err);
+    mockSelectChain([customInboxRowWithBadImap, customInboxRowWithBadImap]);
+    mockInsert();
+    mockUpdate();
+
+    await expect((service as any).runPrecheck('inbox-3', 'custom')).rejects.toMatchObject({
+      step: 'imap',
+      errCode: 'IMAP_EAUTH',
+      host: 'imap.sendco.com',
+      port: 993,
+    });
+  });
+
+  it('returns a detail object with smtp/imap timing, host, port, and mailbox count on success', async () => {
+    mockSelectChain([
+      { ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 },
+    ]);
+    mockInsert();
+    mockUpdate();
+    imapClientService.getConnection.mockResolvedValue({
+      mailboxCreate: jest.fn().mockResolvedValue(undefined),
+      list: jest.fn().mockResolvedValue([{ path: 'INBOX' }, { path: 'WarmupHub' }]),
+    });
+
+    const steps = await (service as any).runPrecheck('inbox-1', 'gmail');
+
+    expect(steps.detail.smtp).toMatchObject({ ok: true, host: 'smtp.sendco.com', port: 587 });
+    expect(typeof steps.detail.smtp.ms).toBe('number');
+    expect(steps.detail.imap).toMatchObject({ ok: true, mailboxCount: 2 });
+    expect(typeof steps.detail.imap.ms).toBe('number');
   });
 });

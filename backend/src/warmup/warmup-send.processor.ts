@@ -59,10 +59,7 @@ export class WarmupSendProcessor extends WorkerHost {
       .limit(1);
     const sender = senderRows[0];
     if (!sender) {
-      this.logger.warn(
-        { jobId, senderInboxId },
-        'warmup-send: sender inbox not found',
-      );
+      this.logger.warn({ jobId, senderInboxId }, 'warmup-send: sender inbox not found');
       throw new UnrecoverableError(`Sender inbox ${senderInboxId} not found`);
     }
     if (sender.status !== 'active') {

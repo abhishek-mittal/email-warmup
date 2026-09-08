@@ -207,3 +207,31 @@ When completing a task:
 - Fill in `completed_at`
 - Add a one-line note in the `notes` column (e.g., "All 5 acceptance criteria passed")
 - If any criterion could not be met, change status to `blocked` and describe the blocker
+
+---
+
+## Wave 12 — Pool Inbox Activity Panel + Connection Hints
+**Goal:** The pool inbox detail panel gains full activity visibility (received emails, actions taken, pairings, log stream) and the connect/pool wizard gets SMTP/IMAP provider quick-fill with plain-English error hints.
+
+| Task | Description | Parallelizable? |
+|---|---|---|
+| T028 | Pool panel → 4-tab slide-over (Health, Activity, Pairings, Logs) + Connection Summary strip + SMTP/IMAP quick-fill on connect form | — (single task) |
+
+**Wave 12 gate:**
+- Pool inbox panel shows SMTP host:port / IMAP host:port connection strip; amber chip when IMAP missing
+- Activity tab shows received email timeline + aggregate stats (open %, reply %, spam %)
+- Pairings tab shows which inboxes this pool inbox is currently serving
+- Logs tab shows filtered backend log lines for this pool inbox with Follow mode
+- Connect form has Gmail/Outlook/Yahoo/Zoho quick-fill buttons + App Password hints
+- SMTP port renders as 587 TLS / 465 SSL chips
+- Connection test shows ✓/✗ per SMTP and IMAP with errCode mapped to plain English
+
+**Run command:**
+```bash
+cd projects/email-warmup && claude --dangerously-skip-permissions \
+  "Read __specs__/ORCHESTRATOR.md. All waves W0–W11 are already done — do NOT re-run them. \
+   Execute Wave 12 only (T028). \
+   Read __specs__/tasks/T028-pool-inbox-activity-panel.md completely before writing any code. \
+   Load docs/05-agent-skills/10-skill-frontend.md and docs/05-agent-skills/11-skill-logging.md before starting. \
+   Mark T028 in_progress in __specs__/SPEC-STATUS.md before starting, done when all 11 acceptance criteria pass."
+```

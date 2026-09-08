@@ -236,7 +236,13 @@ export class InboxService {
     },
   ) {
     this.logger.info(
-      { userId, provider: 'custom', email: dto.email, smtpHost: dto.smtpHost, smtpPort: dto.smtpPort },
+      {
+        userId,
+        provider: 'custom',
+        email: dto.email,
+        smtpHost: dto.smtpHost,
+        smtpPort: dto.smtpPort,
+      },
       'inbox connect attempt',
     );
     await this.billing.assertInboxLimit(userId);
@@ -379,10 +385,29 @@ export class InboxService {
     //               custom SMTP inbox). Counts as "fine" for the
     //               all-of-activation check.
     const steps: Record<string, boolean | 'skipped'> = {};
+    // `detail` mirrors `steps` but carries the host/port/timing/mailbox-count
+    // the frontend's inline connection-test result needs (T028 §5) — kept
+    // separate from `steps` so existing callers asserting on the bare
+    // boolean shape are unaffected.
+    const detail: {
+      smtp?: { ok: boolean; host?: string; port?: number; ms: number };
+      imap?: { ok: boolean; host?: string; port?: number; ms: number; mailboxCount?: number };
+    } = {};
     let hasImap = false;
+
+    const lookupRow = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const inboxRow = lookupRow[0];
+
+    const smtpStart = Date.now();
     try {
       await this.smtp.verify(inboxId);
       steps.smtp = true;
+      detail.smtp = {
+        ok: true,
+        host: inboxRow?.smtpHost ?? undefined,
+        port: inboxRow?.smtpPort ?? undefined,
+        ms: Date.now() - smtpStart,
+      };
       this.logger.info({ inboxId, provider }, 'precheck passed: smtp');
     } catch (err: any) {
       steps.smtp = false;
@@ -390,7 +415,12 @@ export class InboxService {
         { inboxId, provider, err: err?.message, errCode: err?.code },
         'precheck failed: smtp',
       );
-      throw Object.assign(new Error(err.message || 'SMTP verification failed'), { step: 'smtp' });
+      throw Object.assign(new Error(err.message || 'SMTP verification failed'), {
+        step: 'smtp',
+        errCode: err?.code,
+        host: inboxRow?.smtpHost,
+        port: inboxRow?.smtpPort,
+      });
     }
 
     // IMAP is optional. For custom inboxes where the user didn't supply
@@ -399,6 +429,7 @@ export class InboxService {
     // is always available via the XOAUTH2 token, so we always verify it.
     let imapAttempted = false;
     let imapFailure: Error | null = null;
+    const imapStart = Date.now();
     try {
       const client = await this.imap.getConnection(inboxId);
       imapAttempted = true;
@@ -407,9 +438,17 @@ export class InboxService {
       } catch (err: any) {
         if (!err.message?.includes('exists')) throw err;
       }
+      const mailboxes = await client.list();
       await this.imap.close(inboxId);
       steps.imap = true;
       hasImap = true;
+      detail.imap = {
+        ok: true,
+        host: inboxRow?.imapHost ?? undefined,
+        port: inboxRow?.imapPort ?? undefined,
+        ms: Date.now() - imapStart,
+        mailboxCount: mailboxes.length,
+      };
     } catch (err: any) {
       imapFailure = err;
       // We don't know yet whether the user supplied IMAP creds; the
@@ -420,14 +459,18 @@ export class InboxService {
     }
 
     if (!imapAttempted) {
-      // Look up the row to see if the user actually supplied IMAP.
-      const lookup = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
-      const row = lookup[0];
-      const noImapConfigured = !row?.imapHost;
+      // We already have the row from the top of this method — reuse it to
+      // see if the user actually supplied IMAP.
+      const noImapConfigured = !inboxRow?.imapHost;
       if (provider !== 'custom' || !noImapConfigured) {
         // Either: OAuth provider (IMAP is mandatory), or: custom provider
         // with IMAP creds supplied that failed. Either way, fail.
-        throw Object.assign(imapFailure ?? new Error('IMAP verification failed'), { step: 'imap' });
+        throw Object.assign(imapFailure ?? new Error('IMAP verification failed'), {
+          step: 'imap',
+          errCode: (imapFailure as any)?.code,
+          host: inboxRow?.imapHost,
+          port: inboxRow?.imapPort,
+        });
       }
       // Custom provider, no IMAP creds — skip gracefully.
       steps.imap = 'skipped';
@@ -460,10 +503,7 @@ export class InboxService {
         'inbox status changed',
       );
     }
-    this.logger.info(
-      { inboxId, provider, activationPass, steps },
-      'precheck completed',
-    );
+    this.logger.info({ inboxId, provider, activationPass, steps }, 'precheck completed');
 
     // Enroll in the warmup pool ONLY if IMAP is actually configured and
     // passed. The warmup engine needs to confirm delivery via IMAP,
@@ -481,7 +521,7 @@ export class InboxService {
       });
     }
 
-    return steps;
+    return { ...steps, detail };
   }
 
   private async checkDns(domain: string): Promise<{

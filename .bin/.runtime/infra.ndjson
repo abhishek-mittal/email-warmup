@@ -1,0 +1,65 @@
+{"source":"infra","service":"unknown","level":30,"time":1782306144047,"msg":"1:M 24 Jun 2026 13:02:24.043 * 10000 changes in 60 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782306144048,"msg":"1:M 24 Jun 2026 13:02:24.044 * Background saving started by pid 22"}
+{"source":"infra","service":"unknown","level":30,"time":1782306144051,"msg":"22:C 24 Jun 2026 13:02:24.050 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782306144052,"msg":"22:C 24 Jun 2026 13:02:24.050 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782306144149,"msg":"1:M 24 Jun 2026 13:02:24.147 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782306383335,"msg":"2026-06-24 13:06:23.330 UTC [26] LOG:  checkpoint starting: time"}
+{"source":"infra","service":"unknown","level":30,"time":1782306383457,"msg":"2026-06-24 13:06:23.454 UTC [26] LOG:  checkpoint complete: wrote 4 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.111 s, sync=0.004 s, total=0.126 s; sync files=3, longest=0.003 s, average=0.002 s; distance=8 kB, estimate=8 kB; lsn=0/1AE8B00, redo lsn=0/1AE8AC8"}
+{"source":"infra","service":"unknown","level":30,"time":1782306469789,"msg":"1:M 24 Jun 2026 13:07:49.783 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782306469790,"msg":"1:M 24 Jun 2026 13:07:49.785 * Background saving started by pid 23"}
+{"source":"infra","service":"unknown","level":30,"time":1782306469796,"msg":"23:C 24 Jun 2026 13:07:49.794 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782306469796,"msg":"23:C 24 Jun 2026 13:07:49.795 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782306469893,"msg":"1:M 24 Jun 2026 13:07:49.891 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782306770086,"msg":"1:M 24 Jun 2026 13:12:50.082 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782306770087,"msg":"1:M 24 Jun 2026 13:12:50.083 * Background saving started by pid 24"}
+{"source":"infra","service":"unknown","level":30,"time":1782306770094,"msg":"24:C 24 Jun 2026 13:12:50.093 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782306770094,"msg":"24:C 24 Jun 2026 13:12:50.093 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782306770189,"msg":"1:M 24 Jun 2026 13:12:50.188 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782307071078,"msg":"1:M 24 Jun 2026 13:17:51.076 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782307071078,"msg":"1:M 24 Jun 2026 13:17:51.076 * Background saving started by pid 25"}
+{"source":"infra","service":"unknown","level":30,"time":1782307071083,"msg":"25:C 24 Jun 2026 13:17:51.081 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782307071083,"msg":"25:C 24 Jun 2026 13:17:51.082 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782307071183,"msg":"1:M 24 Jun 2026 13:17:51.182 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782307386805,"msg":"1:M 24 Jun 2026 13:23:06.801 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782307386805,"msg":"1:M 24 Jun 2026 13:23:06.802 * Background saving started by pid 26"}
+{"source":"infra","service":"unknown","level":30,"time":1782307386813,"msg":"26:C 24 Jun 2026 13:23:06.811 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782307386813,"msg":"26:C 24 Jun 2026 13:23:06.811 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782307386905,"msg":"1:M 24 Jun 2026 13:23:06.904 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782307687074,"msg":"1:M 24 Jun 2026 13:28:07.069 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782307687074,"msg":"1:M 24 Jun 2026 13:28:07.071 * Background saving started by pid 27"}
+{"source":"infra","service":"unknown","level":30,"time":1782307687083,"msg":"27:C 24 Jun 2026 13:28:07.081 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782307687083,"msg":"27:C 24 Jun 2026 13:28:07.081 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782307687180,"msg":"1:M 24 Jun 2026 13:28:07.178 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":30,"time":1782307988030,"msg":"1:M 24 Jun 2026 13:33:08.024 * 100 changes in 300 seconds. Saving..."}
+{"source":"infra","service":"unknown","level":30,"time":1782307988030,"msg":"1:M 24 Jun 2026 13:33:08.026 * Background saving started by pid 28"}
+{"source":"infra","service":"unknown","level":30,"time":1782307988037,"msg":"28:C 24 Jun 2026 13:33:08.034 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782307988038,"msg":"28:C 24 Jun 2026 13:33:08.035 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB"}
+{"source":"infra","service":"unknown","level":30,"time":1782307988134,"msg":"1:M 24 Jun 2026 13:33:08.131 * Background saving terminated with success"}
+{"source":"infra","service":"unknown","level":50,"time":1782308012179,"msg":"2026-06-24 13:33:32.177 UTC [93] ERROR:  update or delete on table \"inboxes\" violates foreign key constraint \"dns_checks_inbox_id_inboxes_id_fk\" on table \"dns_checks\""}
+{"source":"infra","service":"unknown","level":30,"time":1782308012179,"msg":"2026-06-24 13:33:32.177 UTC [93] DETAIL:  Key (id)=(e114b001-0405-41b0-ad50-2eba2bcd75cc) is still referenced from table \"dns_checks\"."}
+{"source":"infra","service":"unknown","level":30,"time":1782308012179,"msg":"2026-06-24 13:33:32.177 UTC [93] STATEMENT:  DELETE FROM inboxes WHERE id IN ($1, $2)"}
+{"source":"infra","service":"unknown","level":50,"time":1782308026609,"msg":"2026-06-24 13:33:46.607 UTC [98] ERROR:  update or delete on table \"inboxes\" violates foreign key constraint \"warmup_sends_sender_inbox_id_inboxes_id_fk\" on table \"warmup_sends\""}
+{"source":"infra","service":"unknown","level":30,"time":1782308026609,"msg":"2026-06-24 13:33:46.607 UTC [98] DETAIL:  Key (id)=(1f3a6799-a31a-4c49-aa94-b245d5fc70de) is still referenced from table \"warmup_sends\"."}
+{"source":"infra","service":"unknown","level":30,"time":1782308026609,"msg":"2026-06-24 13:33:46.607 UTC [98] STATEMENT:  DELETE FROM inboxes WHERE email LIKE 'e2e-%@example.com';"}
+{"source":"infra","service":"unknown","level":50,"time":1782308028752,"msg":"2026-06-24 13:33:48.750 UTC [100] ERROR:  update or delete on table \"inboxes\" violates foreign key constraint \"dns_checks_inbox_id_inboxes_id_fk\" on table \"dns_checks\""}
+{"source":"infra","service":"unknown","level":30,"time":1782308028752,"msg":"2026-06-24 13:33:48.750 UTC [100] DETAIL:  Key (id)=(028876e8-476c-4d4b-8300-37dd1aede19e) is still referenced from table \"dns_checks\"."}
+{"source":"infra","service":"unknown","level":30,"time":1782308028752,"msg":"2026-06-24 13:33:48.750 UTC [100] STATEMENT:  DELETE FROM inboxes WHERE id IN ($1, $2)"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033924,"msg":"2026-06-24 13:33:53.922 UTC [1] LOG:  received fast shutdown request"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033924,"msg":"1:signal-handler (1782308033) Received SIGTERM scheduling shutdown..."}
+{"source":"infra","service":"unknown","level":30,"time":1782308033925,"msg":"2026-06-24 13:33:53.924 UTC [1] LOG:  aborting any active transactions"}
+{"source":"infra","service":"unknown","level":50,"time":1782308033925,"msg":"2026-06-24 13:33:53.924 UTC [99] FATAL:  terminating connection due to administrator command"}
+{"source":"infra","service":"unknown","level":50,"time":1782308033925,"msg":"2026-06-24 13:33:53.924 UTC [96] FATAL:  terminating connection due to administrator command"}
+{"source":"infra","service":"unknown","level":50,"time":1782308033925,"msg":"2026-06-24 13:33:53.924 UTC [95] FATAL:  terminating connection due to administrator command"}
+{"source":"infra","service":"unknown","level":50,"time":1782308033925,"msg":"2026-06-24 13:33:53.924 UTC [94] FATAL:  terminating connection due to administrator command"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033927,"msg":"2026-06-24 13:33:53.926 UTC [1] LOG:  background worker \"logical replication launcher\" (PID 31) exited with exit code 1"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033927,"msg":"2026-06-24 13:33:53.926 UTC [26] LOG:  shutting down"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033932,"msg":"2026-06-24 13:33:53.932 UTC [26] LOG:  checkpoint starting: shutdown immediate"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033950,"msg":"2026-06-24 13:33:53.949 UTC [26] LOG:  checkpoint complete: wrote 154 buffers (0.9%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.007 s, sync=0.009 s, total=0.023 s; sync files=32, longest=0.004 s, average=0.001 s; distance=1546 kB, estimate=1546 kB; lsn=0/1C6B4C8, redo lsn=0/1C6B4C8"}
+{"source":"infra","service":"unknown","level":30,"time":1782308033953,"msg":"2026-06-24 13:33:53.952 UTC [1] LOG:  database system is shut down"}
+{"source":"infra","service":"unknown","level":30,"time":1782308034016,"msg":"1:M 24 Jun 2026 13:33:54.015 * User requested shutdown..."}
+{"source":"infra","service":"unknown","level":30,"time":1782308034016,"msg":"1:M 24 Jun 2026 13:33:54.015 * Calling fsync() on the AOF file."}
+{"source":"infra","service":"unknown","level":30,"time":1782308034016,"msg":"1:M 24 Jun 2026 13:33:54.015 * Saving the final RDB snapshot before exiting."}
+{"source":"infra","service":"unknown","level":30,"time":1782308034018,"msg":"1:M 24 Jun 2026 13:33:54.017 * DB saved on disk"}
+{"source":"infra","service":"unknown","level":30,"time":1782308034018,"msg":"1:M 24 Jun 2026 13:33:54.017 # Redis is now ready to exit, bye bye..."}
+{"source":"infra","service":"unknown","level":30,"time":1782308034184,"msg":"\u001b[Kpostgres-1 exited with code 0"}
+{"source":"infra","service":"unknown","level":30,"time":1782308034207,"msg":"\u001b[Kredis-1 exited with code 0"}

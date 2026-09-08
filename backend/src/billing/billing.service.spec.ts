@@ -69,8 +69,16 @@ describe('BillingService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(BadRequestException, ForbiddenException, BillingService, PLAN_LIMITS, QueueService, db),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          BadRequestException,
+          ForbiddenException,
+          BillingService,
+          PLAN_LIMITS,
+          QueueService,
+          db,
+        ),
+
         BillingService,
         {
           provide: QueueService,

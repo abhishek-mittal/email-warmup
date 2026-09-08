@@ -66,3 +66,19 @@ Track all progress in **SPEC-STATUS.md**.
 | services/billing.md | Stripe integration, plan limits, trial lifecycle |
 | domains/frontend.md | Next.js page structure, component contracts, API proxying |
 | domains/infra.md | GCP Cloud Run, Cloud SQL, Memorystore, Secret Manager, CI/CD |
+
+---
+
+## Waves added post-Phase 1
+
+| Wave | Name | Tasks | Depends on |
+|---|---|---|---|
+| W10 | Pool UX + PulseDot | T026 | W7 |
+| W11 | Inbox Activity Dashboard | T027 | T008, T009, T011, T012, T013, T025 |
+| W12 | Pool Inbox Activity Panel + Connection Hints | T028 | T026, T027 |
+
+| Task | Title | Wave | Skill files |
+|---|---|---|---|
+| T026 | Pool UX + PulseDot + readiness badges | W10 | docs/05-agent-skills/10-skill-frontend.md |
+| T027 | Inbox Activity Dashboard (5 tabs + sparkline) | W11 | docs/05-agent-skills/10-skill-frontend.md |
+| T028 | Pool Inbox Activity Panel + SMTP/IMAP hints | W12 | docs/05-agent-skills/10-skill-frontend.md |

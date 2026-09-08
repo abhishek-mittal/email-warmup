@@ -48,8 +48,18 @@ describe('PlacementController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PlacementController],
-      providers: [...pinoLoggerStubsFor(HttpException, HttpStatus, NotFoundException, PlacementController, PlacementService, db, Date),
-      { provide: PlacementService, useValue: placementService }],
+      providers: [
+        ...pinoLoggerStubsFor(
+          HttpException,
+          HttpStatus,
+          NotFoundException,
+          PlacementController,
+          PlacementService,
+          db,
+          Date,
+        ),
+        { provide: PlacementService, useValue: placementService },
+      ],
     }).compile();
 
     controller = module.get<PlacementController>(PlacementController);

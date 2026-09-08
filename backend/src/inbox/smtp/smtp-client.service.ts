@@ -32,10 +32,7 @@ export class SmtpClientService {
     const transporter = await this.getTransporter(inboxId);
     try {
       await transporter.verify();
-      this.logger.info(
-        { inboxId, provider: inbox?.provider },
-        'SMTP verify succeeded',
-      );
+      this.logger.info({ inboxId, provider: inbox?.provider }, 'SMTP verify succeeded');
     } catch (err: any) {
       this.logger.error(
         {

@@ -143,6 +143,9 @@ export class InboxController {
         throw new UnprocessableEntityException({
           step: err.step,
           error: err.message,
+          errCode: err.errCode,
+          host: err.host,
+          port: err.port,
         });
       }
       throw err;

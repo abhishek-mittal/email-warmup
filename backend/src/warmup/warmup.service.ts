@@ -234,11 +234,35 @@ export class WarmupService {
    * receive-engagement jobs (open/star/reply/rescue) *for* mail already sent *to*
    * this inbox — so a paused inbox (e.g. blacklisted) does not participate in any
    * further warmup activity in either direction. See T012 context addendum #3.
+   *
+   * Idempotent — safe to call on an already-paused inbox. The status update
+   * and queue drain are best-effort for the second invocation: if there's
+   * nothing to drain the helpers return without throwing.
    */
   async pauseInbox(inboxId: string): Promise<void> {
     await db.update(inboxes).set({ status: 'paused' }).where(eq(inboxes.id, inboxId));
     await this.queueService.removeJobsForSender('warmup-send', inboxId);
     await this.queueService.removeJobsForReceiver('warmup-receive', inboxId);
+  }
+
+  /**
+   * Resumes a paused inbox. Flips status back to 'active' and re-runs
+   * today's `scheduleInbox` so the inbox starts warming again right
+   * away (no need to wait for the 05:00 UTC daily cron).
+   *
+   * Idempotent — calling on an already-active inbox is a no-op aside from
+   * re-queueing today's send volume (which is what the user would want
+   * anyway: a second resume just means "go warm more"). We deliberately
+   * do NOT also drain the queues here — there's nothing to drain on a
+   * freshly-resumed inbox, and if the user spam-clicks Resume we don't
+   * want to delete a job that was already in flight.
+   */
+  async resumeInbox(inboxId: string): Promise<void> {
+    await db.update(inboxes).set({ status: 'active' }).where(eq(inboxes.id, inboxId));
+    const inboxRows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const inbox = inboxRows[0];
+    if (!inbox) return;
+    await this.scheduleInbox(inbox);
   }
 
   private async graduate(inbox: typeof inboxes.$inferSelect): Promise<void> {

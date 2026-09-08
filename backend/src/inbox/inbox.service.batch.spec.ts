@@ -48,8 +48,19 @@ describe('InboxService.batchUpload', () => {
     queueService = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(InboxService, GoogleOAuthService, MicrosoftOAuthService, BillingService, ImapClientService, SmtpClientService, QueueService, db, encrypt),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          InboxService,
+          GoogleOAuthService,
+          MicrosoftOAuthService,
+          BillingService,
+          ImapClientService,
+          SmtpClientService,
+          QueueService,
+          db,
+          encrypt,
+        ),
+
         InboxService,
         { provide: GoogleOAuthService, useValue: {} },
         { provide: MicrosoftOAuthService, useValue: {} },

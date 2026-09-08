@@ -70,10 +70,7 @@ export class WarmupReceiveProcessor extends WorkerHost {
 
     const receiver = await this.loadReceiver(receiverSource, receiverId);
     if (!receiver) {
-      this.logger.warn(
-        { jobId, receiverSource, receiverId },
-        'warmup-receive: receiver not found',
-      );
+      this.logger.warn({ jobId, receiverSource, receiverId }, 'warmup-receive: receiver not found');
       throw new Error(`Receiver not found: ${receiverSource}:${receiverId}`);
     }
 

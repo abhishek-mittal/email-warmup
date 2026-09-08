@@ -2,10 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { currentUserId } from '@/lib/api-server';
 import { getInboxes } from '@/app/(dashboard)/_lib/data';
-import { InboxActions } from '@/app/(dashboard)/inboxes/_components/InboxActions';
-import { BatchUploadCsv } from '@/app/(dashboard)/_components/BatchUploadCsv';
-import { BatchUploadWizard } from '@/app/(dashboard)/_components/BatchUploadWizard';
-import { HealthChip, IssuesCell } from '@/app/(dashboard)/_components/AnalysisCells';
+import { InboxListTable } from '@/app/(dashboard)/_components/InboxListTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,64 +15,23 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Inboxes</h1>
-            <p className="text-sm text-slate-600">All inboxes connected to your account.</p>
-          </div>
-          <div className="flex gap-2">
-            <BatchUploadCsv endpoint="/inboxes/batch/csv" />
-            <BatchUploadWizard endpoint="/inboxes/batch" />
-            <Link
-              href="/inboxes/connect"
-              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-            >
-              Connect inbox
-            </Link>
-          </div>
-        </header>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Score</th>
-                <th className="px-4 py-3">Speed</th>
-                <th className="px-4 py-3">Day</th>
-                <th className="px-4 py-3">Last placement</th>
-                <th className="px-4 py-3">DNS Health</th>
-                <th className="px-4 py-3">Issues</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {inboxes.map((i) => (
-                <tr key={i.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{i.email}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 capitalize">
-                      {i.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono">{i.score != null ? i.score : '—'}</td>
-                  <td className="px-4 py-3 text-slate-600 capitalize">{i.warmupSpeed ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{i.warmupDay ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{i.lastPlacementAt ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <HealthChip analysis={i.analysis} />
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    <IssuesCell analysis={i.analysis} status={i.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <InboxActions inboxId={i.id} status={i.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Inboxes</h1>
+          <p className="text-sm text-slate-600">
+            All inboxes connected to your account. Tick rows to pause or resume warmup in bulk.
+          </p>
         </div>
+        <div className="flex gap-2">
+          <Link
+            href="/inboxes/connect"
+            className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Connect inbox
+          </Link>
+        </div>
+      </header>
+
+      <InboxListTable inboxes={inboxes} />
     </div>
   );
 }

@@ -48,8 +48,17 @@ describe('DiagnosticsController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DiagnosticsController],
-      providers: [...pinoLoggerStubsFor(ForbiddenException, NotFoundException, DiagnosticsController, BillingService, QueueService, db, Date),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          ForbiddenException,
+          NotFoundException,
+          DiagnosticsController,
+          BillingService,
+          QueueService,
+          db,
+          Date,
+        ),
+
         { provide: BillingService, useValue: billingService },
         { provide: QueueService, useValue: queueService },
       ],

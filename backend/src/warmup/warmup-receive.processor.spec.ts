@@ -97,8 +97,18 @@ describe('WarmupReceiveProcessor', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(WarmupReceiveProcessor, ImapClientService, SmtpClientService, ContentService, db, Set, Error, ImapNotConfiguredError),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          WarmupReceiveProcessor,
+          ImapClientService,
+          SmtpClientService,
+          ContentService,
+          db,
+          Set,
+          Error,
+          ImapNotConfiguredError,
+        ),
+
         WarmupReceiveProcessor,
         { provide: ImapClientService, useValue: imapClientService },
         { provide: SmtpClientService, useValue: smtpClientService },

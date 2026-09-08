@@ -1,0 +1,25 @@
+{
+  "name": "emailwarm-dev-tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ink-based two-column live-log TUI for .bin/dev up. Companion scripts: next-log-capture.mjs (Next.js stdout → NDJSON) and dev-logs-json.mjs (.bin/dev logs --json wrapper).",
+  "scripts": {
+    "tui": "tsx index.tsx",
+    "next-capture": "node next-log-capture.mjs",
+    "logs:json": "node dev-logs-json.mjs"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "ink": "^5.0.1",
+    "ink-scroll-view": "^0.3.7",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

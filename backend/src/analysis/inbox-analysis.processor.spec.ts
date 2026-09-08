@@ -17,8 +17,11 @@ describe('InboxAnalysisProcessor', () => {
     analysisService = { analyse: jest.fn().mockResolvedValue({ id: 'analysis-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(InboxAnalysisProcessor, AnalysisService, Error),
-      InboxAnalysisProcessor, { provide: AnalysisService, useValue: analysisService }],
+      providers: [
+        ...pinoLoggerStubsFor(InboxAnalysisProcessor, AnalysisService, Error),
+        InboxAnalysisProcessor,
+        { provide: AnalysisService, useValue: analysisService },
+      ],
     }).compile();
 
     processor = module.get<InboxAnalysisProcessor>(InboxAnalysisProcessor);

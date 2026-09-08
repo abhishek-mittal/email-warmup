@@ -95,8 +95,16 @@ describe('WarmupSendProcessor', () => {
     sendMailMock.mockResolvedValue({ messageId: 'whatever' });
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(UnrecoverableError, WarmupSendProcessor, ContentService, SmtpClientService, QueueService, db),
-      
+      providers: [
+        ...pinoLoggerStubsFor(
+          UnrecoverableError,
+          WarmupSendProcessor,
+          ContentService,
+          SmtpClientService,
+          QueueService,
+          db,
+        ),
+
         WarmupSendProcessor,
         { provide: ContentService, useValue: contentService },
         { provide: SmtpClientService, useValue: smtpClientService },

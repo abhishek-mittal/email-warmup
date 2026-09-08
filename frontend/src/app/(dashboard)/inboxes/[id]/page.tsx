@@ -1,46 +1,91 @@
 import { redirect, notFound } from 'next/navigation';
-import { currentUserId } from '@/lib/api-server';
-import { serverApi } from '@/lib/api-server';
-import { RunPlacementButton } from '@/app/(dashboard)/inboxes/[id]/_components/RunPlacementButton';
+import { currentUserId, serverApi } from '@/lib/api-server';
+import type { ScoreHistoryResponse } from '@/lib/activity-types';
+import { InboxPageHeader } from './_components/InboxPageHeader';
+import { InboxDashboardTabs } from './_components/InboxDashboardTabs';
+import { InboxControlButtons } from '@/app/(dashboard)/_components/InboxControlButtons';
 
 export const dynamic = 'force-dynamic';
 
+interface InboxResponse {
+  id: string;
+  email: string;
+  provider: string;
+  status: string;
+  warmupDay: number;
+  // T013 also attaches `analysis`, `warmupSpeed`, etc. We only need a
+  // handful here, but the server-side inbox response is the same
+  // object — pass through.
+  [key: string]: unknown;
+}
+
+/**
+ * Inbox detail page → full activity dashboard (T027). The server
+ * component fetches the inbox row + score history once on mount,
+ * passes them as props to the client header (sparkline + trend) and
+ * the tabbed dashboard (5 tabs of data). Each tab fetches its own
+ * data on demand — see InboxDashboardTabs.
+ *
+ * The "Run Placement Test" button moved into the Placement tab
+ * (per T027 §4 Tab 4). A link to the diagnostics page is preserved
+ * below the dashboard for users who want the deeper AI analysis.
+ */
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const userId = await currentUserId();
   if (!userId) redirect('/sign-in');
   const { id } = await params;
 
-  let inbox: { id: string; email: string; provider: string; status: string; score: number | null };
+  let inbox: InboxResponse;
   try {
-    inbox = await serverApi<{ id: string; email: string; provider: string; status: string; score: number | null }>(`/inboxes/${id}`);
+    inbox = await serverApi<InboxResponse>(`/inboxes/${id}`);
   } catch (err: unknown) {
     const e2 = err as { status?: number };
     if (e2?.status === 404) notFound();
     throw err;
   }
 
+  // Score history is independent of the inbox row and may 404/empty if
+  // the inbox has never had a score computed. Treat the absence as a
+  // legitimate "no score yet" state — no need to surface an error.
+  let scoreHistory: ScoreHistoryResponse | null = null;
+  try {
+    scoreHistory = await serverApi<ScoreHistoryResponse>(`/inboxes/${id}/score-history?days=30`);
+  } catch {
+    scoreHistory = { current: null, trend: 'stable', history: [] };
+  }
+
   return (
     <div className="space-y-8">
-      <header>
-          <h1 className="text-2xl font-semibold text-slate-900">{inbox.email}</h1>
-          <p className="text-sm text-slate-600 capitalize">{inbox.provider} · {inbox.status}</p>
-        </header>
+      <InboxPageHeader
+        email={inbox.email}
+        provider={inbox.provider}
+        status={inbox.status}
+        warmupDay={inbox.warmupDay ?? 0}
+        score={scoreHistory}
+      />
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-slate-700">Reputation</h2>
-          <p className="mt-1 font-mono text-3xl text-slate-900">
-            {inbox.score != null ? inbox.score : '—'}
+      {/* Page-level Pause/Resume. The same component also shows up as a
+          per-row button in the inbox list — `size="md"` here gives it
+          more padding for the page header. */}
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-slate-900">Warmup control</p>
+          <p className="text-xs text-slate-500">
+            Pause stops all pending send and receive jobs and freezes the daily schedule.
+            Resume re-queues today&rsquo;s sends immediately — no need to wait for the 05:00 UTC cron.
           </p>
-        </section>
+        </div>
+        <InboxControlButtons inboxId={inbox.id} status={inbox.status} size="md" />
+      </div>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-slate-700">Placement</h2>
-          <RunPlacementButton inboxId={inbox.id} disabled={false} />
-        </section>
+      <InboxDashboardTabs inboxId={inbox.id} />
 
-        <a className="inline-block text-sm text-indigo-600 hover:underline" href={`/inboxes/${id}/diagnostics`}>
-          View diagnostics →
-        </a>
+      <a
+        className="inline-block text-sm text-indigo-600 hover:underline"
+        href={`/inboxes/${id}/diagnostics`}
+      >
+        View diagnostics →
+      </a>
     </div>
   );
 }

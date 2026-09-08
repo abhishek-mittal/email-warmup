@@ -56,22 +56,50 @@ export class DnsCheckProcessor extends WorkerHost {
     const selector = inbox.dkimSelector ?? 'default';
 
     const [spf, dkim, dmarc, mx] = await Promise.all([
-      this.dnsService.checkSpf(domain).then((r) => (this.logger.debug(
-        { jobId, check: 'spf', result: r.status === 'pass' },
-        'DNS check result',
-      ), r)),
-      this.dnsService.checkDkim(domain, selector).then((r) => (this.logger.debug(
-        { jobId, check: 'dkim', result: r.status === 'pass' },
-        'DNS check result',
-      ), r)),
-      this.dnsService.checkDmarc(domain).then((r) => (this.logger.debug(
-        { jobId, check: 'dmarc', result: r.status === 'pass' },
-        'DNS check result',
-      ), r)),
-      this.dnsService.checkMx(domain).then((r) => (this.logger.debug(
-        { jobId, check: 'mx', result: r.status === 'pass' },
-        'DNS check result',
-      ), r)),
+      this.dnsService
+        .checkSpf(domain)
+        .then(
+          (r) => (
+            this.logger.debug(
+              { jobId, check: 'spf', result: r.status === 'pass' },
+              'DNS check result',
+            ),
+            r
+          ),
+        ),
+      this.dnsService
+        .checkDkim(domain, selector)
+        .then(
+          (r) => (
+            this.logger.debug(
+              { jobId, check: 'dkim', result: r.status === 'pass' },
+              'DNS check result',
+            ),
+            r
+          ),
+        ),
+      this.dnsService
+        .checkDmarc(domain)
+        .then(
+          (r) => (
+            this.logger.debug(
+              { jobId, check: 'dmarc', result: r.status === 'pass' },
+              'DNS check result',
+            ),
+            r
+          ),
+        ),
+      this.dnsService
+        .checkMx(domain)
+        .then(
+          (r) => (
+            this.logger.debug(
+              { jobId, check: 'mx', result: r.status === 'pass' },
+              'DNS check result',
+            ),
+            r
+          ),
+        ),
     ]);
 
     // rDNS is best-effort and only meaningful when the inbox has a known sending IP

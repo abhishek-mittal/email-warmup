@@ -59,10 +59,7 @@ export class BillingService {
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user || !allowedPlans.includes(user.plan)) {
-      this.logger.warn(
-        { userId, allowedPlans, currentPlan: user?.plan },
-        'assertPlan rejected',
-      );
+      this.logger.warn({ userId, allowedPlans, currentPlan: user?.plan }, 'assertPlan rejected');
       throw new ForbiddenException(`This feature requires plan: ${allowedPlans.join(' or ')}`);
     }
   }

@@ -42,8 +42,9 @@ describe('SmtpClientService', () => {
     microsoftOAuthService = { refreshToken: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [...pinoLoggerStubsFor(SmtpClientService, GoogleOAuthService, MicrosoftOAuthService, db),
-      
+      providers: [
+        ...pinoLoggerStubsFor(SmtpClientService, GoogleOAuthService, MicrosoftOAuthService, db),
+
         SmtpClientService,
         { provide: GoogleOAuthService, useValue: googleOAuthService },
         { provide: MicrosoftOAuthService, useValue: microsoftOAuthService },
@@ -88,9 +89,7 @@ describe('SmtpClientService', () => {
     it('throws when the pool inbox cannot be found', async () => {
       mockSelectInbox(null);
 
-      await expect(service.getPoolInboxTransporter('pi-1')).rejects.toThrow(
-        'Pool inbox not found',
-      );
+      await expect(service.getPoolInboxTransporter('pi-1')).rejects.toThrow('Pool inbox not found');
     });
 
     it('builds a basic-auth transporter from custom credentials in encrypted_credentials', async () => {

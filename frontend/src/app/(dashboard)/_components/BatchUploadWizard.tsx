@@ -4,6 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApi, ApiError } from '@/lib/api';
 import { Toast, useToasts } from '@/components/Toast';
+import {
+  ProviderQuickFill,
+  ProviderAppPasswordNote,
+  SmtpPortChips,
+  errorHint,
+  type Provider as HintProvider,
+} from './SmtpFormHints';
 
 type Provider = 'gmail' | 'outlook' | 'custom';
 
@@ -65,6 +72,16 @@ function validateEntry(entry: BatchEntry): string | null {
   return null;
 }
 
+const KNOWN_ERROR_CODES = ['EAUTH', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'IMAP_EAUTH'];
+
+/** Pulls a known errCode out of a free-text `failed[].reason` string (if
+ *  present) and maps it through the shared `errorHint()` helper so batch
+ *  failures get the same plain-English fix hints as the connect form. */
+function hintForReason(reason: string): string | null {
+  const code = KNOWN_ERROR_CODES.find((c) => reason.includes(c));
+  return code ? errorHint(code) : null;
+}
+
 function toApiEntry(entry: BatchEntry): Record<string, unknown> {
   if (entry.provider === 'gmail' || entry.provider === 'outlook') {
     return {
@@ -108,12 +125,18 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
   const [collected, setCollected] = useState<BatchEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-row failures from the last submit, e.g. a duplicate email or a
+  // missing-field error keyed by errCode-like substrings (EAUTH /
+  // ECONNREFUSED / etc.) the backend may include in `reason` — mapped
+  // through the same `errorHint()` the connect form uses (T028 §5).
+  const [submitFailures, setSubmitFailures] = useState<{ email: string; reason: string }[]>([]);
 
   function closeModal() {
     setOpen(false);
     setForm(EMPTY_FORM);
     setCollected([]);
     setError(null);
+    setSubmitFailures([]);
   }
 
   function update<K extends keyof BatchEntry>(key: K, value: BatchEntry[K]) {
@@ -152,6 +175,7 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
 
     setBusy(true);
     setError(null);
+    setSubmitFailures([]);
     try {
       const res = await api<{ created: number; failed: { email: string; reason: string }[] }>(
         endpoint,
@@ -167,7 +191,15 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
       // before any `inbox_analysis` rows exist.
       onUploaded?.();
       router.refresh();
-      closeModal();
+      if (res.failed.length > 0) {
+        // Keep the modal open so the user can see which rows failed and
+        // why, instead of silently closing on a partial success.
+        setSubmitFailures(res.failed);
+        setCollected(finalList);
+        setForm({ ...EMPTY_FORM, provider: form.provider });
+      } else {
+        closeModal();
+      }
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to submit batch';
       show(msg || 'Failed to submit batch', 'error');
@@ -224,6 +256,40 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
               ))}
             </div>
 
+            {/* T028: provider quick-fill chips for the SMTP/IMAP host + port
+                when "custom" is selected. Auto-fills SMTP + IMAP host/port
+                so the user doesn't have to memorize them. Email/password
+                stay user-supplied. */}
+            {form.provider === 'custom' ? (
+              <div className="mt-3 space-y-2">
+                <ProviderQuickFill
+                  current="custom"
+                  onPick={(p) => {
+                    update('smtpHost', p.smtpHost);
+                    update('smtpPort', p.smtpPort);
+                    update('imapHost', p.imapHost);
+                    update('imapPort', p.imapPort);
+                  }}
+                  onCustom={() => {
+                    /* no-op: already custom */
+                  }}
+                />
+                <p className="text-xs text-slate-500">
+                  Pick a provider above to pre-fill the SMTP and IMAP hostnames + ports —
+                  you still enter the email and password.
+                </p>
+              </div>
+            ) : null}
+
+            {/* T028: App Password note when Gmail / Outlook is selected */}
+            <div className="mt-3">
+              <ProviderAppPasswordNote
+                provider={(form.provider === 'gmail' || form.provider === 'outlook'
+                  ? form.provider
+                  : 'custom') as HintProvider}
+              />
+            </div>
+
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field
                 label="Email address"
@@ -255,12 +321,14 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
               ) : (
                 <>
                   <Field label="SMTP host" value={form.smtpHost ?? ''} onChange={(v) => update('smtpHost', v)} />
-                  <Field
-                    label="SMTP port"
-                    type="number"
-                    value={String(form.smtpPort ?? '')}
-                    onChange={(v) => update('smtpPort', Number(v))}
-                  />
+                  <div className="space-y-1.5">
+                    <span className="mb-1 block text-xs font-medium text-slate-700">SMTP port</span>
+                    <SmtpPortChips
+                      name="smtpPort"
+                      value={form.smtpPort ?? 587}
+                      onChange={(v) => update('smtpPort', v)}
+                    />
+                  </div>
                   <Field label="SMTP user" value={form.smtpUser ?? ''} onChange={(v) => update('smtpUser', v)} />
                   <Field
                     label="SMTP password"
@@ -286,7 +354,31 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
               )}
             </div>
 
-            {error ? <p className="mt-3 text-sm font-medium text-rose-700">{error}</p> : null}
+            {error ? (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                <p className="font-semibold">Couldn&rsquo;t add this entry</p>
+                <p className="mt-1">{error}</p>
+              </div>
+            ) : null}
+
+            {submitFailures.length > 0 ? (
+              <div className="mt-3 space-y-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                <p className="font-semibold">
+                  {submitFailures.length} entr{submitFailures.length === 1 ? 'y' : 'ies'} failed
+                </p>
+                {submitFailures.map((f, idx) => {
+                  const hint = hintForReason(f.reason);
+                  return (
+                    <div key={`${f.email}-${idx}`} className="border-t border-rose-200/60 pt-1.5 first:border-t-0 first:pt-0">
+                      <p>
+                        <span className="font-mono">{f.email}</span> — {f.reason}
+                      </p>
+                      {hint ? <p className="mt-0.5 text-rose-700">→ {hint}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
 
             <div className="mt-6 flex justify-end gap-2">
               <button
