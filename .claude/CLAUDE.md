@@ -101,7 +101,7 @@ cd projects/email-warmup
 cd backend
 npm install
 npm run db:migrate      # apply DB migrations
-npm run start:dev       # NestJS dev server on :3001
+npm run start:dev       # NestJS dev server on :4611
 
 # Frontend (Next.js)
 cd frontend

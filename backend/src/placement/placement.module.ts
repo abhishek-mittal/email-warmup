@@ -6,10 +6,11 @@ import { PlacementService } from './placement.service';
 import { PlacementAnalyzerService } from './placement-analyzer.service';
 import { PlacementTestProcessor } from './placement-test.processor';
 import { PlacementController } from './placement.controller';
+import { SeedAdminController } from './seed-admin.controller';
 
 @Module({
   imports: [QueueModule, InboxModule],
-  controllers: [PlacementController],
+  controllers: [PlacementController, SeedAdminController],
   providers: [SeedListService, PlacementService, PlacementAnalyzerService, PlacementTestProcessor],
   exports: [PlacementService, SeedListService],
 })

@@ -1,8 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
-import { inboxes } from '../db/schema';
+import { inboxes, users } from '../db/schema';
+import { PLAN_LIMITS } from '../billing/billing.service';
 import { WarmupService } from '../warmup/warmup.service';
+import { BounceMonitorService, BOUNCE_PAUSE_REASON } from '../safety/bounce-monitor.service';
 
 /**
  * Bulk + single pause/resume operations on user-owned inboxes. Lives in
@@ -17,7 +19,22 @@ import { WarmupService } from '../warmup/warmup.service';
 export class InboxControlService {
   private readonly logger = new Logger(InboxControlService.name);
 
-  constructor(private readonly warmupService: WarmupService) {}
+  constructor(
+    private readonly warmupService: WarmupService,
+    private readonly bounces: BounceMonitorService,
+  ) {}
+
+  /** Ownership-checked bounce figures for one inbox. */
+  async bounceStats(userId: string, inboxId: string) {
+    const inbox = await this.assertOwnership(userId, inboxId);
+    const stats = await this.bounces.stats(inboxId);
+    return {
+      ...stats,
+      ratePct: Math.round(stats.rate * 1000) / 10,
+      limitPct: stats.limit * 100,
+      held: inbox.status === 'paused' && inbox.statusReason === BOUNCE_PAUSE_REASON,
+    };
+  }
 
   /**
    * Pause a single inbox. Idempotent (pauseInbox is idempotent). Returns
@@ -36,16 +53,19 @@ export class InboxControlService {
 
   /**
    * Resume a single inbox. Idempotent — resume on an already-active inbox
-   * just re-queues today's send volume (see WarmupService.resumeInbox).
+   * changes nothing and queues no extra mail (see WarmupService.resumeInbox).
+   * Returns the inbox's actual status, which stays e.g. 'error' when the
+   * inbox can't be resumed by a click.
    */
   async resumeOne(userId: string, inboxId: string): Promise<{ id: string; status: string }> {
     const inbox = await this.assertOwnership(userId, inboxId);
-    await this.warmupService.resumeInbox(inboxId);
+    await this.assertPlanAllowsWarmup(userId);
+    const status = (await this.warmupService.resumeInbox(inboxId)) ?? inbox.status;
     this.logger.log(
-      { userId, inboxId, from: inbox.status, to: 'active' },
-      'inbox resumed by user request',
+      { userId, inboxId, from: inbox.status, to: status },
+      'inbox resume requested by user',
     );
-    return { id: inboxId, status: 'active' };
+    return { id: inboxId, status };
   }
 
   /**
@@ -97,9 +117,8 @@ export class InboxControlService {
       if (!id || seen.has(id)) continue;
       seen.add(id);
       try {
-        const result = action === 'pause'
-          ? await this.pauseOne(userId, id)
-          : await this.resumeOne(userId, id);
+        const result =
+          action === 'pause' ? await this.pauseOne(userId, id) : await this.resumeOne(userId, id);
         updated.push(result);
       } catch (err: any) {
         // 404 (not found / not yours) — surface as a per-row failure
@@ -110,6 +129,21 @@ export class InboxControlService {
     }
 
     return { updated, failed };
+  }
+
+  /**
+   * An expired trial or cancelled plan pauses every inbox; resuming has to
+   * respect that rather than only checking who owns the inbox.
+   */
+  private async assertPlanAllowsWarmup(userId: string): Promise<void> {
+    const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const user = rows[0];
+    const plan = user?.plan ?? 'free';
+    const trialExpired =
+      plan === 'trial' && user?.trialEndsAt != null && user.trialEndsAt.getTime() < Date.now();
+    if ((PLAN_LIMITS[plan]?.inboxes ?? 0) === 0 || trialExpired) {
+      throw new ForbiddenException('Your current plan does not include warmup — upgrade to resume');
+    }
   }
 
   private async assertOwnership(userId: string, inboxId: string) {

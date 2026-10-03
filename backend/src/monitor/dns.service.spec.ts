@@ -148,13 +148,38 @@ describe('DnsService', () => {
       expect(result.code).toBeNull();
     });
 
-    it('returns fail with DMARC_NONE when p=none', async () => {
+    it('treats p=none as a valid monitoring policy: pass, with DMARC_NONE as advice', async () => {
       resolveTxt.mockResolvedValue([['v=DMARC1; p=none']]);
 
       const result = await service.checkDmarc('sendco.com');
 
-      expect(result.status).toBe('fail');
+      expect(result.status).toBe('pass');
       expect(result.code).toBe('DMARC_NONE');
+    });
+
+    it.each([
+      ['no version tag', 'p=reject; rua=mailto:x@sendco.com'],
+      ['an unrelated TXT record', 'some-verification=abc'],
+    ])('a record with %s is not DMARC: fail DMARC_MISSING', async (_name, record) => {
+      resolveTxt.mockResolvedValue([[record]]);
+      const result = await service.checkDmarc('sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'DMARC_MISSING' });
+    });
+
+    it.each([
+      ['no policy', 'v=DMARC1; rua=mailto:x@sendco.com'],
+      ['an unknown policy', 'v=DMARC1; p=maybe'],
+      ['only a subdomain policy', 'v=DMARC1; sp=reject'],
+    ])('a DMARC record with %s is invalid, not passing', async (_name, record) => {
+      resolveTxt.mockResolvedValue([[record]]);
+      const result = await service.checkDmarc('sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'DMARC_INVALID' });
+    });
+
+    it('two DMARC records are invalid', async () => {
+      resolveTxt.mockResolvedValue([['v=DMARC1; p=reject'], ['v=DMARC1; p=none']]);
+      const result = await service.checkDmarc('sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'DMARC_INVALID' });
     });
 
     it('returns fail with DMARC_MISSING when no _dmarc TXT record exists', async () => {
@@ -223,6 +248,109 @@ describe('DnsService', () => {
 
       expect(result.status).toBe('fail');
       expect(result.code).toBe('RDNS_MISSING');
+    });
+  });
+
+  describe('a lookup that did not complete is unknown, never "missing"', () => {
+    const failures = [
+      ['timeout', 'ETIMEOUT'],
+      ['server failure', 'ESERVFAIL'],
+      ['refused', 'ECONNREFUSED'],
+    ];
+
+    it.each(failures)('TXT checks on %s', async (_name, code) => {
+      resolveTxt.mockRejectedValue(Object.assign(new Error(code), { code }));
+
+      for (const outcome of [
+        await service.checkSpf('sendco.com'),
+        await service.checkDkim('sendco.com', 'mailo'),
+        await service.checkDmarc('sendco.com'),
+      ]) {
+        expect(outcome.status).toBe('unknown');
+        expect(outcome.code).toBeNull();
+      }
+    });
+
+    it.each(failures)('MX and reverse DNS on %s', async (_name, code) => {
+      resolveMx.mockRejectedValue(Object.assign(new Error(code), { code }));
+      reverse.mockRejectedValue(Object.assign(new Error(code), { code }));
+
+      expect((await service.checkMx('sendco.com')).status).toBe('unknown');
+      expect((await service.checkRdns('203.0.113.7')).status).toBe('unknown');
+    });
+  });
+
+  describe('SPF validity', () => {
+    it('two SPF records are a permanent error for receivers: fail SPF_INVALID', async () => {
+      resolveTxt.mockResolvedValue([['v=spf1 include:a.example ~all'], ['v=spf1 -all']]);
+      const result = await service.checkSpf('sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'SPF_INVALID' });
+    });
+
+    it('a record that needs more than ten DNS lookups fails', async () => {
+      const includes = Array.from({ length: 11 }, (_, i) => `include:spf${i}.example`).join(' ');
+      resolveTxt.mockResolvedValue([[`v=spf1 ${includes} -all`]]);
+      const result = await service.checkSpf('sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'SPF_INVALID' });
+      expect(result.detail).toContain('11');
+    });
+
+    it('ip4/ip6/all terms do not count as lookups', async () => {
+      const ips = Array.from({ length: 15 }, (_, i) => `ip4:203.0.113.${i}`).join(' ');
+      resolveTxt.mockResolvedValue([[`v=spf1 ${ips} include:a.example mx -all`]]);
+      expect((await service.checkSpf('sendco.com')).status).toBe('pass');
+    });
+
+    it('does not mistake a look-alike for an SPF record', async () => {
+      resolveTxt.mockResolvedValue([['v=spf10 something'], ['spf2.0/pra ~all']]);
+      expect(await service.checkSpf('sendco.com')).toMatchObject({
+        status: 'fail',
+        code: 'SPF_MISSING',
+      });
+    });
+  });
+
+  describe('MX', () => {
+    it('a null MX means the domain accepts no mail: fail', async () => {
+      resolveMx.mockResolvedValue([{ exchange: '', priority: 0 }]);
+      expect(await service.checkMx('sendco.com')).toMatchObject({
+        status: 'fail',
+        code: 'MX_MISSING',
+      });
+      resolveMx.mockResolvedValue([{ exchange: '.', priority: 0 }]);
+      expect((await service.checkMx('sendco.com')).detail).toContain('null MX');
+    });
+  });
+
+  describe('checkDkimForInbox', () => {
+    it('checks the selector the owner supplied, and a missing key there is a failure', async () => {
+      resolveTxt.mockRejectedValue(Object.assign(new Error('nx'), { code: 'ENOTFOUND' }));
+      const result = await service.checkDkimForInbox('sendco.com', 'mailo', 'custom');
+      expect(resolveTxt).toHaveBeenCalledWith('mailo._domainkey.sendco.com');
+      expect(result).toMatchObject({ status: 'fail', code: 'DKIM_MISSING' });
+    });
+
+    it('without a selector, tries the provider defaults and passes when a key is found', async () => {
+      resolveTxt.mockImplementation(async (name: string) => {
+        if (name === 'selector2._domainkey.sendco.com') return [['v=DKIM1; k=rsa; p=MIIBIjANBg']];
+        throw Object.assign(new Error('nx'), { code: 'ENOTFOUND' });
+      });
+      const result = await service.checkDkimForInbox('sendco.com', null, 'outlook');
+      expect(result.status).toBe('pass');
+    });
+
+    it('without a selector and no key at the usual places, DKIM is unknown — never pass, never fail', async () => {
+      resolveTxt.mockRejectedValue(Object.assign(new Error('nx'), { code: 'ENOTFOUND' }));
+      for (const provider of ['gmail', 'outlook', 'custom']) {
+        const result = await service.checkDkimForInbox('sendco.com', null, provider);
+        expect(result.status).toBe('unknown');
+        expect(result.code).toBeNull();
+      }
+    });
+
+    it('never guesses a selector for a custom provider', async () => {
+      await service.checkDkimForInbox('sendco.com', undefined, 'custom');
+      expect(resolveTxt).not.toHaveBeenCalled();
     });
   });
 });

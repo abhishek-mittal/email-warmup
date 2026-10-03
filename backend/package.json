@@ -11,7 +11,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -26,7 +26,9 @@
     "logs:smtp": "LOG_LEVEL=debug nest start --watch 2>&1 | pino-pretty --colorize --singleLine | grep -i smtp",
     "logs:imap": "LOG_LEVEL=debug nest start --watch 2>&1 | pino-pretty --colorize --singleLine | grep -i imap",
     "logs:warn": "nest start --watch 2>&1 | pino-pretty --colorize --levelFirst | grep -E 'WARN|ERROR'",
-    "logs:inbox": "LOG_LEVEL=debug nest start --watch 2>&1 | pino-pretty --colorize --singleLine | grep -i"
+    "logs:inbox": "LOG_LEVEL=debug nest start --watch 2>&1 | pino-pretty --colorize --singleLine | grep -i",
+    "test:int": "jest --config ./test/jest-int.json --runInBand",
+    "db:migrate:prod": "node dist/src/db/migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",

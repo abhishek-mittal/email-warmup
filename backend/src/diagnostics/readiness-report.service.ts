@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { inboxes, placementTests, reputationScores, warmupSends, diagnostics } from '../db/schema';
 
@@ -147,7 +147,12 @@ export class ReadinessReportService {
     const rows = await db
       .select()
       .from(placementTests)
-      .where(eq(placementTests.inboxId, inboxId))
+      .where(
+        and(
+          eq(placementTests.inboxId, inboxId),
+          inArray(placementTests.status, ['complete', 'partial']),
+        ),
+      )
       .orderBy(desc(placementTests.completedAt))
       .limit(1);
     return rows[0] ?? null;
@@ -162,7 +167,7 @@ export class ReadinessReportService {
     const [result] = await db
       .select({ count: sql<number>`count(distinct ${warmupSends.receiverInboxId})` })
       .from(warmupSends)
-      .where(eq(warmupSends.senderInboxId, inboxId));
+      .where(and(eq(warmupSends.senderInboxId, inboxId), isNotNull(warmupSends.sentAt)));
 
     const n = Number(result?.count ?? 0);
     return `Your inbox helped warm ${n} other inboxes`;

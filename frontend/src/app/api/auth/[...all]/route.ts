@@ -12,16 +12,30 @@ import { toNextJsHandler } from 'better-auth/next-js';
  * migration. Once the migration is done the promise resolves instantly and
  * there's no per-request overhead.
  */
-const handlers = toNextJsHandler(getAuth() as unknown as {
-  handler: (r: Request) => Promise<Response>;
-});
+type Handlers = ReturnType<typeof toNextJsHandler>;
+let handlers: Handlers | undefined;
+
+/**
+ * Built on first request, not at import: the build collects page data by
+ * importing this module, with no database or secrets available.
+ */
+function getHandlers(): Handlers {
+  if (!handlers) {
+    handlers = toNextJsHandler(
+      getAuth() as unknown as { handler: (r: Request) => Promise<Response> },
+    );
+  }
+  return handlers;
+}
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   await waitForAuthSchema();
-  return handlers.GET(req);
+  return getHandlers().GET(req);
 }
 
 export async function POST(req: Request) {
   await waitForAuthSchema();
-  return handlers.POST(req);
+  return getHandlers().POST(req);
 }

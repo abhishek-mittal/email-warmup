@@ -62,6 +62,17 @@ export function PlacementTab({ inboxId }: Props) {
 
         {loading && !latest ? (
           <p className="mt-6 text-sm text-slate-500">Loading…</p>
+        ) : latest && latest.status === 'failed' ? (
+          <div
+            role="status"
+            className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            <p className="font-medium">This test did not produce a result.</p>
+            <p className="mt-1">
+              {latest.failureReason ?? 'Too few seed mailboxes could be checked.'} This says nothing
+              about your inbox, and the test was not counted against your allowance.
+            </p>
+          </div>
         ) : latest ? (
           <PlacementBar
             primary={latest.primaryPct ?? 0}
@@ -74,6 +85,17 @@ export function PlacementTab({ inboxId }: Props) {
             No placement tests run yet. Click &ldquo;Run Placement Test&rdquo; to start.
           </p>
         )}
+        {latest && latest.status !== 'failed' ? (
+          <p className="mt-4 text-xs text-slate-500">
+            Based on {latest.observedCount ?? latest.seedCount ?? 0} of {latest.seedCount ?? 0} seed
+            mailboxes.
+            {latest.status === 'partial'
+              ? ` ${latest.errorCount ?? 0} could not be checked and are left out of the percentages — they are not counted as spam or missing.`
+              : ''}{' '}
+            One generic test message was sent from this inbox; the result indicates sender standing
+            and does not predict how a specific campaign will be placed.
+          </p>
+        ) : null}
       </div>
 
       {rows.length > 0 ? (
@@ -96,12 +118,26 @@ export function PlacementTab({ inboxId }: Props) {
                 {rows.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50">
                     <td className="whitespace-nowrap px-3 py-2 text-slate-700">{formatDateTime(row.completedAt)}</td>
-                    <td className="px-3 py-2 text-slate-700">{row.seedCount ?? '—'}</td>
-                    <td className="px-3 py-2 text-emerald-700">{row.primaryPct ?? '—'}%</td>
-                    <td className="px-3 py-2 text-amber-700">{row.promotionsPct ?? '—'}%</td>
-                    <td className="px-3 py-2 text-rose-700">{row.spamPct ?? '—'}%</td>
-                    <td className="px-3 py-2 text-slate-700">{row.missingPct ?? '—'}%</td>
-                    <td className="px-3 py-2 font-mono text-slate-700">{row.placementScore ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {row.status === 'failed'
+                        ? `0 of ${row.seedCount ?? '—'}`
+                        : row.status === 'partial'
+                          ? `${row.observedCount ?? '—'} of ${row.seedCount ?? '—'}`
+                          : (row.seedCount ?? '—')}
+                    </td>
+                    {row.status === 'failed' ? (
+                      <td colSpan={5} className="px-3 py-2 text-amber-800">
+                        No result — seed mailboxes could not be checked
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 text-emerald-700">{pct(row.primaryPct)}</td>
+                        <td className="px-3 py-2 text-amber-700">{pct(row.promotionsPct)}</td>
+                        <td className="px-3 py-2 text-rose-700">{pct(row.spamPct)}</td>
+                        <td className="px-3 py-2 text-slate-700">{pct(row.missingPct)}</td>
+                        <td className="px-3 py-2 font-mono text-slate-700">{row.placementScore ?? '—'}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -115,6 +151,11 @@ export function PlacementTab({ inboxId }: Props) {
       ) : null}
     </section>
   );
+}
+
+/** A percentage cell: a dash when there is no figure, never "—%". */
+function pct(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : `${value}%`;
 }
 
 interface PlacementBarProps {

@@ -9,6 +9,23 @@
 This file is the source of truth for Phase 1 test users. The catalog here
 mirrors `scripts/seed-test-users.mjs`; if you change one, change the other.
 
+## Quick login
+
+Sign in at <http://localhost:3000/sign-in>. Every account uses the same password.
+
+| Email | Password | Plan |
+|---|---|---|
+| `admin@emailwarm.dev` | `EmailWarm-Phase1-Test!` | enterprise |
+| `founder@emailwarm.dev` | `EmailWarm-Phase1-Test!` | agency (trial +14d) |
+| `growth@emailwarm.dev` | `EmailWarm-Phase1-Test!` | growth |
+| `starter@emailwarm.dev` | `EmailWarm-Phase1-Test!` | starter |123431
+| `trial@emailwarm.dev` | `EmailWarm-Phase1-Test!` | trial (+7d) |
+| `expired@emailwarm.dev` | `EmailWarm-Phase1-Test!` | trial (expired -3d) |
+| `blacklist@emailwarm.dev` | `EmailWarm-Phase1-Test!` | growth |
+| `spam@emailwarm.dev` | `EmailWarm-Phase1-Test!` | growth |
+
+Not seeded yet on your machine? Run section 1. What each account is for: section 2.
+
 ---
 
 ## 1. Seed the accounts
@@ -90,17 +107,19 @@ Or via curl (server-rendered session cookie path, for tests):
 # Sign in — captures the better-auth session cookie in /tmp/cookies.txt
 curl -sS -c /tmp/cookies.txt -X POST http://localhost:3000/api/auth/sign-in/email \
   -H 'Content-Type: application/json' \
+  -H 'Origin: http://localhost:3000' \
   -d '{"email":"growth@emailwarm.dev","password":"EmailWarm-Phase1-Test!"}'
 
-# Use the session to call the backend (mints a v1.<uid>.<exp>.<sig> bearer
-# token from the cookie via useApi — not directly callable from curl;
-# the backend's BetterAuthGuard verifies the HMAC, not the cookie)
-curl -sS -b /tmp/cookies.txt http://localhost:3000/api/inboxes
+# Use the session cookie to load a server-rendered page
+curl -sS -b /tmp/cookies.txt http://localhost:3000/inboxes
 ```
 
-> The backend is auth'd by **bearer token**, not by the cookie. The cookie
-> lives only on the frontend. To exercise the backend in a test, mint the
-> token the same way the frontend does — see `frontend/src/lib/bearer-token.ts`.
+> The backend (`http://localhost:4611`) is auth'd by **bearer token**, not by
+> the cookie. The cookie lives only on the frontend, and there is no
+> `/api/inboxes` proxy route on the frontend — the app calls the backend
+> directly with a `v1.<uid>.<exp>.<sig>` token. To exercise the backend in a
+> test, mint the token the same way the frontend does — see
+> `frontend/src/lib/bearer-token.ts`.
 
 ---
 

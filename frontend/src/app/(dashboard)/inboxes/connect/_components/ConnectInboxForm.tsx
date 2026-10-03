@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApi, ApiError } from '@/lib/api';
 import { useToasts } from '@/components/Toast';
 import {
@@ -14,15 +14,36 @@ import {
 
 type Tab = 'gmail' | 'outlook' | 'custom';
 
-// Backend owns the OAuth client_id/secret + state encoding. Frontend just
-// fetches the Google/Microsoft URL it should redirect to, then bounces the
-// browser there. Backend's /auth/callback/{google,microsoft} handles the
-// code exchange + token encryption + inbox creation, then redirects to /inboxes.
+// The API owns the OAuth client and the single-use state. This form asks it
+// for the provider URL and sends the browser there; the provider returns to
+// /api/mailbox-oauth/callback/{google,microsoft}, which completes the link
+// for the signed-in user and comes back here (with `link_error`) or to /inboxes.
+
+const LINK_ERRORS: Record<string, string> = {
+  denied: 'Access to the mailbox was not granted, so nothing was connected.',
+  state_invalid: 'That connection attempt expired or was already used. Please start again.',
+  provider_error: 'The mail provider did not complete the connection. Please try again.',
+  duplicate: 'This mailbox is already connected to another account.',
+  limit: 'You have reached the inbox limit for your plan.',
+  connection_failed:
+    'Access was granted, but the mailbox did not pass the connection check. Make sure IMAP is enabled for it, then try again.',
+};
 
 export function ConnectInboxForm() {
   const [tab, setTab] = useState<Tab>('gmail');
+  // Joining the shared pool is the owner's explicit choice, never a default.
+  const [poolConsent, setPoolConsent] = useState(false);
+  const linkError = useSearchParams().get('link_error');
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {linkError ? (
+        <div
+          role="alert"
+          className="rounded-t-2xl border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-800"
+        >
+          {LINK_ERRORS[linkError] ?? LINK_ERRORS.provider_error}
+        </div>
+      ) : null}
       <div className="flex border-b border-slate-200">
         <TabButton active={tab === 'gmail'} onClick={() => setTab('gmail')}>
           Gmail
@@ -35,10 +56,41 @@ export function ConnectInboxForm() {
         </TabButton>
       </div>
       <div className="p-6">
-        {tab === 'gmail' ? <GmailConnect /> : null}
-        {tab === 'outlook' ? <OutlookConnect /> : null}
-        {tab === 'custom' ? <CustomSmtpForm /> : null}
+        {tab === 'gmail' ? <GmailConnect poolConsent={poolConsent} /> : null}
+        {tab === 'outlook' ? <OutlookConnect poolConsent={poolConsent} /> : null}
+        {tab === 'custom' ? <CustomSmtpForm poolConsent={poolConsent} /> : null}
+        <PoolConsentField checked={poolConsent} onChange={setPoolConsent} />
       </div>
+    </div>
+  );
+}
+
+function PoolConsentField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <span className="text-sm text-slate-700">
+          <span className="font-medium text-slate-900">Join the shared warmup pool</span>
+          <span className="mt-1 block text-slate-600">
+            This inbox will exchange automated warmup emails with other customers’ inboxes: it
+            sends to them, and it automatically opens, stars, replies to and files the warmup
+            emails it receives into a “WarmupHub” folder. Leave this off to warm only against
+            your own private pool. You can change it later from the inbox page.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -67,7 +119,7 @@ function TabButton({
   );
 }
 
-function GmailConnect() {
+function GmailConnect({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const { show } = useToasts();
   const [busy, setBusy] = useState(false);
@@ -75,7 +127,9 @@ function GmailConnect() {
   async function startGmail() {
     setBusy(true);
     try {
-      const { url } = await api<{ url: string }>('/auth/gmail/connect');
+      const { url } = await api<{ url: string }>(
+        `/auth/gmail/connect?poolConsent=${poolConsent}`,
+      );
       window.location.href = url;
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to start Google connect';
@@ -102,7 +156,7 @@ function GmailConnect() {
   );
 }
 
-function OutlookConnect() {
+function OutlookConnect({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const { show } = useToasts();
   const [busy, setBusy] = useState(false);
@@ -110,7 +164,9 @@ function OutlookConnect() {
   async function startOutlook() {
     setBusy(true);
     try {
-      const { url } = await api<{ url: string }>('/auth/outlook/connect');
+      const { url } = await api<{ url: string }>(
+        `/auth/outlook/connect?poolConsent=${poolConsent}`,
+      );
       window.location.href = url;
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to start Microsoft connect';
@@ -137,7 +193,7 @@ function OutlookConnect() {
   );
 }
 
-function CustomSmtpForm() {
+function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const router = useRouter();
   const { show } = useToasts();
@@ -198,6 +254,7 @@ function CustomSmtpForm() {
       smtpUser: String(data.get('smtpUser') ?? ''),
       smtpPassword: String(data.get('smtpPassword') ?? ''),
       useImap,
+      poolConsent,
       dkimSelector: (data.get('dkimSelector') as string) || undefined,
     };
     if (useImap) {

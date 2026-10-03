@@ -20,7 +20,7 @@ import pg from 'pg';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const FRONTEND_URL = 'http://localhost:3000';
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'http://localhost:4611';
 const DATABASE_URL = 'postgresql://emailwarm:localdev@localhost:5432/emailwarm';
 const BETTER_AUTH_SECRET = 'dev-only-secret-do-not-use-in-prod-32-chars';
 const TEST_USER_PASSWORD = 'EmailWarm-Phase1-Test!';

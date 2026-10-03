@@ -38,7 +38,10 @@ export class ApiError extends Error {
 }
 
 function getApiUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  return (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4611').replace(
+    /\/+$/,
+    '',
+  );
 }
 
 /**
@@ -63,7 +66,7 @@ export async function serverApi<T = unknown>(
   if (userId) {
     const secret = process.env.BETTER_AUTH_SECRET;
     if (secret) {
-      hdrs.Authorization = `Bearer ${await mintBearerToken(userId, secret)}`;
+      hdrs.Authorization = `Bearer ${await mintBearerToken(userId, secret, 60_000)}`;
     }
   }
 

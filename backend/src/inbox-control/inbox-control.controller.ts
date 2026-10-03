@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   Param,
   Post,
   Req,
@@ -31,19 +32,22 @@ import { InboxControlService } from './inbox-control.service';
 export class InboxControlController {
   constructor(private readonly control: InboxControlService) {}
 
+  /**
+   * Bounce figures for the last 24 hours with the sample size behind them,
+   * and whether the inbox is currently held for exceeding the limit.
+   */
+  @Get(':id/bounce-stats')
+  async bounceStats(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
+    return this.control.bounceStats(req.userId!, id);
+  }
+
   @Post(':id/pause')
-  async pauseOne(
-    @Req() req: Request & { userId?: string },
-    @Param('id') id: string,
-  ) {
+  async pauseOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
     return this.control.pauseOne(req.userId!, id);
   }
 
   @Post(':id/resume')
-  async resumeOne(
-    @Req() req: Request & { userId?: string },
-    @Param('id') id: string,
-  ) {
+  async resumeOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
     return this.control.resumeOne(req.userId!, id);
   }
 

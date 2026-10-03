@@ -4,6 +4,7 @@ import type { ScoreHistoryResponse } from '@/lib/activity-types';
 import { InboxPageHeader } from './_components/InboxPageHeader';
 import { InboxDashboardTabs } from './_components/InboxDashboardTabs';
 import { InboxControlButtons } from '@/app/(dashboard)/_components/InboxControlButtons';
+import { PoolParticipation } from './_components/PoolParticipation';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,8 @@ interface InboxResponse {
   email: string;
   provider: string;
   status: string;
+  statusReason?: string | null;
+  poolConsentAt?: string | null;
   warmupDay: number;
   // T013 also attaches `analysis`, `warmupSpeed`, etc. We only need a
   // handful here, but the server-side inbox response is the same
@@ -62,6 +65,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         status={inbox.status}
         warmupDay={inbox.warmupDay ?? 0}
         score={scoreHistory}
+      />
+
+      <PoolParticipation
+        inboxId={inbox.id}
+        status={inbox.status}
+        statusReason={inbox.statusReason ?? null}
+        poolConsentAt={inbox.poolConsentAt ?? null}
       />
 
       {/* Page-level Pause/Resume. The same component also shows up as a

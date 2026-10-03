@@ -1,5 +1,9 @@
 import { plainToInstance } from 'class-transformer';
-import { validateSync, IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { validateSync, IsString, IsNotEmpty, MinLength, ValidateIf } from 'class-validator';
+
+// Stripe is not configured in demo mode (DEMO_MODE=true): accounts run on
+// fixed test credits and no payment calls are made.
+const stripeRequired = () => process.env.DEMO_MODE !== 'true';
 
 class EnvironmentVariables {
   @IsString()
@@ -30,10 +34,12 @@ class EnvironmentVariables {
   @MinLength(16)
   INTERNAL_SECRET: string;
 
+  @ValidateIf(stripeRequired)
   @IsString()
   @IsNotEmpty()
   STRIPE_SECRET_KEY: string;
 
+  @ValidateIf(stripeRequired)
   @IsString()
   @IsNotEmpty()
   STRIPE_WEBHOOK_SECRET: string;
@@ -58,14 +64,17 @@ class EnvironmentVariables {
   @IsNotEmpty()
   MICROSOFT_CLIENT_SECRET: string;
 
+  @ValidateIf(stripeRequired)
   @IsString()
   @IsNotEmpty()
   STRIPE_PRICE_STARTER: string;
 
+  @ValidateIf(stripeRequired)
   @IsString()
   @IsNotEmpty()
   STRIPE_PRICE_GROWTH: string;
 
+  @ValidateIf(stripeRequired)
   @IsString()
   @IsNotEmpty()
   STRIPE_PRICE_AGENCY: string;

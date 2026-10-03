@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EmailWarm — Architecture Map</title>
+<style>
+:root {
+  /* Palette #10 — Education & Charts (rebalanced for dev documentation) */
+  --bg: #fafaf7;
+  --bg-card: #ffffff;
+  --bg-muted: #f4f3ee;
+  --border: #e5e3da;
+  --border-strong: #d4d1be;
+  --ink: #264653;
+  --ink-2: #4a5963;
+  --ink-3: #7a858d;
+  --built: #2a9d8f;
+  --built-bg: #e6f4f1;
+  --pending: #e9c46a;
+  --pending-bg: #fbf3dc;
+  --progress: #f4a261;
+  --progress-bg: #fdeede;
+  --blocked: #e76f51;
+  --blocked-bg: #fbe6e0;
+  --flow: #5b8def;
+  --flow-bg: #eaf1fd;
+  --data: #7c5ce0;
+  --data-bg: #f0ebfb;
+  --shadow: 0 1px 2px rgba(38, 70, 83, 0.04), 0 4px 12px rgba(38, 70, 83, 0.06);
+  --shadow-lift: 0 2px 4px rgba(38, 70, 83, 0.06), 0 8px 24px rgba(38, 70, 83, 0.10);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+  --mono: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+a { color: var(--flow); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ===== Top bar (sticky) ===== */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(250, 250, 247, 0.85);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-inner {
+  max-width: 1320px; margin: 0 auto;
+  padding: 10px 28px;
+  display: flex; align-items: center; gap: 28px;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; color: var(--ink); font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.brand-mark {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--ink) 0%, #3a7b8b 100%);
+  display: grid; place-items: center;
+  color: white; font-weight: 800; font-size: 13px;
+}
+.nav-links {
+  display: flex; gap: 4px; flex: 1;
+  overflow-x: auto;
+}
+.nav-link {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap;
+  transition: background 120ms;
+}
+.nav-link:hover { background: var(--bg-muted); text-decoration: none; }
+.nav-stats {
+  display: flex; gap: 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.nav-stats b { color: var(--ink); font-weight: 600; }
+
+/* ===== Main canvas ===== */
+.canvas {
+  max-width: 1320px; margin: 0 auto;
+  padding: 32px 28px 80px;
+}
+.hero {
+  margin-bottom: 36px;
+}
+.hero-eyebrow {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.hero-title {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+.hero-sub {
+  font-size: 16px;
+  color: var(--ink-2);
+  max-width: 760px;
+  margin: 0 0 20px;
+}
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-2);
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; }
+
+/* ===== Section ===== */
+.section { margin-top: 56px; }
+.section-head {
+  display: flex; align-items: baseline; gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  background: var(--bg-muted);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.section-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin-left: auto;
+}
+
+/* ===== KPI tiles ===== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+.kpi {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.kpi-label {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.kpi-foot {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* ===== Architecture diagram ===== */
+.diagram {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+.diag-row {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.diag-row.flow { grid-template-columns: 1fr 1fr; }
+.diag-row.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+.diag-block {
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  position: relative;
+}
+.diag-block.flow-style {
+  background: var(--flow-bg);
+  border-color: #c8d8f5;
+}
+.diag-block.data-style {
+  background: var(--data-bg);
+  border-color: #d8cdf5;
+}
+.diag-block-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.diag-block.flow-style .diag-block-title { color: var(--flow); }
+.diag-block.data-style .diag-block-title { color: var(--data); }
+.diag-block-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.diag-block-list {
+  list-style: none;
+  padding: 0; margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.diag-block-list li {
+  padding: 3px 0;
+  display: flex; gap: 6px; align-items: baseline;
+}
+.diag-block-list li::before {
+  content: "•";
+  color: var(--ink-3);
+}
+.arrow-down {
+  display: flex; justify-content: center;
+  font-size: 20px; color: var(--ink-3);
+  margin: 4px 0;
+  height: 20px;
+  align-items: center;
+}
+.arrow-down::before { content: "↓"; }
+
+/* ===== Module grid ===== */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.module {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--built);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 160ms, transform 160ms;
+  position: relative;
+}
+.module:hover {
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
+}
+.module[data-status="built"] { border-left-color: var(--built); }
+.module[data-status="partial"] { border-left-color: var(--progress); }
+.module[data-status="pending"] { border-left-color: var(--pending); }
+.module[data-status="blocked"] { border-left-color: var(--blocked); }
+.module-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.module-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: var(--mono);
+}
+.module-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.module-badge.built { background: var(--built-bg); color: var(--built); }
+.module-badge.partial { background: var(--progress-bg); color: #c46d2c; }
+.module-badge.pending { background: var(--pending-bg); color: #8a6a14; }
+.module-badge.blocked { background: var(--blocked-bg); color: var(--blocked); }
+.module-desc {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.module-meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+.module-detail {
+  display: none;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.module.open .module-detail { display: block; }
+.module-detail ul { margin: 6px 0 0; padding-left: 16px; }
+.module-detail li { margin-bottom: 3px; }
+.module-detail code {
+  background: var(--bg-muted);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+/* ===== Filters ===== */
+.filters {
+  display: flex; gap: 8px; margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--ink-2);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 120ms;
+}
+.filter-btn:hover { border-color: var(--ink-3); }
+.filter-btn.active {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+}
+
+/* ===== Wave timeline ===== */
+.wave-timeline {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.wave-track {
+  display: flex;
+  gap: 0;
+  min-width: 1080px;
+  position: relative;
+}
+.wave {
+  flex: 1;
+  min-width: 90px;
+  position: relative;
+  padding: 0 8px;
+}
+.wave-marker {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.wave-num {
+  display: inline-block;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--built);
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 36px;
+  text-align: center;
+  font-family: var(--mono);
+}
+.wave.partial .wave-num { background: var(--progress); }
+.wave.done .wave-num { background: var(--built); }
+.wave.pending .wave-num {
+  background: var(--pending);
+  color: var(--ink);
+}
+.wave-name {
+  font-size: 11px;
+  color: var(--ink-2);
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 6px;
+  min-height: 28px;
+}
+.wave-tasks {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+  font-family: var(--mono);
+}
+.wave-line {
+  position: absolute;
+  top: 50px;
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  background: var(--built);
+}
+.wave.pending .wave-line { background: var(--pending); }
+.wave.partial .wave-line { background: var(--progress); }
+.wave-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ===== Tables ===== */
+.tbl {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  font-size: 13px;
+}
+.tbl th, .tbl td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.tbl thead th {
+  background: var(--bg-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.tbl tbody tr:last-child td { border-bottom: none; }
+.tbl tbody tr:hover { background: var(--bg-muted); }
+.tbl code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+.tbl-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tbl-status.built { background: var(--built-bg); color: var(--built); }
+.tbl-status.partial { background: var(--progress-bg); color: #c46d2c; }
+.tbl-status.pending { background: var(--pending-bg); color: #8a6a14; }
+
+/* ===== Page tree ===== */
+.page-tree {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  font-family: var(--mono);
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.page-tree ul {
+  list-style: none;
+  padding-left: 18px;
+  margin: 4px 0;
+  border-left: 1px dashed var(--border-strong);
+}
+.page-tree li {
+  padding: 3px 0;
+  position: relative;
+}
+.page-tree li::before {
+  content: "└─";
+  color: var(--ink-3);
+  position: absolute;
+  left: -16px;
+}
+.page-tree .file {
+  color: var(--ink);
+}
+.page-tree .file .ext { color: var(--ink-3); }
+.page-tree .dir {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.page-tree .built-tag {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  border-radius: 3px;
+  background: var(--built-bg);
+  color: var(--built);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ===== Pending list ===== */
+.pending-list {
+  display: grid;
+  gap: 10px;
+}
+.pending-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--pending);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+.pending-item.blocked { border-left-color: var(--blocked); }
+.pending-item.partial { border-left-color: var(--progress); }
+.pending-id {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-muted);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--ink-2);
+}
+.pending-body { }
+.pending-title {
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.pending-desc {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.pending-meta {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+/* ===== Stack panel ===== */
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.stack-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+.stack-card-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.stack-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+.stack-item:last-child { border-bottom: none; }
+.stack-item-label { color: var(--ink-2); }
+.stack-item-value {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ===== Footer ===== */
+.footer {
+  margin-top: 64px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-3);
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+
+/* responsive */
+@media (max-width: 720px) {
+  .canvas { padding: 16px; }
+  .topbar-inner { padding: 8px 12px; gap: 12px; }
+  .nav-links { display: none; }
+  .nav-stats { font-size: 11px; }
+  .hero-title { font-size: 26px; }
+  .diag-row.flow, .diag-row.cols3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark">EW</div>
+      <span>EmailWarm Architecture</span>
+    </div>
+    <nav class="nav-links">
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#architecture">System map</a>
+      <a class="nav-link" href="#backend">Backend modules</a>
+      <a class="nav-link" href="#frontend">Frontend pages</a>
+      <a class="nav-link" href="#queues">Queues</a>
+      <a class="nav-link" href="#database">Database</a>
+      <a class="nav-link" href="#waves">Wave timeline</a>
+      <a class="nav-link" href="#pending">Pending</a>
+      <a class="nav-link" href="#stack">Stack</a>
+    </nav>
+    <div class="nav-stats">
+      <span><b>28</b> tasks</span>
+      <span><b>546</b> tests pass</span>
+      <span><b>Jun 2026</b></span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HERO ============ -->
+<main class="canvas">
+
+<section class="hero" id="overview">
+  <div class="hero-eyebrow">Project map · Last updated 2026-06-25</div>
+  <h1 class="hero-title">EmailWarm — Built vs. Pending</h1>
+  <p class="hero-sub">
+    Solo-built SaaS that warms cold-outreach inboxes so cold emails land in Primary, not Spam.
+    NestJS API + Next.js 16 dashboard, backed by PostgreSQL and BullMQ on GCP.
+    Phase 1 is feature-complete in code; this page shows every piece, what's shipping, and what's left.
+  </p>
+  <div class="legend">
+    <div class="legend-item"><div class="swatch" style="background:var(--built)"></div> Built &amp; shipped</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--progress)"></div> Partial / fix-in-flight</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--pending)"></div> Pending / designed</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--blocked)"></div> Blocked / needs decision</div>
+  </div>
+</section>
+
+<!-- ============ KPI ============ -->
+<section class="section" style="margin-top: 32px;">
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Tasks completed</div>
+      <div class="kpi-value">28 / 29</div>
+      <div class="kpi-foot">across 12 waves · T029 designed</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Backend modules</div>
+      <div class="kpi-value">18</div>
+      <div class="kpi-foot">all wired into AppModule</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Database tables</div>
+      <div class="kpi-value">14</div>
+      <div class="kpi-foot">Drizzle ORM · 3 migrations applied</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">BullMQ queues</div>
+      <div class="kpi-value">11</div>
+      <div class="kpi-foot">+ 4 cron schedules on processors</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Frontend pages</div>
+      <div class="kpi-value">9</div>
+      <div class="kpi-foot">Next.js 16 App Router</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Test pass rate</div>
+      <div class="kpi-value">546 / 546</div>
+      <div class="kpi-foot">backend · tsc/build/lint clean</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE DIAGRAM ============ -->
+<section class="section" id="architecture">
+  <div class="section-head">
+    <span class="section-num">01</span>
+    <h2 class="section-title">System map</h2>
+    <span class="section-sub">High-level data flow</span>
+  </div>
+
+  <div class="diagram">
+    <!-- Row 1: Frontend -->
+    <div class="diag-row">
+      <div class="diag-block flow-style" style="grid-column: 1 / -1;">
+        <div class="diag-block-title">Browser</div>
+        <div class="diag-block-name">Next.js 16 frontend · React 19 · Tailwind 4 · recharts</div>
+        <ul class="diag-block-list">
+          <li>better-auth client → signs in via email/password (HMAC bearer)</li>
+          <li>Server Components fetch from NestJS through <code>api-server.ts</code> using a minted bearer token</li>
+          <li>SWR for client polling · PulseDot for live status</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow-down"></div>
+
+    <!-- Row 2: Backend -->
+    <div class="diag-row flow">
+      <div class="diag-block flow-style">
+        <div class="diag-block-title">HTTP API</div>
+        <div class="diag-block-name">NestJS · Node 22 · TypeScript</div>
+        <ul class="diag-block-list">
+          <li><b>18 modules</b> · 60+ REST endpoints</li>
+          <li>BetterAuthGuard on every non-public path</li>
+          <li>Structured logging (pino · pino-pretty)</li>
+          <li>5 <code>logs:*</code> CLI recipes</li>
+        </ul>
+      </div>
+      <div class="diag-block">
+        <div class="diag-block-title">Cron schedules</div>
+        <div class="diag-block-name">@nestjs/schedule</div>
+        <ul class="diag-block-list">
+          <li>WarmupService · <code>05:00 UTC</code> daily</li>
+          <li>DnsCheckProcessor · <code>06:00 UTC</code> daily</li>
+          <li>BlacklistCheck · <code>every 6h</code></li>
+          <li>TrialService · trial expiry</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow-down"></div>
+
+    <!-- Row 3: External services -->
+    <div class="diag-row cols3">
+      <div class="diag-block">
+        <div class="diag-block-title">Email send / receive</div>
+        <div class="diag-block-name">Gmail · Outlook · Custom SMTP/IMAP</div>
+        <ul class="diag-block-list">
+          <li>Nodemailer (raw SMTP)</li>
+          <li>imapflow (OAuth-aware IMAP)</li>
+          <li>Encrypted creds (AES-256-GCM)</li>
+        </ul>
+      </div>
+      <div class="diag-block">
+        <div class="diag-block-title">AI content</div>
+        <div class="diag-block-name">Anthropic Claude API</div>
+        <ul class="diag-block-list">
+          <li>Industry-aware warmup bodies</li>
+          <li>10s timeout + 50-template fallback</li>
+          <li>No body stored &gt; 7 days (privacy)</li>
+        </ul>
+      </div>
+      <div class="diag-block">
+        <div class="diag-block-title">Payments</div>
+        <div class="diag-block-name">Stripe</div>
+        <ul class="diag-block-list">
+          <li>Checkout + webhook + portal</li>
+          <li>Trial · Starter · Growth · Agency · Enterprise</li>
+          <li><code>stripe_events</code> table for idempotency</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow-down"></div>
+
+    <!-- Row 4: Data layer -->
+    <div class="diag-row flow">
+      <div class="diag-block data-style">
+        <div class="diag-block-title">Relational store</div>
+        <div class="diag-block-name">PostgreSQL 16 · Drizzle ORM</div>
+        <ul class="diag-block-list">
+          <li>14 tables · 3 migrations applied</li>
+          <li>Tenant isolation by <code>user_id</code></li>
+          <li>Indexes on <code>domain</code>, <code>provider</code>, <code>inbox_id</code></li>
+        </ul>
+      </div>
+      <div class="diag-block data-style">
+        <div class="diag-block-title">Queue + cache</div>
+        <div class="diag-block-name">Redis 7 · BullMQ</div>
+        <ul class="diag-block-list">
+          <li>11 queues with millisecond delays</li>
+          <li>Per-inbox rate limiting + parent-child flows</li>
+          <li>NDJSON log tail for live activity feed</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BACKEND MODULES ============ -->
+<section class="section" id="backend">
+  <div class="section-head">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Backend modules</h2>
+    <span class="section-sub">Click a module to see what's inside</span>
+  </div>
+
+  <div class="filters" id="moduleFilters">
+    <button class="filter-btn active" data-filter="all">All (18)</button>
+    <button class="filter-btn" data-filter="built">Built (15)</button>
+    <button class="filter-btn" data-filter="partial">Partial (2)</button>
+    <button class="filter-btn" data-filter="pending">Designed (1)</button>
+  </div>
+
+  <div class="module-grid" id="moduleGrid">
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">AuthModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">better-auth bearer-token guard · user sync on first sign-in · internal endpoint shared-secret auth.</div>
+      <div class="module-meta">5 controllers · 5 services</div>
+      <div class="module-detail">
+        <b>Highlights:</b>
+        <ul>
+          <li><code>BetterAuthGuard</code> — HMAC verify, redact header in logs</li>
+          <li><code>UserSyncService.upsertUser</code> — wires plan='trial', 7-day default</li>
+          <li><code>internal.controller.ts</code> — <code>POST /internal/user-sync</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">InboxModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Connect Gmail/Outlook/SMTP/IMAP, store encrypted creds, run pre-check, bulk batch upload.</div>
+      <div class="module-meta">inbox + imap + smtp + oauth + dto</div>
+      <div class="module-detail">
+        <b>Endpoints:</b>
+        <ul>
+          <li><code>POST /inboxes/connect/{gmail,outlook,smtp}</code></li>
+          <li><code>POST /inboxes/batch</code>, <code>/batch/csv</code></li>
+          <li>Per-step precheck errors (422 with <code>errCode</code>, host, port)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">WarmupModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">The brain. Daily ramp, pairing, send + receive + engage. The whole reason EmailWarm exists.</div>
+      <div class="module-meta">10 processors + 5 services</div>
+      <div class="module-detail">
+        <b>Services:</b> WarmupService (schedule + pause/resume), RampService (linear, cap 200), PairingService (same-domain hard block), ContentService (Claude + 50-template fallback)<br>
+        <b>Processors:</b> WarmupSendProcessor · WarmupReceiveProcessor (rescue→open→star→reply→file)
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">MonitorModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">DNS + RBL checks. SPF/DKIM/DMARC/MX/rDNS via Cloudflare/Google DNS. 8-zone blacklist with 5s timeouts.</div>
+      <div class="module-meta">2 processors · 2 services · 8 RBLs (out of 100+ planned)</div>
+      <div class="module-detail">
+        <b>Crons:</b> <code>0 6 * * *</code> daily DNS · <code>0 0,6,12,18 * * *</code> every 6h blacklist<br>
+        <b>Real bug caught:</b> rDNS skip when sendingIp unset; first-ever check never alerts.
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">ScoringModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Composite 0–100 reputation score from DNS + blacklist + placement, with trend and 90-day history.</div>
+      <div class="module-meta">3 services · 1 processor · 1 controller</div>
+      <div class="module-detail">
+        <b>Algorithm:</b> DNS (40) + Blacklist (20) + Placement (40) — each component has its own scoring function.<br>
+        <b>Real bug caught:</b> trend requires ≥4 rows before up/down, else 'stable'; never alerts newly-connected inbox.
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">PlacementModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Send to seed list (10 quick / 35 full) via BCC with shared Message-ID. Classify Gmail X-GM-LABELS + Outlook/Yahoo folders.</div>
+      <div class="module-meta">4 services · 1 processor · 1 controller</div>
+      <div class="module-detail">
+        <b>Plan quotas:</b> trial/starter:1 · growth:5 · agency:unlimited (429 via HttpException)<br>
+        <b>Real bug caught:</b> X-GM-LABELS <code>\Category_Social</code>→missing (not primary), kept Promotions distinct from Spam.
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">DiagnosticsModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">AI-powered cause analysis (Claude) with issue codes &amp; fix steps · readiness report at graduation.</div>
+      <div class="module-meta">3 services · 2 processors · 1 controller</div>
+      <div class="module-detail">
+        <b>Triggers:</b> manual · <code>auto_blacklist</code> · <code>auto_drop</code><br>
+        <b>Queue:</b> <code>diagnostics</code> · <code>readiness-report</code>
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">NotifyModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Email alerts via Nodemailer + Slack webhook delivery for every event type.</div>
+      <div class="module-meta">2 services · 1 processor</div>
+      <div class="module-detail">
+        <b>Events:</b> blacklist_hit · score_drop · warmup_graduated · trial_expiring · dns_critical · diagnostics_ready
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">BillingModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Stripe checkout + webhook + portal · trial service · plan-gating helpers (assertInboxLimit, assertPlan).</div>
+      <div class="module-meta">3 services · 2 controllers</div>
+      <div class="module-detail">
+        <b>Tiers:</b> trial · starter · growth · agency · enterprise<br>
+        <b>Stripe webhook</b> writes to <code>stripe_events</code> for idempotency
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">AnalysisModule</div>
+        <span class="module-badge built">Span</span>
+      </div>
+      <div class="module-desc">Initial inbox &amp; pool-inbox analysis — DNS + health score on every uploaded row.</div>
+      <div class="module-meta">1 service · 1 processor</div>
+      <div class="module-detail">
+        <b>Queue:</b> <code>inbox-analysis</code><br>
+        <b>Anti-cycle pattern:</b> exposes read methods as plain functions to avoid Nest DI import cycle (Inbox → Analysis → Monitor → Warmup → Inbox)
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">PoolInboxModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Private pool CRUD + reanalyze route. The other half of the closed-loop warmup.</div>
+      <div class="module-meta">3 controllers/services</div>
+      <div class="module-detail">
+        <b>Endpoints:</b> <code>GET/POST/DELETE /pool-inboxes[/:id]</code> · <code>POST /pool-inboxes/:id/analyze</code> (resets pending, enqueues analysis)
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">ActivityModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">9 endpoints powering the 5-tab inbox activity dashboard. NDJSON log tail for the Logs tab.</div>
+      <div class="module-meta">9 endpoints · T027</div>
+      <div class="module-detail">
+        <b>Endpoints:</b> <code>activity</code>, <code>sends</code>, <code>dns-history</code>, <code>blacklist-history</code>, <code>placement-history</code>, <code>score-history</code>, <code>logs</code>, <code>POST checks/dns</code>, <code>POST checks/blacklist</code>
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">PoolInboxActivityModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Pool inbox panel endpoints — 4-tab slide-over + connection-summary strip (no secrets shipped).</div>
+      <div class="module-meta">5 endpoints · T028</div>
+      <div class="module-detail">
+        <b>Endpoints:</b> <code>connection-summary</code> · <code>activity</code> · <code>activity-stats</code> · <code>pairings</code> · <code>logs</code>
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">InboxControlModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">Single + bulk pause/resume with ownership-checked 404. Resume re-queues today's sends immediately.</div>
+      <div class="module-meta">4 endpoints · bulk body &le; 200 ids</div>
+      <div class="module-detail">
+        <b>Endpoints:</b> <code>POST /inboxes/:id/pause</code> · <code>resume</code> · <code>POST /inboxes/pause</code> (bulk) · <code>resume</code> (bulk)
+      </div>
+    </div>
+
+    <div class="module" data-status="built">
+      <div class="module-head">
+        <div class="module-name">QueueModule</div>
+        <span class="module-badge built">Built</span>
+      </div>
+      <div class="module-desc">11 BullMQ queues registered · QueueService wraps add/getJobCounts/removeJobsForSender/Receiver.</div>
+      <div class="module-meta">11 queues · queue.module.ts</div>
+      <div class="module-detail">
+        <b>Retention:</b> completed kept 1k×24h · failed kept 500×72h
+      </div>
+    </div>
+
+    <div class="module" data-status="partial">
+      <div class="module-head">
+        <div class="module-name">MonitorModule</div>
+        <span class="module-badge partial">Partial</span>
+      </div>
+      <div class="module-desc">Only 8 RBLs implemented (Spamhaus + 7 zones). Spec asks for 100+ — backlog is real.</div>
+      <div class="module-meta">8 / 100+ RBLs</div>
+      <div class="module-detail">
+        <b>Gap:</b> <code>monitor/rbl-list.ts</code> ships with 8 minimum zones. The 100+ target needs MXToolbox/Spamhaus commercial feeds.<br>
+        <b>OD005:</b> decision pending — buy RBL feed vs build vs ship with 8.
+      </div>
+    </div>
+
+    <div class="module" data-status="partial">
+      <div class="module-head">
+        <div class="module-name">NotifyModule</div>
+        <span class="module-badge partial">Partial</span>
+      </div>
+      <div class="module-desc">Email + Slack channels wired. SMS + in-app toast channel not implemented.</div>
+      <div class="module-meta">2 / 4 channels</div>
+      <div class="module-detail">
+        <b>Implemented:</b> email (Nodemailer) · Slack (webhook)<br>
+        <b>Pending:</b> in-app toast (queued behind frontend plan) · SMS (no provider picked)
+      </div>
+    </div>
+
+    <div class="module" data-status="pending">
+      <div class="module-head">
+        <div class="module-name">T029 · Real-seen detection</div>
+        <span class="module-badge pending">Designed</span>
+      </div>
+      <div class="module-desc">Wave 13. Detect real human opens via on-demand IMAP <code>\Seen</code> refresh, not just our worker-set flags.</div>
+      <div class="module-meta">spec written · migration 0005 designed</div>
+      <div class="module-detail">
+        <b>Path A:</b> opportunistic snapshot in WarmupReceiveProcessor (before simulated open) — if <code>\Seen</code> already true → real human open<br>
+        <b>Path B:</b> <code>POST /inboxes/:id/refresh-real-opens</code> (synchronous, ≤50 rows/30d window, idempotent)<br>
+        <b>Schema:</b> <code>opened_source</code> ('simulated' | 'imap_rescan')
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ FRONTEND PAGES ============ -->
+<section class="section" id="frontend">
+  <div class="section-head">
+    <span class="section-num">03</span>
+    <h2 class="section-title">Frontend pages</h2>
+    <span class="section-sub">Next.js 16 App Router · 9 routes · 13 components</span>
+  </div>
+
+  <div class="page-tree">
+    <ul style="padding-left:0; border:none;">
+      <li class="dir">src/app/</li>
+      <ul>
+        <li><span class="file">layout<span class="ext">.tsx</span></span> · <span class="built-tag">Shell</span></li>
+        <li><span class="file">globals.css</span> · <span class="built-tag">Tailwind 4</span></li>
+        <li class="dir">sign-in/</li>
+        <ul>
+          <li><span class="file">page.tsx</span> · <span class="built-tag">better-auth</span></li>
+        </ul>
+        <li class="dir">sign-up/</li>
+        <ul>
+          <li><span class="file">page.tsx</span> · <span class="built-tag">better-auth</span></li>
+        </ul>
+        <li class="dir">(dashboard)/</li>
+        <ul>
+          <li><span class="file">layout.tsx</span> · <span class="built-tag">DashboardShell</span></li>
+          <li><span class="file">page.tsx</span> · home</li>
+          <li class="dir">inboxes/</li>
+          <ul>
+            <li><span class="file">page.tsx</span> · <span class="built-tag">list + bulk</span></li>
+            <li class="dir">connect/</li>
+            <ul>
+              <li><span class="file">page.tsx</span></li>
+              <li><span class="file">_components/ConnectInboxForm.tsx</span> · <span class="built-tag">SmtpFormHints</span></li>
+            </ul>
+            <li class="dir">[id]/</li>
+            <ul>
+              <li><span class="file">page.tsx</span> · <span class="built-tag">5-tab activity dashboard</span></li>
+              <li><span class="file">_components/{ActivityFeedTab, SentEmailsTab, DnsBlacklistTab, PlacementTab, LogsTab, InboxPageHeader, InboxDashboardTabs, RunPlacementButton}.tsx</span></li>
+              <li class="dir">diagnostics/</li>
+              <ul>
+                <li><span class="file">page.tsx</span> · AI diagnostics detail</li>
+              </ul>
+            </ul>
+          </ul>
+          <li class="dir">pool/</li>
+          <ul>
+            <li><span class="file">page.tsx</span> · <span class="built-tag">list + batch upload</span></li>
+            <li><span class="file">_components/{PoolPageClient, PoolInboxGrid, HealthScoreGauge, ReadinessBadge, ReanalyzeButton, RemovePoolInboxButton, ConnectionSummaryStrip, PoolActivityTab, PoolPairingsTab, PoolLogsTab}.tsx</span></li>
+            <li class="dir">[id]/</li>
+            <ul>
+              <li><span class="file">page.tsx</span> · <span class="built-tag">4-tab detail</span></li>
+            </ul>
+          </ul>
+          <li class="dir">billing/</li>
+          <ul>
+            <li><span class="file">page.tsx</span> · Stripe portal</li>
+          </ul>
+          <li class="dir">_components/</li>
+          <ul>
+            <li><span class="file">{Sidebar, Topbar, DashboardShell, PulseDot, ReputationGauge, ScoreHistoryChart, DnsStatusCard, InboxStatusBadge, PlacementBar, PlanGate, Toast, BatchUploadCsv, BatchUploadWizard, BulkInboxActions, InboxControlButtons, InboxListTable, AnalysisCells, SmtpFormHints}.tsx</span></li>
+          </ul>
+          <li class="dir">_lib/</li>
+          <ul>
+            <li><span class="file">data.ts</span> · Server-component data fetchers</li>
+          </ul>
+        </ul>
+        <li class="dir">lib/</li>
+        <ul>
+          <li><span class="file">{api, api-server, auth, auth-server, bearer-token, format, types, plan-config, issue-catalog, use-polling, user-sync, activity-types, pool-activity-types}.ts</span></li>
+        </ul>
+      </ul>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ QUEUES ============ -->
+<section class="section" id="queues">
+  <div class="section-head">
+    <span class="section-num">04</span>
+    <h2 class="section-title">BullMQ queues</h2>
+    <span class="section-sub">11 queues · Redis 7 · millisecond delays</span>
+  </div>
+
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th style="width:22%;">Queue</th>
+        <th style="width:22%;">Processor</th>
+        <th>Triggered by</th>
+        <th style="width:18%;">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>warmup-send</code></td>
+        <td>WarmupSendProcessor</td>
+        <td>WarmupService @ 05:00 UTC + resume</td>
+        <td><span class="tbl-status built">2–240min</span></td>
+      </tr>
+      <tr>
+        <td><code>warmup-receive</code></td>
+        <td>WarmupReceiveProcessor</td>
+        <td>warmup-send enqueues with delay</td>
+        <td><span class="tbl-status built">rescue→open→star→reply→file</span></td>
+      </tr>
+      <tr>
+        <td><code>dns-check</code></td>
+        <td>DnsCheckProcessor</td>
+        <td>Daily 06:00 UTC + manual POST</td>
+        <td><span class="tbl-status built">5 checks / inbox</span></td>
+      </tr>
+      <tr>
+        <td><code>blacklist-check</code></td>
+        <td>BlacklistCheckProcessor</td>
+        <td>Every 6h + manual POST</td>
+        <td><span class="tbl-status partial">8 / 100+ RBLs</span></td>
+      </tr>
+      <tr>
+        <td><code>placement-test</code></td>
+        <td>PlacementTestProcessor</td>
+        <td>POST /inboxes/:id/placement-test</td>
+        <td><span class="tbl-status built">5min delay · plan quota</span></td>
+      </tr>
+      <tr>
+        <td><code>score-compute</code></td>
+        <td>ScoreComputeProcessor</td>
+        <td>DNS / blacklist / placement completion</td>
+        <td><span class="tbl-status built">trend · drop ≥15 alert</span></td>
+      </tr>
+      <tr>
+        <td><code>notify</code></td>
+        <td>NotifyProcessor</td>
+        <td>Any alert-triggering event</td>
+        <td><span class="tbl-status built">email + Slack</span></td>
+      </tr>
+      <tr>
+        <td><code>token-refresh</code></td>
+        <td>— (event-driven)</td>
+        <td>Inbox connect for OAuth inboxes</td>
+        <td><span class="tbl-status built">pre-expiry refresh</span></td>
+      </tr>
+      <tr>
+        <td><code>readiness-report</code></td>
+        <td>ReadinessReportProcessor</td>
+        <td>WarmupService on day 28 graduation</td>
+        <td><span class="tbl-status built">asymmetric missing-data</span></td>
+      </tr>
+      <tr>
+        <td><code>diagnostics</code></td>
+        <td>DiagnosticsProcessor</td>
+        <td>Manual + auto_blacklist + auto_drop</td>
+        <td><span class="tbl-status built">Claude API · issue codes</span></td>
+      </tr>
+      <tr>
+        <td><code>inbox-analysis</code></td>
+        <td>InboxAnalysisProcessor</td>
+        <td>Batch upload + POST /pool-inboxes/:id/analyze</td>
+        <td><span class="tbl-status built">DNS + health score</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ DATABASE ============ -->
+<section class="section" id="database">
+  <div class="section-head">
+    <span class="section-num">05</span>
+    <h2 class="section-title">Database schema</h2>
+    <span class="section-sub">14 tables · PostgreSQL 16 · Drizzle ORM</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px;">
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">users</div><span class="module-badge built">built</span></div>
+      <div class="module-desc"><code>id</code> · <code>email</code> · <code>plan</code> · <code>trialEndsAt</code> · <code>stripeCustomerId</code> · <code>slackWebhookUrl</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">inboxes</div><span class="module-badge built">built</span></div>
+      <div class="module-desc"><code>email</code> · <code>provider</code> · OAuth tokens (encrypted) · SMTP/IMAP creds (encrypted) · <code>status</code> · <code>warmupDay</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">pool_members</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Shared-pool members · <code>domain</code> + <code>provider</code> indexed · <code>quarantined</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">pool_inboxes</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Tenant-private pool · <code>encryptedCredentials</code> JSONB · <code>activePairs</code> counter</div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">warmup_sends</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Every send row · <code>openedAt</code> · <code>repliedAt</code> · <code>spamLandedAt</code> · <code>rescuedAt</code> · <code>filedAt</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">inbox_analysis</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Latest DNS+health snapshot · <code>spfValid</code>/<code>dkimValid</code>/<code>dmarcValid</code>/<code>mxValid</code>/<code>rdnsValid</code> · <code>healthScore</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">dns_checks</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Per-inbox daily DNS run · booleans only · 5 fields checked</div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">blacklist_checks</div><span class="module-badge built">built</span></div>
+      <div class="module-desc"><code>rblResults</code> JSONB of {zone, listed} · derived <code>listedCount</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">placement_tests</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">BCC send with shared <code>messageId</code> · <code>primary/promotions/spam</code> counts · <code>placementScore</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">seed_inboxes</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Platform-controlled seed accounts (encrypted creds) · currently empty in dev</div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">reputation_scores</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Composite 0–100 history · <code>breakdown</code> JSONB · <code>trigger</code></div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">diagnostics</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">AI-generated · <code>issueCodes</code> · <code>fixSteps</code> · <code>trigger</code> ('manual' / 'auto_blacklist' / 'auto_drop')</div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">stripe_events</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Webhook idempotency log · <code>eventId</code> unique · <code>payload</code> JSONB</div>
+    </div>
+    <div class="module" data-status="built">
+      <div class="module-head"><div class="module-name">notifications</div><span class="module-badge built">built</span></div>
+      <div class="module-desc">Every notify job · <code>channel</code> (email|slack) · <code>status</code> · <code>eventType</code></div>
+    </div>
+    <div class="module" data-status="pending">
+      <div class="module-head"><div class="module-name">warmup_sends + opened_source</div><span class="module-badge pending">migration 0005</span></div>
+      <div class="module-desc">T029 schema migration — <code>opened_source text CHECK (simulated|imap_rescan)</code></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WAVE TIMELINE ============ -->
+<section class="section" id="waves">
+  <div class="section-head">
+    <span class="section-num">06</span>
+    <h2 class="section-title">Wave timeline</h2>
+    <span class="section-sub">W0 (2026-06-20) → W13 (designed)</span>
+  </div>
+
+  <div class="wave-timeline">
+    <div class="wave-track">
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W0</div></div>
+        <div class="wave-name">Foundation</div>
+        <div class="wave-tasks">T001-T003<br>Jun 20</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W1</div></div>
+        <div class="wave-name">Auth + Inbox</div>
+        <div class="wave-tasks">T004-T007<br>Jun 20</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W2</div></div>
+        <div class="wave-name">Warmup engine</div>
+        <div class="wave-tasks">T008-T010<br>Jun 21</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W3</div></div>
+        <div class="wave-name">Monitor + Scoring</div>
+        <div class="wave-tasks">T011-T013<br>Jun 21</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W4</div></div>
+        <div class="wave-name">Placement + AI</div>
+        <div class="wave-tasks">T014-T015<br>Jun 21</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W5</div></div>
+        <div class="wave-name">Billing + Notify</div>
+        <div class="wave-tasks">T016-T017<br>Jun 22</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W6</div></div>
+        <div class="wave-name">Frontend</div>
+        <div class="wave-tasks">T018<br>Jun 22</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W7</div></div>
+        <div class="wave-name">Private pool</div>
+        <div class="wave-tasks">T019-T023<br>Jun 22</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W8</div></div>
+        <div class="wave-name">Auth hotfix</div>
+        <div class="wave-tasks">T024<br>Jun 23</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W9</div></div>
+        <div class="wave-name">Logging</div>
+        <div class="wave-tasks">T025<br>Jun 23</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W10</div></div>
+        <div class="wave-name">Pool UX</div>
+        <div class="wave-tasks">T026<br>Jun 23</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W11</div></div>
+        <div class="wave-name">Activity dash</div>
+        <div class="wave-tasks">T027<br>Jun 24</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave done">
+        <div class="wave-marker"><div class="wave-num">W12</div></div>
+        <div class="wave-name">Pause + Pool panel</div>
+        <div class="wave-tasks">T028 × 2<br>Jun 24-25</div>
+        <div class="wave-line"></div>
+      </div>
+      <div class="wave pending">
+        <div class="wave-marker"><div class="wave-num">W13</div></div>
+        <div class="wave-name">Real-seen</div>
+        <div class="wave-tasks">T029<br>designed</div>
+        <div class="wave-line"></div>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:14px; color:var(--ink-3); font-size:12px;">
+    <b>Note:</b> Two tasks share the ID <code>T028</code> — <i>Pause/Resume + bulk operations</i> (Jun 24) and <i>Pool Inbox Activity Panel</i> (Jun 24–25).
+    This is a pre-existing numbering collision flagged for the team to renumber.
+  </p>
+</section>
+
+<!-- ============ PENDING ============ -->
+<section class="section" id="pending">
+  <div class="section-head">
+    <span class="section-num">07</span>
+    <h2 class="section-title">Pending work</h2>
+    <span class="section-sub">What still needs to ship before Phase 1 is "live"</span>
+  </div>
+
+  <div class="pending-list">
+
+    <div class="pending-item">
+      <div class="pending-id">T029</div>
+      <div class="pending-body">
+        <div class="pending-title">Real-seen detection · Wave 13</div>
+        <div class="pending-desc">Detect real human opens via on-demand IMAP <code>\Seen</code> refresh (not just our worker-set flag). Spec + migration 0005 designed; not built.</div>
+      </div>
+      <div class="pending-meta">P1 · ready to build</div>
+    </div>
+
+    <div class="pending-item partial">
+      <div class="pending-id">RBL</div>
+      <div class="pending-body">
+        <div class="pending-title">100+ RBL zones (currently 8)</div>
+        <div class="pending-desc">Spec target is 100+ blacklists. Only 8 implemented (Spamhaus + 7 zones). Needs OD005 decision: buy commercial feed vs build incrementally.</div>
+      </div>
+      <div class="pending-meta">backlog · OD005</div>
+    </div>
+
+    <div class="pending-item blocked">
+      <div class="pending-id">E2E</div>
+      <div class="pending-body">
+        <div class="pending-title">Live E2E with real Gmail / Outlook accounts</div>
+        <div class="pending-desc">Phase 1 DoD requires end-to-end in browser. All structural criteria met (546 tests, clean boot, clean build) but live OAuth + IMAP / SMTP / Stripe never exercised in this env.</div>
+      </div>
+      <div class="pending-meta">DoD · needs real creds</div>
+    </div>
+
+    <div class="pending-item blocked">
+      <div class="pending-id">DEPLOY</div>
+      <div class="pending-body">
+        <div class="pending-title">Production Cloud Run deployment</div>
+        <div class="pending-desc">Backend Dockerfile + GCP Cloud Run config in <code>domains/infra.md</code>, but not deployed. Reuses dmphub project <code>sunny-ship-236913</code> in <code>asia-south1</code>.</div>
+      </div>
+      <div class="pending-meta">infra · not deployed</div>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-id">OD001</div>
+      <div class="pending-body">
+        <div class="pending-title">Final product name</div>
+        <div class="pending-desc">Currently "EmailWarm". Options: WarmHub, Inboxly, MailWarm, or other. Owner: Abhishek. Blocks domain purchase.</div>
+      </div>
+      <div class="pending-meta">decision · before domain</div>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-id">OD002</div>
+      <div class="pending-body">
+        <div class="pending-title">Warmup pool bootstrap strategy</div>
+        <div class="pending-desc">Build 500 internal accounts vs invite-only user contribution. Owner: Abhishek. Blocks T010-related ops.</div>
+      </div>
+      <div class="pending-meta">decision · before T010 ops</div>
+    </div>
+
+    <div class="pending-item partial">
+      <div class="pending-id">OD003</div>
+      <div class="pending-body">
+        <div class="pending-title">AI content provider</div>
+        <div class="pending-desc">Currently Anthropic Claude. Spec allows OpenAI GPT-4o as alternative. Already wired through Claude with 50-template fallback, so non-blocking — but documented as open decision.</div>
+      </div>
+      <div class="pending-meta">decided (Claude) · documented</div>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-id">OD004</div>
+      <div class="pending-body">
+        <div class="pending-title">BIMI support in Phase 1</div>
+        <div class="pending-desc">Brand Indicators for Message Identification — visual logo in supported inboxes. Currently deferred to Phase 2.</div>
+      </div>
+      <div class="pending-meta">deferred · Phase 2</div>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-id">OD005</div>
+      <div class="pending-body">
+        <div class="pending-title">Seed list provider for placement tests</div>
+        <div class="pending-desc">Build own vs buy (GlockApps / MailTester). Currently <code>seed_inboxes</code> table is empty in dev — no real seed accounts yet.</div>
+      </div>
+      <div class="pending-meta">decision · blocks live placement</div>
+    </div>
+
+    <div class="pending-item partial">
+      <div class="pending-id">AGENCY</div>
+      <div class="pending-body">
+        <div class="pending-title">Agency tier features</div>
+        <div class="pending-desc">Multi-client workspace · bulk CSV import (done) · white-label dashboard · client portal · team seats (10) · PDF reports.</div>
+      </div>
+      <div class="pending-meta">Phase 1.5+ · partially built</div>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-id">ENT</div>
+      <div class="pending-body">
+        <div class="pending-title">Enterprise tier features</div>
+        <div class="pending-desc">Public REST API · webhooks · dedicated IP pool · SSO · SLA. All deferred to Phase 2.</div>
+      </div>
+      <div class="pending-meta">Phase 2 · deferred</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ STACK ============ -->
+<section class="section" id="stack">
+  <div class="section-head">
+    <span class="section-num">08</span>
+    <h2 class="section-title">Stack</h2>
+    <span class="section-sub">What's locked vs. what's flexible</span>
+  </div>
+
+  <div class="stack-grid">
+
+    <div class="stack-card">
+      <div class="stack-card-title">Backend</div>
+      <div class="stack-item"><span class="stack-item-label">Framework</span><span class="stack-item-value">NestJS (Node 22)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Language</span><span class="stack-item-value">TypeScript 5.x</span></div>
+      <div class="stack-item"><span class="stack-item-label">Validation</span><span class="stack-item-value">class-validator · Joi</span></div>
+      <div class="stack-item"><span class="stack-item-label">Crypto</span><span class="stack-item-value">AES-256-GCM</span></div>
+      <div class="stack-item"><span class="stack-item-label">Logging</span><span class="stack-item-value">pino · nestjs-pino · pino-pretty</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div class="stack-card-title">Frontend</div>
+      <div class="stack-item"><span class="stack-item-label">Framework</span><span class="stack-item-value">Next.js 16 (App Router)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Runtime</span><span class="stack-item-value">React 19</span></div>
+      <div class="stack-item"><span class="stack-item-label">Styling</span><span class="stack-item-value">Tailwind 4</span></div>
+      <div class="stack-item"><span class="stack-item-label">Charts</span><span class="stack-item-value">recharts</span></div>
+      <div class="stack-item"><span class="stack-item-label">Data</span><span class="stack-item-value">SWR + Server Components</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div class="stack-card-title">Data layer</div>
+      <div class="stack-item"><span class="stack-item-label">Database</span><span class="stack-item-value">PostgreSQL 16</span></div>
+      <div class="stack-item"><span class="stack-item-label">ORM</span><span class="stack-item-value">Drizzle</span></div>
+      <div class="stack-item"><span class="stack-item-label">Queue</span><span class="stack-item-value">BullMQ</span></div>
+      <div class="stack-item"><span class="stack-item-label">Cache / sessions</span><span class="stack-item-value">Redis 7</span></div>
+      <div class="stack-item"><span class="stack-item-label">Migrations</span><span class="stack-item-value">drizzle-kit · 3 applied</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div class="stack-card-title">Email + auth</div>
+      <div class="stack-item"><span class="stack-item-label">SMTP</span><span class="stack-item-value">Nodemailer (raw)</span></div>
+      <div class="stack-item"><span class="stack-item-label">IMAP</span><span class="stack-item-value">imapflow (OAuth-aware)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Auth</span><span class="stack-item-value">better-auth (self-hosted)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Tokens</span><span class="stack-item-value">HMAC bearer</span></div>
+      <div class="stack-item"><span class="stack-item-label">AI</span><span class="stack-item-value">Anthropic Claude API</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div class="stack-card-title">Payments</div>
+      <div class="stack-item"><span class="stack-item-label">Provider</span><span class="stack-item-value">Stripe</span></div>
+      <div class="stack-item"><span class="stack-item-label">Plans</span><span class="stack-item-value">trial · starter · growth · agency · enterprise</span></div>
+      <div class="stack-item"><span class="stack-item-label">Webhook</span><span class="stack-item-value">stripe_events idempotency</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div class="stack-card-title">Infra</div>
+      <div class="stack-item"><span class="stack-item-label">Hosting</span><span class="stack-item-value">GCP Cloud Run</span></div>
+      <div class="stack-item"><span class="stack-item-label">Region</span><span class="stack-item-value">asia-south1</span></div>
+      <div class="stack-item"><span class="stack-item-label">Database host</span><span class="stack-item-value">Cloud SQL (PG)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Cache host</span><span class="stack-item-value">Memorystore (Redis)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Project</span><span class="stack-item-value">sunny-ship-236913 (dmphub)</span></div>
+      <div class="stack-item"><span class="stack-item-label">Dev</span><span class="stack-item-value">docker-compose (pg + redis)</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div>
+    Built from <code>__specs__/SPEC-STATUS.md</code> + <code>backend/src/</code> + <code>frontend/src/</code> + <code>docs/</code> · 2026-06-25 snapshot
+  </div>
+  <div>
+    Open this file in any browser · <code>architecture.html</code> · 28 tasks, 546 tests, 0 broken
+  </div>
+</footer>
+
+</main>
+
+<script>
+// Filter buttons
+document.querySelectorAll('#moduleFilters .filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#moduleFilters .filter-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    const filter = btn.getAttribute('data-filter');
+    document.querySelectorAll('#moduleGrid .module').forEach((mod) => {
+      const status = mod.getAttribute('data-status');
+      mod.style.display = (filter === 'all' || status === filter) ? '' : 'none';
+    });
+  });
+});
+
+// Module click-to-expand
+document.querySelectorAll('#moduleGrid .module').forEach((mod) => {
+  mod.addEventListener('click', (e) => {
+    // don't toggle if user clicked a link inside
+    if (e.target.tagName === 'A' || e.target.tagName === 'CODE') return;
+    mod.classList.toggle('open');
+  });
+});
+
+// Smooth scroll for nav links
+document.querySelectorAll('.nav-link').forEach((link) => {
+  link.addEventListener('click', (e) => {
+    const href = link.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      const el = document.querySelector(href);
+      if (el) {
+        e.preventDefault();
+        const top = el.getBoundingClientRect().top + window.scrollY - 60;
+        window.scrollTo({ top, behavior: 'smooth' });
+      }
+    }
+  });
+});
+</script>
+
+</body>
+</html>

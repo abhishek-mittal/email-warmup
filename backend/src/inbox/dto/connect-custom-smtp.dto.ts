@@ -75,6 +75,11 @@ export class ConnectCustomSmtpDto {
   @IsNotEmpty()
   imapPass?: string;
 
+  // Explicit opt-in to the shared warmup pool. Absent/false = not enrolled.
+  @IsOptional()
+  @IsBoolean()
+  poolConsent?: boolean;
+
   // ---- Misc ----
   @IsString()
   @IsOptional()

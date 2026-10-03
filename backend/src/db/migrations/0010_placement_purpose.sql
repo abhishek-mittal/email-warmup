@@ -1,0 +1,1 @@
+ALTER TABLE "placement_tests" ADD COLUMN "purpose" text DEFAULT 'manual' NOT NULL;

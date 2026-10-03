@@ -210,7 +210,9 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
       : 'text-rose-600';
   const verdictLabel =
     isClean === null
-      ? 'Not yet checked'
+      ? latest
+        ? 'Could not be checked'
+        : 'Not yet checked'
       : isClean
       ? '✓ Clean'
       : listedCount > 0
@@ -220,6 +222,11 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
   const listedRbls = latest?.rblResults
     ? Object.entries(latest.rblResults).filter(([, status]) => status === 'listed').map(([zone]) => zone)
     : [];
+  // How many lists actually answered. A list that refused the query, timed
+  // out, or needs a sending IP we don't have tells us nothing either way.
+  const rblStatuses = latest?.rblResults ? Object.values(latest.rblResults) : [];
+  const answeredCount = rblStatuses.filter((status) => status === 'clean' || status === 'listed').length;
+  const unansweredCount = rblStatuses.length - answeredCount;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -252,6 +259,12 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
       ) : latest ? (
         <div className="mt-4 space-y-3">
           <p className={`text-base font-semibold ${verdictColor}`}>{verdictLabel}</p>
+          <p className="text-xs text-slate-500">
+            {answeredCount} of {rblStatuses.length} lists answered.
+            {unansweredCount > 0
+              ? ` ${unansweredCount} gave no result (query refused, timed out, list retired, or it needs a sending IP that isn’t set for this inbox). No result is not the same as clean.`
+              : ''}
+          </p>
           {listedRbls.length > 0 ? (
             <details className="rounded-lg border border-rose-100 bg-rose-50/50 px-3 py-2 text-sm">
               <summary className="cursor-pointer text-rose-700">

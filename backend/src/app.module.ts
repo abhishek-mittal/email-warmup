@@ -22,6 +22,8 @@ import { ActivityModule } from './activity/activity.module';
 import { InboxControlModule } from './inbox-control/inbox-control.module';
 import { validate } from './config/env.validation';
 
+import { AccountModule } from './account/account.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -88,6 +90,7 @@ import { validate } from './config/env.validation';
     PoolInboxActivityModule,
     ActivityModule,
     InboxControlModule,
+    AccountModule,
   ],
   controllers: [AppController],
   providers: [AppService],

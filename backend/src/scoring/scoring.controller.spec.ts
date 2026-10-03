@@ -69,7 +69,13 @@ describe('ScoringController', () => {
 
     const result = await controller.getScore('inbox-1', makeReq('user-1'));
 
-    expect(result).toEqual({ current: null, trend: 'stable', breakdown: null, history: [] });
+    expect(result).toEqual({
+      current: null,
+      completeness: null,
+      trend: 'stable',
+      breakdown: null,
+      history: [],
+    });
   });
 
   it('returns breakdown for a growth-plan user', async () => {

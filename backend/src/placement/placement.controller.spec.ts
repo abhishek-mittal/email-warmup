@@ -94,7 +94,10 @@ describe('PlacementController', () => {
       const result = await controller.createTest('inbox-1', makeReq('user-1'));
 
       expect(placementService.runTest).toHaveBeenCalledWith('inbox-1', 'user-1');
-      expect(result).toEqual({ testId: 'test-1', estimatedReadyAt: '2026-06-21T12:05:00.000Z' });
+      expect(result).toMatchObject({
+        testId: 'test-1',
+        estimatedReadyAt: '2026-06-21T12:05:00.000Z',
+      });
     });
 
     it('propagates the 429 HttpException from PlacementService.runTest unchanged', async () => {
@@ -142,6 +145,8 @@ describe('PlacementController', () => {
             promotionsPct: null,
             spamPct: null,
             placementScore: null,
+            status: 'queued',
+            createdAt: new Date('2026-06-21T11:00:00.000Z'),
             completedAt: new Date('2026-06-21T12:00:00.000Z'), // insert-time placeholder
           },
         ],
@@ -149,7 +154,7 @@ describe('PlacementController', () => {
 
       const result = await controller.getTest('inbox-1', 'test-1', makeReq('user-1'));
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         status: 'pending',
         primaryPct: null,
         promotionsPct: null,
@@ -177,6 +182,9 @@ describe('PlacementController', () => {
             promotionsPct: 0,
             spamPct: 0,
             placementScore: 100,
+            status: 'complete',
+            createdAt: new Date('2026-06-21T11:00:00.000Z'),
+            observedCount: 10,
             completedAt,
           },
         ],
@@ -184,7 +192,7 @@ describe('PlacementController', () => {
 
       const result = await controller.getTest('inbox-1', 'test-1', makeReq('user-1'));
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         status: 'complete',
         primaryPct: 100,
         promotionsPct: 0,
@@ -211,6 +219,9 @@ describe('PlacementController', () => {
             promotionsPct: 0,
             spamPct: 20,
             placementScore: 50,
+            status: 'complete',
+            createdAt: new Date('2026-06-21T11:00:00.000Z'),
+            observedCount: 10,
             completedAt: new Date(),
           },
         ],
@@ -245,6 +256,9 @@ describe('PlacementController', () => {
           promotionsPct: 10,
           spamPct: 10,
           placementScore: 85,
+          status: 'complete',
+          createdAt: new Date('2026-06-21T11:00:00.000Z'),
+          observedCount: 10,
           completedAt: new Date('2026-06-21T12:10:00.000Z'),
         },
         {
@@ -259,6 +273,8 @@ describe('PlacementController', () => {
           promotionsPct: null,
           spamPct: null,
           placementScore: null,
+          status: 'queued',
+          createdAt: new Date('2026-06-21T11:00:00.000Z'),
           completedAt: new Date('2026-06-21T11:00:00.000Z'),
         },
       ];
@@ -273,6 +289,67 @@ describe('PlacementController', () => {
       expect(result[1]).toEqual(
         expect.objectContaining({ status: 'pending', placementScore: null, completedAt: null }),
       );
+    });
+  });
+
+  describe('partial and failed tests', () => {
+    const base = {
+      id: 'test-1',
+      inboxId: 'inbox-1',
+      seedCount: 10,
+      createdAt: new Date('2026-06-21T11:00:00.000Z'),
+      completedAt: new Date('2026-06-21T11:10:00.000Z'),
+    };
+
+    it('a partial test reports its coverage alongside percentages over what was observed', () => {
+      const response = (controller as any).toResponse({
+        ...base,
+        status: 'partial',
+        observedCount: 5,
+        errorCount: 5,
+        primaryCount: 4,
+        spamCount: 1,
+        otherInboxCount: 0,
+        missingCount: 0,
+        primaryPct: 80,
+        promotionsPct: 0,
+        spamPct: 20,
+        placementScore: 80,
+      });
+      expect(response).toMatchObject({
+        status: 'partial',
+        seedCount: 10,
+        observedCount: 5,
+        errorCount: 5,
+        primaryPct: 80,
+        spamPct: 20,
+        missingPct: 0,
+        placementScore: 80,
+      });
+    });
+
+    it('a failed test shows a reason and no percentages or score — never a zero', () => {
+      const response = (controller as any).toResponse({
+        ...base,
+        status: 'failed',
+        observedCount: 0,
+        errorCount: 10,
+        primaryPct: null,
+        promotionsPct: null,
+        spamPct: null,
+        placementScore: null,
+        failureReason:
+          'Only 0 of 10 seed mailboxes could be checked, which is too few for a result',
+      });
+      expect(response).toMatchObject({
+        status: 'failed',
+        primaryPct: null,
+        spamPct: null,
+        missingPct: null,
+        placementScore: null,
+        errorCount: 10,
+      });
+      expect(response.failureReason).toContain('too few');
     });
   });
 });

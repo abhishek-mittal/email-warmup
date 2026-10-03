@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { eq, count } from 'drizzle-orm';
+import { and, eq, count, ne } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { db } from '../db';
 import { users, inboxes } from '../db/schema';
@@ -11,12 +11,31 @@ export const PLAN_LIMITS: Record<
   { inboxes: number; placementTests: number; diagnosticsAi: boolean; slackAlerts: boolean }
 > = {
   free: { inboxes: 0, placementTests: 0, diagnosticsAi: false, slackAlerts: false },
+  // Demo plan: granted at signup when DEMO_MODE=true so the product can be
+  // used end to end before payments are wired up. Fixed test credits, no
+  // trial clock, no Stripe involvement.
+  demo: {
+    inboxes: demoCredit('DEMO_INBOX_CREDITS', 10),
+    placementTests: demoCredit('DEMO_PLACEMENT_CREDITS', 5),
+    diagnosticsAi: true,
+    slackAlerts: true,
+  },
   trial: { inboxes: 3, placementTests: 1, diagnosticsAi: false, slackAlerts: false },
   starter: { inboxes: 3, placementTests: 1, diagnosticsAi: false, slackAlerts: false },
   growth: { inboxes: 20, placementTests: 5, diagnosticsAi: true, slackAlerts: true },
   agency: { inboxes: 100, placementTests: -1, diagnosticsAi: true, slackAlerts: true },
   enterprise: { inboxes: -1, placementTests: -1, diagnosticsAi: true, slackAlerts: true },
 };
+
+function demoCredit(envName: string, fallback: number): number {
+  const parsed = Number.parseInt(process.env[envName] ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** True when signups should get the demo plan instead of a paid-conversion trial. */
+export function isDemoMode(): boolean {
+  return process.env.DEMO_MODE === 'true';
+}
 
 // Plans purchasable via Stripe Checkout. Enterprise is handled manually — no
 // Stripe price exists for it (see T016 context addendum #9).
@@ -81,7 +100,8 @@ export class BillingService {
     const [result] = await db
       .select({ count: count() })
       .from(inboxes)
-      .where(eq(inboxes.userId, userId));
+      // A disconnected inbox no longer uses a slot.
+      .where(and(eq(inboxes.userId, userId), ne(inboxes.status, 'disconnected')));
     if (result.count >= limit) {
       this.logger.warn(
         { userId, plan: user.plan, inboxesUsed: result.count, inboxLimit: limit },
@@ -89,6 +109,25 @@ export class BillingService {
       );
       throw new ForbiddenException(`Inbox limit reached for ${user.plan} plan (${limit} inboxes)`);
     }
+  }
+
+  /**
+   * How many more inboxes the user's plan allows (Infinity for unlimited
+   * plans, 0 for unknown/free ones). Batch imports use this so an upload
+   * can't walk past the limit that single connects are held to.
+   */
+  async remainingInboxSlots(userId: string): Promise<number> {
+    const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const user = userRows[0];
+    if (!user) return 0;
+    const limit = PLAN_LIMITS[user.plan]?.inboxes ?? 0;
+    if (limit === -1) return Number.POSITIVE_INFINITY;
+    const [result] = await db
+      .select({ count: count() })
+      .from(inboxes)
+      // A disconnected inbox no longer uses a slot.
+      .where(and(eq(inboxes.userId, userId), ne(inboxes.status, 'disconnected')));
+    return Math.max(0, limit - Number(result.count));
   }
 
   /** Creates a Stripe Checkout session in subscription mode. Enterprise is rejected — handled manually. */
@@ -108,7 +147,7 @@ export class BillingService {
       customer: user.stripeCustomerId ?? undefined,
       customer_email: user.stripeCustomerId ? undefined : user.email,
       line_items: [{ price: this.priceIdForPlan(plan as CheckoutPlan), quantity: 1 }],
-      success_url: `${process.env.APP_URL}/dashboard?checkout=success`,
+      success_url: `${process.env.APP_URL}/?checkout=success`,
       cancel_url: `${process.env.APP_URL}/billing?checkout=cancelled`,
       metadata: { userId, plan },
     });

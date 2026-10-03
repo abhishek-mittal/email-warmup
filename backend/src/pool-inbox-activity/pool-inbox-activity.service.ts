@@ -3,7 +3,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
 import * as path from 'node:path';
-import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql, isNotNull } from 'drizzle-orm';
 import { db } from '../db';
 import { inboxes, poolInboxes, warmupSends } from '../db/schema';
 import { QueueService } from '../queue/queue.service';
@@ -260,9 +260,10 @@ export class PoolInboxActivityService {
         sinceTs
           ? and(
               eq(warmupSends.receiverPoolInboxId, poolInboxId),
+              isNotNull(warmupSends.sentAt),
               lte(warmupSends.createdAt, sinceTs),
             )
-          : eq(warmupSends.receiverPoolInboxId, poolInboxId),
+          : and(eq(warmupSends.receiverPoolInboxId, poolInboxId), isNotNull(warmupSends.sentAt)),
       )
       .orderBy(desc(warmupSends.createdAt))
       .limit(rowFetchLimit);
@@ -358,7 +359,7 @@ export class PoolInboxActivityService {
         landedInSpam: warmupSends.landedInSpam,
       })
       .from(warmupSends)
-      .where(eq(warmupSends.receiverPoolInboxId, poolInboxId));
+      .where(and(eq(warmupSends.receiverPoolInboxId, poolInboxId), isNotNull(warmupSends.sentAt)));
 
     const received = rows.length;
     const opened = rows.filter((r) => r.openedAt !== null).length;
@@ -397,7 +398,7 @@ export class PoolInboxActivityService {
         lastSendAt: sql<Date | null>`max(${warmupSends.sentAt})`,
       })
       .from(warmupSends)
-      .where(eq(warmupSends.receiverPoolInboxId, poolInboxId))
+      .where(and(eq(warmupSends.receiverPoolInboxId, poolInboxId), isNotNull(warmupSends.sentAt)))
       .groupBy(warmupSends.senderInboxId)
       .orderBy(sql`count(*) desc`)
       .limit(PAIRINGS_LIMIT_MAX);
@@ -538,10 +539,7 @@ export class PoolInboxActivityService {
    * jobs, soonest-first, capped at 5 (this is a glance-level indicator,
    * not a full job browser).
    */
-  async getLiveStatus(
-    poolInboxId: string,
-    userId: string | undefined,
-  ): Promise<PoolLiveStatus> {
+  async getLiveStatus(poolInboxId: string, userId: string | undefined): Promise<PoolLiveStatus> {
     await this.assertPoolOwnership(poolInboxId, userId);
 
     const jobs = await this.queueService.getJobsForReceiver('warmup-receive', poolInboxId, [
@@ -596,9 +594,7 @@ export class PoolInboxActivityService {
   }
 
   /** Batched messageId -> senderEmail resolve, used by getLiveStatus. */
-  private async resolveSenderEmailsByMessageId(
-    messageIds: string[],
-  ): Promise<Map<string, string>> {
+  private async resolveSenderEmailsByMessageId(messageIds: string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     if (messageIds.length === 0) return result;
 

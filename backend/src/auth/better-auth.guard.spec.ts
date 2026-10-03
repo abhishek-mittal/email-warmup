@@ -86,6 +86,22 @@ describe('BetterAuthGuard', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
+  it('rejects a correctly signed token that claims an implausibly long lifetime', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const tok = mintToken('user_123', SECRET, 30 * 24 * 60 * 60 * 1000);
+    await expect(
+      guard.canActivate(createContext({ authorization: `Bearer ${tok}` })),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects a correctly signed token with a non-numeric or empty identity', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+    const empty = mintToken('', SECRET);
+    await expect(
+      guard.canActivate(createContext({ authorization: `Bearer ${empty}` })),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
   it('attaches userId on valid token', async () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
     const tok = mintToken('user_123', SECRET);

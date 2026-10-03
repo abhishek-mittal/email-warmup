@@ -1,6 +1,6 @@
 // Domain types mirroring the NestJS backend response shapes.
 
-export type Plan = 'free' | 'trial' | 'starter' | 'growth' | 'agency' | 'enterprise';
+export type Plan = 'free' | 'demo' | 'trial' | 'starter' | 'growth' | 'agency' | 'enterprise';
 
 export type InboxStatus = 'pending' | 'active' | 'paused' | 'error' | 'disconnected';
 export type Provider = 'gmail' | 'outlook' | 'custom';
@@ -14,6 +14,10 @@ export interface Inbox {
   warmupDay: number;
   warmupSpeed: 'slow' | 'medium' | 'fast' | null;
   sendingIp: string | null;
+  /** Why the inbox is not warming, when it isn't (e.g. 'credentials_revoked'). */
+  statusReason?: string | null;
+  /** Set when the owner opted this inbox into the shared warmup pool. */
+  poolConsentAt?: string | null;
   createdAt: string;
 }
 

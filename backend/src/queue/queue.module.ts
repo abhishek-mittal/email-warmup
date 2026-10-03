@@ -25,6 +25,12 @@ export type QueueName = (typeof QUEUE_NAMES)[number];
         url: process.env.REDIS_URL,
       },
       defaultJobOptions: {
+        // Jobs that set their own attempts (warmup send/receive, placement,
+        // notify) keep them. Everything else — the DNS, blocklist, scoring,
+        // analysis and report jobs, all of which only read and then write a
+        // fresh row — gets a bounded retry instead of failing once for good.
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: { count: 1000, age: 86400 },
         removeOnFail: { count: 500, age: 259200 },
       },

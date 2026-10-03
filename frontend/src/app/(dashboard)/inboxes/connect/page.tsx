@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { ConnectInboxForm } from './_components/ConnectInboxForm';
 
 export default function ConnectInboxPage() {
@@ -10,7 +11,10 @@ export default function ConnectInboxPage() {
           control. We run a 5-step pre-check on every connect.
         </p>
       </div>
-      <ConnectInboxForm />
+      {/* The form reads `link_error` from the URL after an OAuth round-trip. */}
+      <Suspense fallback={null}>
+        <ConnectInboxForm />
+      </Suspense>
     </div>
   );
 }

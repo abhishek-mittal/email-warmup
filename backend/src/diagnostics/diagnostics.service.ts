@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray, and } from 'drizzle-orm';
 import { db } from '../db';
 import {
   dnsChecks,
@@ -133,7 +133,12 @@ export class DiagnosticsService {
     const rows = await db
       .select()
       .from(placementTests)
-      .where(eq(placementTests.inboxId, inboxId))
+      .where(
+        and(
+          eq(placementTests.inboxId, inboxId),
+          inArray(placementTests.status, ['complete', 'partial']),
+        ),
+      )
       .orderBy(desc(placementTests.completedAt))
       .limit(1);
     return rows[0] ?? null;

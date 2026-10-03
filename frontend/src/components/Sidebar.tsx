@@ -51,6 +51,11 @@ const NAV: NavItem[] = [
     label: 'Billing',
     icon: <Icon d="M3 10h18M5 6h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />,
   },
+  {
+    href: '/account',
+    label: 'Account',
+    icon: <Icon d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
+  },
 ];
 
 export function Sidebar() {

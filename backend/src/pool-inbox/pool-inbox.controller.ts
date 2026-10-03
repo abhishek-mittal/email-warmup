@@ -18,6 +18,7 @@ import { Request } from 'express';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { BatchInboxEntry } from '@/inbox/inbox.service';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
+import { MAX_IMPORT_BYTES, assertImportSize } from '@/common/import-limits';
 import {
   getLatestAnalysisForPoolInboxes,
   getLatestAnalysisForPoolInbox,
@@ -38,12 +39,13 @@ export class PoolInboxController {
   @Post('batch')
   async batchUpload(@Req() req: Request & { userId?: string }, @Body() body: BatchUploadDto) {
     const entries = (body?.inboxes ?? []) as BatchInboxEntry[];
+    assertImportSize(entries.length);
     return this.poolInboxService.batchUpload(req.userId!, entries);
   }
 
   /** CSV variant of `POST /pool-inboxes/batch` — see InboxController.batchUploadCsv. */
   @Post('batch/csv')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES, files: 1 } }))
   async batchUploadCsv(
     @Req() req: Request & { userId?: string },
     @UploadedFile() file: Express.Multer.File,
@@ -53,6 +55,7 @@ export class PoolInboxController {
     }
 
     const parsedRows = parseInboxBatchCsv(file.buffer.toString('utf8'));
+    assertImportSize(parsedRows.length);
 
     const failed: { email: string; reason: string }[] = [];
     const validEntries: BatchInboxEntry[] = [];

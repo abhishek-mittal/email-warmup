@@ -5,6 +5,10 @@ import { GoogleOAuthService } from './oauth/google-oauth.service';
 import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { ImapClientService } from './imap/imap-client.service';
 import { SmtpClientService } from './smtp/smtp-client.service';
+import { MailCredentialService } from './oauth/mail-credential.service';
+import { TokenRefreshProcessor } from './oauth/token-refresh.processor';
+import { MailboxLinkService } from './oauth/mailbox-link.service';
+import { DnsService } from '../monitor/dns.service';
 import { BillingModule } from '../billing/billing.module';
 import { QueueModule } from '../queue/queue.module';
 
@@ -17,6 +21,12 @@ import { QueueModule } from '../queue/queue.module';
     MicrosoftOAuthService,
     ImapClientService,
     SmtpClientService,
+    MailCredentialService,
+    TokenRefreshProcessor,
+    MailboxLinkService,
+    // Stateless; provided here as well as in MonitorModule, which cannot be
+    // imported from this module without a cycle.
+    DnsService,
   ],
   exports: [
     InboxService,
@@ -24,6 +34,7 @@ import { QueueModule } from '../queue/queue.module';
     MicrosoftOAuthService,
     ImapClientService,
     SmtpClientService,
+    MailCredentialService,
   ],
 })
 export class InboxModule {}

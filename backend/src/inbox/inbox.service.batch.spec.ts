@@ -5,6 +5,7 @@ import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { BillingService } from '@/billing/billing.service';
 import { ImapClientService } from './imap/imap-client.service';
 import { SmtpClientService } from './smtp/smtp-client.service';
+import { DnsService } from '@/monitor/dns.service';
 import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
 import { encrypt } from '@/common/crypto';
@@ -25,6 +26,7 @@ jest.mock('@/common/crypto', () => ({
 describe('InboxService.batchUpload', () => {
   let service: InboxService;
   let queueService: { add: jest.Mock };
+  let billingService: { assertInboxLimit: jest.Mock; remainingInboxSlots: jest.Mock };
 
   function mockSelectExisting(existingEmails: string[]) {
     (db.select as jest.Mock).mockReturnValue({
@@ -46,6 +48,10 @@ describe('InboxService.batchUpload', () => {
     (encrypt as jest.Mock).mockImplementation((v: string) => `enc(${v})`);
 
     queueService = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+    billingService = {
+      assertInboxLimit: jest.fn(),
+      remainingInboxSlots: jest.fn().mockResolvedValue(Number.POSITIVE_INFINITY),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -64,14 +70,49 @@ describe('InboxService.batchUpload', () => {
         InboxService,
         { provide: GoogleOAuthService, useValue: {} },
         { provide: MicrosoftOAuthService, useValue: {} },
-        { provide: BillingService, useValue: { assertInboxLimit: jest.fn() } },
+        { provide: BillingService, useValue: billingService },
         { provide: ImapClientService, useValue: {} },
         { provide: SmtpClientService, useValue: {} },
         { provide: QueueService, useValue: queueService },
+        {
+          provide: DnsService,
+          useValue: {
+            checkSpf: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+            checkDkimForInbox: jest
+              .fn()
+              .mockResolvedValue({ status: 'unknown', code: null, detail: '' }),
+            checkDmarc: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+            checkMx: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<InboxService>(InboxService);
+  });
+
+  it('stops at the plan’s inbox limit and reports the rows it refused', async () => {
+    mockSelectExisting([]);
+    billingService.remainingInboxSlots.mockResolvedValue(2);
+    let counter = 0;
+    mockInsertReturning(() => `inbox-${++counter}`);
+    const entry = (email: string) =>
+      ({ email, provider: 'gmail', clientId: 'c', clientSecret: 's', refreshToken: 'r' }) as any;
+
+    const result = await service.batchUpload('user-1', [
+      entry('a@one.com'),
+      entry('b@two.com'),
+      entry('c@three.com'),
+      entry('d@four.com'),
+    ]);
+
+    expect(result.created).toBe(2);
+    expect(result.failed).toEqual([
+      { email: 'c@three.com', reason: 'inbox limit reached for your plan' },
+      { email: 'd@four.com', reason: 'inbox limit reached for your plan' },
+    ]);
+    expect(db.insert).toHaveBeenCalledTimes(2);
+    expect(queueService.add).toHaveBeenCalledTimes(2);
   });
 
   it('writes a gmail entry with encrypted clientSecret/refreshToken, status=pending, and enqueues inbox-analysis', async () => {

@@ -54,7 +54,7 @@ export class BlacklistCheckProcessor extends WorkerHost {
 
     const domain = inbox.email.split('@')[1];
     this.logger.info({ jobId, inboxId, domain }, 'blacklist check started');
-    const result = await this.blacklistService.checkDomain(domain);
+    const result = await this.blacklistService.check(domain, inbox.sendingIp);
 
     await db.insert(blacklistChecks).values({
       inboxId,
@@ -63,11 +63,13 @@ export class BlacklistCheckProcessor extends WorkerHost {
       rblResults: result.rblResults,
     });
 
-    if (!result.isClean) {
+    // Only a real listing pauses. "Nothing could be checked" (isClean null) and
+    // refused or failed lookups are not evidence against the sender.
+    if (result.isClean === false) {
       // Pause MUST complete before the alert is sent — see T012 context addendum #5
       // and the monitoring skill file's "never fire blacklist alert without pausing
       // warmup first" rule.
-      await this.warmupService.pauseInbox(inboxId);
+      await this.warmupService.pauseInbox(inboxId, 'blacklist');
       this.logger.warn(
         { jobId, inboxId, listed: result.listed, rbl: Object.keys(result.rblResults ?? {}) },
         'inbox paused due to blacklist hit',
@@ -89,7 +91,15 @@ export class BlacklistCheckProcessor extends WorkerHost {
 
     await this.queueService.add('score-compute', { inboxId });
     this.logger.info(
-      { jobId, inboxId, domain, isClean: result.isClean, listedCount: result.listedCount },
+      {
+        jobId,
+        inboxId,
+        domain,
+        isClean: result.isClean,
+        listedCount: result.listedCount,
+        checkedCount: result.checkedCount,
+        unknownCount: result.unknownCount,
+      },
       'blacklist check completed',
     );
   }

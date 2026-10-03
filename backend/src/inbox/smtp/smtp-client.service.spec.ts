@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SmtpClientService } from './smtp-client.service';
-import { GoogleOAuthService } from '../oauth/google-oauth.service';
-import { MicrosoftOAuthService } from '../oauth/microsoft-oauth.service';
+import { MailCredentialService } from '../oauth/mail-credential.service';
 import { db } from '../../db';
 
 import { pinoLoggerStubsFor } from '../../common/test-module';
@@ -9,6 +8,17 @@ jest.mock('../../db', () => ({
   db: {
     select: jest.fn(),
   },
+}));
+
+// DNS resolution and the address policy are covered in common/egress-policy.spec.ts
+// and test/integration/safety.int-spec.ts; here hosts resolve to a fixed public address.
+jest.mock('../../common/egress-policy', () => ({
+  ...jest.requireActual('../../common/egress-policy'),
+  resolvePublicHost: jest.fn(async (host: string) => ({
+    address: '203.0.113.10',
+    family: 4,
+    servername: host,
+  })),
 }));
 
 jest.mock('../../common/crypto', () => ({
@@ -24,8 +34,7 @@ jest.mock('nodemailer', () => ({
 
 describe('SmtpClientService', () => {
   let service: SmtpClientService;
-  let googleOAuthService: { refreshToken: jest.Mock };
-  let microsoftOAuthService: { refreshToken: jest.Mock };
+  let credentials: { getInboxAccessToken: jest.Mock; getPoolInboxAccessToken: jest.Mock };
 
   function mockSelectInbox(row: any) {
     (db.select as jest.Mock).mockReturnValue({
@@ -38,16 +47,17 @@ describe('SmtpClientService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    googleOAuthService = { refreshToken: jest.fn() };
-    microsoftOAuthService = { refreshToken: jest.fn() };
+    credentials = {
+      getInboxAccessToken: jest.fn().mockResolvedValue('inbox-access-token'),
+      getPoolInboxAccessToken: jest.fn().mockResolvedValue('pool-access-token'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ...pinoLoggerStubsFor(SmtpClientService, GoogleOAuthService, MicrosoftOAuthService, db),
+        ...pinoLoggerStubsFor(SmtpClientService, MailCredentialService, db),
 
         SmtpClientService,
-        { provide: GoogleOAuthService, useValue: googleOAuthService },
-        { provide: MicrosoftOAuthService, useValue: microsoftOAuthService },
+        { provide: MailCredentialService, useValue: credentials },
       ],
     }).compile();
 
@@ -65,7 +75,45 @@ describe('SmtpClientService', () => {
 
       const transporter: any = await service.getTransporter('inbox-1');
 
-      expect(transporter.__opts.auth.accessToken).toBe('decrypted:enc-access-token');
+      expect(credentials.getInboxAccessToken).toHaveBeenCalledWith('inbox-1');
+      expect(transporter.__opts.auth.accessToken).toBe('inbox-access-token');
+      // Gmail: implicit TLS on 465.
+      expect(transporter.__opts.host).toBe('smtp.gmail.com');
+      expect(transporter.__opts.port).toBe(465);
+      expect(transporter.__opts.secure).toBe(true);
+    });
+
+    it('uses STARTTLS on 587 for an outlook inbox, never implicit TLS', async () => {
+      mockSelectInbox({
+        id: 'inbox-1',
+        email: 'user@outlook.com',
+        provider: 'outlook',
+        smtpHost: 'smtp.office365.com',
+        smtpPort: 587,
+      });
+
+      const transporter: any = await service.getTransporter('inbox-1');
+
+      expect(transporter.__opts.port).toBe(587);
+      expect(transporter.__opts.secure).toBe(false);
+      expect(transporter.__opts.requireTLS).toBe(true);
+    });
+
+    it('requires STARTTLS for a custom inbox on a non-465 port', async () => {
+      mockSelectInbox({
+        id: 'inbox-1',
+        email: 'user@custom.com',
+        provider: 'custom',
+        smtpHost: 'smtp.custom.com',
+        smtpPort: 587,
+        smtpUser: 'user@custom.com',
+        smtpPass: 'enc-smtp-pass',
+      });
+
+      const transporter: any = await service.getTransporter('inbox-1');
+
+      expect(transporter.__opts.secure).toBe(false);
+      expect(transporter.__opts.requireTLS).toBe(true);
     });
 
     it('builds a basic-auth transporter for a custom inbox', async () => {
@@ -110,7 +158,9 @@ describe('SmtpClientService', () => {
 
       const transporter: any = await service.getPoolInboxTransporter('pi-1');
 
-      expect(transporter.__opts.host).toBe('smtp.custom.com');
+      // Connects to the address that passed the policy; the name is kept for TLS only.
+      expect(transporter.__opts.host).toBe('203.0.113.10');
+      expect(transporter.__opts.tls.servername).toBe('smtp.custom.com');
       expect(transporter.__opts.auth.user).toBe('user@custom.com');
       expect(transporter.__opts.auth.pass).toBe('decrypted:enc-smtp-pass');
     });
@@ -125,56 +175,47 @@ describe('SmtpClientService', () => {
       await expect(service.getPoolInboxTransporter('pi-1')).rejects.toThrow();
     });
 
-    it('decrypts clientSecret and refreshToken, then mints a fresh access token via GoogleOAuthService for a gmail pool inbox', async () => {
+    it('gets the access token from the credential service for a gmail pool inbox (implicit TLS 465)', async () => {
       mockSelectInbox({
         id: 'pi-1',
         email: 'partner@gmail.com',
         provider: 'gmail',
         encryptedCredentials: {
-          clientId: 'pool-client-id',
+          clientId: 'client-id',
           clientSecret: 'enc-client-secret',
           refreshToken: 'enc-refresh-token',
         },
       });
-      googleOAuthService.refreshToken.mockResolvedValue({
-        access_token: 'fresh-access-token',
-        expires_in: 3600,
-      });
 
       const transporter: any = await service.getPoolInboxTransporter('pi-1');
 
-      expect(googleOAuthService.refreshToken).toHaveBeenCalledWith('decrypted:enc-refresh-token', {
-        clientId: 'pool-client-id',
-        clientSecret: 'decrypted:enc-client-secret',
-      });
-      expect(transporter.__opts.auth.accessToken).toBe('fresh-access-token');
+      expect(credentials.getPoolInboxAccessToken).toHaveBeenCalledWith('pi-1');
+      expect(transporter.__opts.auth.accessToken).toBe('pool-access-token');
       expect(transporter.__opts.auth.user).toBe('partner@gmail.com');
+      expect(transporter.__opts.host).toBe('smtp.gmail.com');
+      expect(transporter.__opts.port).toBe(465);
+      expect(transporter.__opts.secure).toBe(true);
     });
 
-    it('decrypts clientSecret and refreshToken, then mints a fresh access token via MicrosoftOAuthService for an outlook pool inbox', async () => {
+    it('uses smtp.office365.com:587 with STARTTLS for an outlook pool inbox (not 465)', async () => {
       mockSelectInbox({
         id: 'pi-1',
         email: 'partner@outlook.com',
         provider: 'outlook',
         encryptedCredentials: {
-          clientId: 'pool-client-id',
+          clientId: 'client-id',
           clientSecret: 'enc-client-secret',
           refreshToken: 'enc-refresh-token',
         },
       });
-      microsoftOAuthService.refreshToken.mockResolvedValue({
-        access_token: 'fresh-access-token-ms',
-        expires_in: 3600,
-      });
 
       const transporter: any = await service.getPoolInboxTransporter('pi-1');
 
-      expect(microsoftOAuthService.refreshToken).toHaveBeenCalledWith(
-        'decrypted:enc-refresh-token',
-        { clientId: 'pool-client-id', clientSecret: 'decrypted:enc-client-secret' },
-      );
-      expect(googleOAuthService.refreshToken).not.toHaveBeenCalled();
-      expect(transporter.__opts.auth.accessToken).toBe('fresh-access-token-ms');
+      expect(transporter.__opts.auth.accessToken).toBe('pool-access-token');
+      expect(transporter.__opts.host).toBe('smtp.office365.com');
+      expect(transporter.__opts.port).toBe(587);
+      expect(transporter.__opts.secure).toBe(false);
+      expect(transporter.__opts.requireTLS).toBe(true);
     });
 
     it('throws when OAuth credentials are incomplete', async () => {
@@ -184,6 +225,11 @@ describe('SmtpClientService', () => {
         provider: 'gmail',
         encryptedCredentials: { clientId: 'pool-client-id' },
       });
+
+      // The credential service owns this check; the transporter must surface its error.
+      credentials.getPoolInboxAccessToken.mockRejectedValue(
+        new Error('OAuth credentials missing for pool inbox pi-1'),
+      );
 
       await expect(service.getPoolInboxTransporter('pi-1')).rejects.toThrow();
     });

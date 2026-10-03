@@ -15,7 +15,7 @@
  *
  * Env vars (with safe local defaults — DO NOT use these defaults in prod):
  *   FRONTEND_URL     default http://localhost:3000  (where better-auth lives)
- *   BACKEND_URL      default http://localhost:3001  (NestJS — only used for the SQL back-fill)
+ *   BACKEND_URL      default http://localhost:4611  (NestJS — only used for the SQL back-fill)
  *   DATABASE_URL     default postgresql://emailwarm:localdev@localhost:5432/emailwarm
  *   TEST_USER_PASSWORD  default 'EmailWarm-Phase1-Test!'  (override per run)
  *
@@ -26,10 +26,15 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
+import { createRequire } from 'node:module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+
+// `pg` is only installed under backend/ — there is no node_modules next to
+// this script, so a bare `import pg from 'pg'` fails with ERR_MODULE_NOT_FOUND.
+// Resolve it from the backend's install instead.
+const pg = createRequire(resolve(ROOT, 'backend/package.json'))('pg');
 
 // ---------- env + arg parsing ----------
 
@@ -52,7 +57,7 @@ loadDotenv(resolve(ROOT, 'backend/.env.local'));
 loadDotenv(resolve(ROOT, 'frontend/.env.local'));
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:4611';
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://emailwarm:localdev@localhost:5432/emailwarm';
 const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? 'EmailWarm-Phase1-Test!';
 

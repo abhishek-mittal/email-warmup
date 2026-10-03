@@ -91,6 +91,11 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
           <p className="text-xs text-slate-500">
             {colors ? colors.label : 'No score yet'}
           </p>
+          {score?.completeness != null && score.completeness < 100 ? (
+            <p className="max-w-[220px] text-xs text-slate-500">
+              Based on {score.completeness}% of signals. The rest could not be measured yet.
+            </p>
+          ) : null}
         </div>
         <div className="h-[60px] w-[160px]" aria-hidden>
           {sparkData.length > 0 ? (

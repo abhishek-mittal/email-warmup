@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnrecoverableError } from 'bullmq';
 import { AnalysisService } from './analysis.service';
 import { DnsService } from '../monitor/dns.service';
+import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
+import { ImapClientService } from '../inbox/imap/imap-client.service';
 import { db } from '../db';
 
 import { pinoLoggerStubsFor } from '../common/test-module';
@@ -15,9 +17,11 @@ jest.mock('../db', () => ({
 
 describe('AnalysisService', () => {
   let service: AnalysisService;
+  const smtpVerify = jest.fn();
+  const imapCheck = jest.fn();
   let dnsService: {
     checkSpf: jest.Mock;
-    checkDkim: jest.Mock;
+    checkDkimForInbox: jest.Mock;
     checkDmarc: jest.Mock;
     checkMx: jest.Mock;
     checkRdns: jest.Mock;
@@ -27,6 +31,7 @@ describe('AnalysisService', () => {
     id: 'inbox-1',
     userId: 'user-1',
     email: 'sender@sendco.com',
+    provider: 'custom',
     dkimSelector: 'mailo',
     sendingIp: '203.0.113.10',
     status: 'pending',
@@ -36,6 +41,7 @@ describe('AnalysisService', () => {
     id: 'pool-1',
     userId: 'user-1',
     email: 'pool@poolco.com',
+    provider: 'gmail',
     status: 'pending',
   };
 
@@ -70,7 +76,9 @@ describe('AnalysisService', () => {
   }
 
   function mockUpdate() {
-    const whereMock = jest.fn().mockResolvedValue(undefined);
+    const whereMock = jest.fn().mockReturnValue({
+      returning: jest.fn().mockResolvedValue([{ id: 'changed' }]),
+    });
     const setMock = jest.fn().mockReturnValue({ where: whereMock });
     (db.update as jest.Mock).mockReturnValue({ set: setMock });
     return { setMock, whereMock };
@@ -78,10 +86,12 @@ describe('AnalysisService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    smtpVerify.mockResolvedValue(undefined);
+    imapCheck.mockResolvedValue([]);
 
     dnsService = {
       checkSpf: jest.fn().mockResolvedValue(pass),
-      checkDkim: jest.fn().mockResolvedValue(pass),
+      checkDkimForInbox: jest.fn().mockResolvedValue(pass),
       checkDmarc: jest.fn().mockResolvedValue(pass),
       checkMx: jest.fn().mockResolvedValue(pass),
       checkRdns: jest.fn().mockResolvedValue(pass),
@@ -92,6 +102,14 @@ describe('AnalysisService', () => {
         ...pinoLoggerStubsFor(UnrecoverableError, AnalysisService, DnsService, db, Error, Date),
         AnalysisService,
         { provide: DnsService, useValue: dnsService },
+        {
+          provide: SmtpClientService,
+          useValue: { verify: smtpVerify, verifyPoolInbox: smtpVerify },
+        },
+        {
+          provide: ImapClientService,
+          useValue: { withInbox: imapCheck, withPoolInbox: imapCheck },
+        },
       ],
     }).compile();
 
@@ -116,20 +134,20 @@ describe('AnalysisService', () => {
       await service.analyse({ inboxId: 'inbox-1', userId: 'user-1' });
 
       expect(dnsService.checkSpf).toHaveBeenCalledWith('sendco.com');
-      expect(dnsService.checkDkim).toHaveBeenCalledWith('sendco.com', 'mailo');
+      expect(dnsService.checkDkimForInbox).toHaveBeenCalledWith('sendco.com', 'mailo', 'custom');
       expect(dnsService.checkDmarc).toHaveBeenCalledWith('sendco.com');
       expect(dnsService.checkMx).toHaveBeenCalledWith('sendco.com');
       expect(dnsService.checkRdns).toHaveBeenCalledWith('203.0.113.10');
     });
 
-    it("falls back to selector 'default' when inbox.dkimSelector is null", async () => {
+    it('passes a missing selector through rather than guessing "default"', async () => {
       mockSelectSequence([[{ ...inboxRow, dkimSelector: null }]]);
       mockInsert();
       mockUpdate();
 
       await service.analyse({ inboxId: 'inbox-1', userId: 'user-1' });
 
-      expect(dnsService.checkDkim).toHaveBeenCalledWith('sendco.com', 'default');
+      expect(dnsService.checkDkimForInbox).toHaveBeenCalledWith('sendco.com', null, 'custom');
     });
 
     it('skips rDNS and writes rdnsValid: null when sendingIp is not set', async () => {
@@ -176,7 +194,7 @@ describe('AnalysisService', () => {
 
     it('computes health_score correctly and lists only false (not null) fields in issues — SPF+DKIM missing, rDNS null (no sendingIp)', async () => {
       dnsService.checkSpf.mockResolvedValue(failSpf);
-      dnsService.checkDkim.mockResolvedValue(failDkim);
+      dnsService.checkDkimForInbox.mockResolvedValue(failDkim);
       mockSelectSequence([[{ ...inboxRow, sendingIp: null }]]);
       const valuesMock = mockInsert();
       mockUpdate();
@@ -197,7 +215,7 @@ describe('AnalysisService', () => {
       // Construct exact 80: spf+dkim+mx pass (25+25+15=65) + dmarc fail, rdns null => 65 -> promotions tier actually
       // Instead directly verify via all-fail (score 0) -> unknown
       dnsService.checkSpf.mockResolvedValue(failSpf);
-      dnsService.checkDkim.mockResolvedValue(failDkim);
+      dnsService.checkDkimForInbox.mockResolvedValue(failDkim);
       dnsService.checkDmarc.mockResolvedValue(failDmarc);
       dnsService.checkMx.mockResolvedValue(failMx);
       dnsService.checkRdns.mockResolvedValue(failRdns);
@@ -227,7 +245,7 @@ describe('AnalysisService', () => {
       // No combination of {25,25,20,15,15} sums to exactly 50 except DKIM+DMARC+5(none) -> impossible.
       // Use 45 instead to confirm tier boundary at 50 is respected (45 -> spam tier).
       dnsService.checkSpf.mockResolvedValue(pass);
-      dnsService.checkDkim.mockResolvedValue(failDkim);
+      dnsService.checkDkimForInbox.mockResolvedValue(failDkim);
       dnsService.checkDmarc.mockResolvedValue(pass);
       dnsService.checkMx.mockResolvedValue(failMx);
       dnsService.checkRdns.mockResolvedValue(failRdns);
@@ -245,7 +263,7 @@ describe('AnalysisService', () => {
     it('placement_estimate is "inbox" at health_score exactly 80', async () => {
       // SPF(25)+DKIM(25)+MX(15)+rDNS(15)=80, DMARC fails
       dnsService.checkSpf.mockResolvedValue(pass);
-      dnsService.checkDkim.mockResolvedValue(pass);
+      dnsService.checkDkimForInbox.mockResolvedValue(pass);
       dnsService.checkDmarc.mockResolvedValue(failDmarc);
       dnsService.checkMx.mockResolvedValue(pass);
       dnsService.checkRdns.mockResolvedValue(pass);
@@ -260,9 +278,9 @@ describe('AnalysisService', () => {
       expect(inserted.placementEstimate).toBe('inbox');
     });
 
-    it('updates inbox status to active unconditionally, regardless of DNS result', async () => {
+    it('activates the inbox once its transport verifies, regardless of DNS result', async () => {
       dnsService.checkSpf.mockResolvedValue(failSpf);
-      dnsService.checkDkim.mockResolvedValue(failDkim);
+      dnsService.checkDkimForInbox.mockResolvedValue(failDkim);
       dnsService.checkDmarc.mockResolvedValue(failDmarc);
       dnsService.checkMx.mockResolvedValue(failMx);
       dnsService.checkRdns.mockResolvedValue(failRdns);
@@ -272,12 +290,12 @@ describe('AnalysisService', () => {
 
       await service.analyse({ inboxId: 'inbox-1', userId: 'user-1' });
 
-      expect(setMock).toHaveBeenCalledWith({ status: 'active' });
+      expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
       expect(whereMock).toHaveBeenCalled();
     });
 
     it('treats a thrown error from one DNS check as null for that field and still writes the others', async () => {
-      dnsService.checkDkim.mockRejectedValue(new Error('DNS timeout'));
+      dnsService.checkDkimForInbox.mockRejectedValue(new Error('DNS timeout'));
       mockSelectSequence([[inboxRow]]);
       const valuesMock = mockInsert();
       mockUpdate();
@@ -295,6 +313,29 @@ describe('AnalysisService', () => {
       expect(inserted.healthScore).toBe(75); // 100 - 25(dkim points not awarded)
     });
 
+    it('marks an imported inbox as errored, not active, when SMTP does not verify', async () => {
+      mockSelectSequence([[inboxRow]]);
+      mockInsert();
+      const { setMock } = mockUpdate();
+      smtpVerify.mockRejectedValue(new Error('Invalid login'));
+
+      await service.analyse({ inboxId: 'inbox-1', userId: 'user-1' });
+
+      expect(setMock).toHaveBeenCalledWith({ status: 'error', statusReason: 'transport_failed' });
+      expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
+    });
+
+    it('marks an imported inbox as errored when IMAP fails for a reason other than "not configured"', async () => {
+      mockSelectSequence([[inboxRow]]);
+      mockInsert();
+      const { setMock } = mockUpdate();
+      imapCheck.mockRejectedValue(new Error('Authentication failed'));
+
+      await service.analyse({ inboxId: 'inbox-1', userId: 'user-1' });
+
+      expect(setMock).toHaveBeenCalledWith({ status: 'error', statusReason: 'transport_failed' });
+    });
+
     it('never throws when a DNS check rejects — job completes and status still updates to active', async () => {
       dnsService.checkMx.mockRejectedValue(new Error('boom'));
       mockSelectSequence([[inboxRow]]);
@@ -304,7 +345,7 @@ describe('AnalysisService', () => {
       await expect(
         service.analyse({ inboxId: 'inbox-1', userId: 'user-1' }),
       ).resolves.not.toThrow();
-      expect(setMock).toHaveBeenCalledWith({ status: 'active' });
+      expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
     });
   });
 
@@ -317,19 +358,36 @@ describe('AnalysisService', () => {
       );
     });
 
-    it('uses dkimSelector "default" and never calls checkRdns for pool inboxes (no sendingIp column)', async () => {
+    it('passes no selector and never calls checkRdns for pool inboxes (no sendingIp column)', async () => {
       mockSelectSequence([[poolInboxRow]]);
       const valuesMock = mockInsert();
       mockUpdate();
 
       await service.analyse({ poolInboxId: 'pool-1', userId: 'user-1' });
 
-      expect(dnsService.checkDkim).toHaveBeenCalledWith('poolco.com', 'default');
+      expect(dnsService.checkDkimForInbox).toHaveBeenCalledWith('poolco.com', null, 'gmail');
       expect(dnsService.checkRdns).not.toHaveBeenCalled();
       const inserted = valuesMock.mock.calls[0][0];
       expect(inserted.rdnsValid).toBeNull();
       expect(inserted.poolInboxId).toBe('pool-1');
       expect(inserted.inboxId).toBeNull();
+    });
+
+    it('marks a pool inbox as errored, not active, when its mailbox cannot be reached', async () => {
+      mockSelectSequence([[poolInboxRow]]);
+      mockInsert();
+      const { setMock } = mockUpdate();
+      smtpVerify.mockRejectedValue(new Error('Invalid login'));
+
+      await service.analyse({ poolInboxId: 'pool-1', userId: 'user-1' });
+
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'error',
+          errorMessage: expect.stringContaining('Invalid login'),
+        }),
+      );
+      expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
     });
 
     it('updates pool_inboxes status to active after analysis completes', async () => {
@@ -339,7 +397,7 @@ describe('AnalysisService', () => {
 
       await service.analyse({ poolInboxId: 'pool-1', userId: 'user-1' });
 
-      expect(setMock).toHaveBeenCalledWith({ status: 'active' });
+      expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
     });
   });
 

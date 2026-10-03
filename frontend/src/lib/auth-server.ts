@@ -2,6 +2,31 @@ import { betterAuth } from 'better-auth';
 import { Pool as PgPool } from 'pg';
 import { syncUserToBackend } from './user-sync';
 
+/**
+ * Asks the API to send an account email through the platform mail account.
+ * Failures are logged, not thrown, so the response to the browser is the
+ * same whether or not an account exists or the mail went out.
+ */
+async function sendAuthEmail(message: { to: string; kind: 'password_reset'; url: string }) {
+  const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+  const secret = process.env.INTERNAL_SECRET ?? '';
+  if (!apiUrl || !secret) {
+    console.error('[auth] API_URL or INTERNAL_SECRET unset — cannot send account email');
+    return;
+  }
+  try {
+    const res = await fetch(`${apiUrl}/internal/auth-email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-secret': secret },
+      body: JSON.stringify(message),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) console.error('[auth] account email was not sent', { status: res.status });
+  } catch (err) {
+    console.error('[auth] account email request failed', err);
+  }
+}
+
 let _pool: PgPool | undefined;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _auth: any;
@@ -32,6 +57,21 @@ function makeAuth() {
     baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
     emailAndPassword: {
       enabled: true,
+      // The reset link works once, for 30 minutes, and choosing a new
+      // password signs out every existing session. better-auth answers the
+      // request the same way whether or not the address has an account.
+      resetPasswordTokenExpiresIn: 30 * 60,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+        await sendAuthEmail({ to: user.email, kind: 'password_reset', url });
+      },
+    },
+    rateLimit: {
+      enabled: true,
+      customRules: {
+        '/request-password-reset': { window: 60 * 15, max: 3 },
+        '/reset-password': { window: 60 * 15, max: 10 },
+      },
     },
     socialProviders: {
       google: {

@@ -6,7 +6,7 @@ import { Job, UnrecoverableError } from 'bullmq';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { dnsChecks, inboxes } from '../db/schema';
-import { DnsService, DnsCheckOutcome, IssueCode } from './dns.service';
+import { DnsService, DnsCheckOutcome, IssueCode, outcomeToBoolean } from './dns.service';
 import { QueueService } from '../queue/queue.service';
 
 export interface DnsCheckJobData {
@@ -53,8 +53,6 @@ export class DnsCheckProcessor extends WorkerHost {
     const domain = inbox.email.split('@')[1];
     this.logger.info({ jobId, inboxId, domain }, 'DNS check started');
 
-    const selector = inbox.dkimSelector ?? 'default';
-
     const [spf, dkim, dmarc, mx] = await Promise.all([
       this.dnsService
         .checkSpf(domain)
@@ -68,7 +66,7 @@ export class DnsCheckProcessor extends WorkerHost {
           ),
         ),
       this.dnsService
-        .checkDkim(domain, selector)
+        .checkDkimForInbox(domain, inbox.dkimSelector, inbox.provider)
         .then(
           (r) => (
             this.logger.debug(
@@ -118,15 +116,17 @@ export class DnsCheckProcessor extends WorkerHost {
 
     await db.insert(dnsChecks).values({
       inboxId,
-      spfValid: spf.status === 'pass',
+      // true = pass, false = fail, null = the lookup could not be completed
+      // (or there was nothing to look up). Null is never stored as a failure.
+      spfValid: outcomeToBoolean(spf),
       spfRecord: spf.detail,
-      dkimValid: dkim.status === 'pass',
-      dkimSelector: selector,
-      dmarcValid: dmarc.status === 'pass',
+      dkimValid: outcomeToBoolean(dkim),
+      dkimSelector: inbox.dkimSelector ?? null,
+      dmarcValid: outcomeToBoolean(dmarc),
       dmarcRecord: dmarc.detail,
-      mxValid: mx.status === 'pass',
+      mxValid: outcomeToBoolean(mx),
       mxRecords: [mx.detail],
-      rdnsValid: rdns ? rdns.status === 'pass' : null,
+      rdnsValid: outcomeToBoolean(rdns),
       rdnsValue: rdns ? rdns.detail : null,
       // score is left unset — T013 (reputation scoring) computes it later.
     });

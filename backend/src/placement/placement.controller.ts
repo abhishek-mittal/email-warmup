@@ -11,12 +11,27 @@ const HISTORY_LIMIT = 10;
 type PlacementTestRow = typeof placementTests.$inferSelect;
 
 export interface PlacementResultResponse {
-  status: 'pending' | 'complete';
+  id: string;
+  /**
+   * pending:  queued or still checking seeds
+   * complete: every selected seed was observed
+   * partial:  some seeds could not be checked; percentages cover the rest
+   * failed:   too few observations for a result — no percentages
+   */
+  status: 'pending' | 'complete' | 'partial' | 'failed';
+  seedCount: number | null;
+  /** Seeds actually observed: the denominator of every percentage. */
+  observedCount: number | null;
+  /** Seeds that could not be checked. Not counted as spam or missing. */
+  errorCount: number | null;
   primaryPct: number | null;
   promotionsPct: number | null;
+  otherInboxPct: number | null;
   spamPct: number | null;
   missingPct: number | null;
   placementScore: number | null;
+  failureReason: string | null;
+  createdAt: string;
   completedAt: string | null;
 }
 
@@ -73,7 +88,7 @@ export class PlacementController {
       .select()
       .from(placementTests)
       .where(eq(placementTests.inboxId, inboxId))
-      .orderBy(desc(placementTests.completedAt))
+      .orderBy(desc(placementTests.createdAt))
       .limit(HISTORY_LIMIT);
 
     return rows.map((row) => this.toResponse(row));
@@ -87,29 +102,31 @@ export class PlacementController {
     }
   }
 
-  /**
-   * Derives status/completedAt from data rather than a stored column — see
-   * addendum #3/#4. A row is "pending" while placementScore is null (the
-   * result fields haven't been filled in by the processor yet); completedAt
-   * is only surfaced once "complete", even though the underlying DB column
-   * always holds some timestamp (an insert-time placeholder while pending).
-   */
   private toResponse(test: PlacementTestRow): PlacementResultResponse {
-    const isComplete = test.placementScore !== null;
+    const status: PlacementResultResponse['status'] =
+      test.status === 'queued' || test.status === 'running'
+        ? 'pending'
+        : (test.status as 'complete' | 'partial' | 'failed');
+    const hasResult = status === 'complete' || status === 'partial';
+    const observed = test.observedCount ?? 0;
+    const pct = (count: number | null) =>
+      hasResult && observed > 0 ? Math.round(((count ?? 0) / observed) * 100) : null;
 
     return {
-      status: isComplete ? 'complete' : 'pending',
-      primaryPct: isComplete ? test.primaryPct : null,
-      promotionsPct: isComplete ? test.promotionsPct : null,
-      spamPct: isComplete ? test.spamPct : null,
-      missingPct: isComplete ? this.missingPct(test) : null,
-      placementScore: isComplete ? test.placementScore : null,
-      completedAt: isComplete ? test.completedAt.toISOString() : null,
+      id: test.id,
+      status,
+      seedCount: test.seedCount,
+      observedCount: status === 'pending' ? null : test.observedCount,
+      errorCount: status === 'pending' ? null : test.errorCount,
+      primaryPct: hasResult ? test.primaryPct : null,
+      promotionsPct: hasResult ? test.promotionsPct : null,
+      otherInboxPct: pct(test.otherInboxCount),
+      spamPct: hasResult ? test.spamPct : null,
+      missingPct: pct(test.missingCount),
+      placementScore: hasResult ? test.placementScore : null,
+      failureReason: status === 'failed' ? test.failureReason : null,
+      createdAt: test.createdAt.toISOString(),
+      completedAt: status !== 'pending' && test.completedAt ? test.completedAt.toISOString() : null,
     };
-  }
-
-  private missingPct(test: PlacementTestRow): number {
-    if (!test.seedCount || test.seedCount === 0) return 0;
-    return Math.round(((test.missingCount ?? 0) / test.seedCount) * 100);
   }
 }

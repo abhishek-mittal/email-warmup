@@ -11,7 +11,13 @@ const isPublicRoute = (path: string) =>
   path === '/' ||
   path.startsWith('/sign-in') ||
   path.startsWith('/sign-up') ||
+  path.startsWith('/forgot-password') ||
+  path.startsWith('/reset-password') ||
   path.startsWith('/api/auth') ||
+  // These validate the session themselves and answer with a proper 401 /
+  // redirect; a cookie-presence check here would turn API calls into HTML redirects.
+  path.startsWith('/api/backend') ||
+  path.startsWith('/api/mailbox-oauth') ||
   path.startsWith('/api/webhooks');
 
 export function middleware(req: NextRequest) {

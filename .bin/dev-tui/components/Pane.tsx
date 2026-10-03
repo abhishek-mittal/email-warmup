@@ -37,7 +37,7 @@ export function Pane({ source, lines, truncated, width, height, focused, searchQ
       <Box paddingX={1} justifyContent="space-between">
         <Text>
           <Text bold>{stripe(source)}</Text>
-          <Text dimColor> · port {source === 'backend' ? 3001 : source === 'frontend' ? 3000 : '—'}</Text>
+          <Text dimColor> · port {source === 'backend' ? 4611 : source === 'frontend' ? 3000 : '—'}</Text>
         </Text>
         {truncated > 0 ? <Text dimColor>({truncated} older truncated)</Text> : <Text dimColor>{lines.length}</Text>}
       </Box>

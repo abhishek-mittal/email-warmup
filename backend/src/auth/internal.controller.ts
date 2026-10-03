@@ -9,6 +9,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
+import * as nodemailer from 'nodemailer';
 import { Public } from './public.decorator';
 import { UserSyncService } from './user-sync.service';
 
@@ -83,5 +84,50 @@ export class InternalController {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Sends an account email (password reset) on behalf of the web app, which
+   * has no mail transport of its own. Guarded by the internal secret, and the
+   * link must point at this product's own site, so the endpoint cannot be
+   * used to mail arbitrary links.
+   */
+  @Public()
+  @Post('auth-email')
+  @HttpCode(200)
+  async sendAuthEmail(
+    @Body() body: { to?: string; kind?: string; url?: string },
+    @Headers('x-internal-secret') providedSecret: string | undefined,
+  ): Promise<{ ok: true }> {
+    if (!this.checkSecret(providedSecret)) {
+      throw new UnauthorizedException('Invalid internal secret');
+    }
+    if (body?.kind !== 'password_reset') throw new BadRequestException('unknown kind');
+    if (!body.to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.to)) {
+      throw new BadRequestException('to is not valid');
+    }
+    let link: URL;
+    try {
+      link = new URL(String(body.url));
+    } catch {
+      throw new BadRequestException('url is not valid');
+    }
+    const appOrigin = new URL(process.env.APP_URL || 'http://localhost:3000').origin;
+    if (link.origin !== appOrigin) throw new BadRequestException('url is not on this site');
+
+    const transport = nodemailer.createTransport({
+      host: process.env.PLATFORM_SMTP_HOST!,
+      port: Number(process.env.PLATFORM_SMTP_PORT!),
+      auth: { user: process.env.PLATFORM_SMTP_USER!, pass: process.env.PLATFORM_SMTP_PASS! },
+    });
+    const href = link.toString().replace(/"/g, '%22');
+    await transport.sendMail({
+      from: process.env.PLATFORM_FROM_EMAIL!,
+      to: body.to,
+      subject: 'Reset your EmailWarm password',
+      text: `Use this link to choose a new password. It works once and expires in 30 minutes.\n\n${link.toString()}\n\nIf you did not ask for this, you can ignore this email.`,
+      html: `<p>Use this link to choose a new password. It works once and expires in 30 minutes.</p><p><a href="${href}">Choose a new password</a></p><p>If you did not ask for this, you can ignore this email.</p>`,
+    });
+    return { ok: true };
   }
 }

@@ -72,8 +72,15 @@ export interface BlacklistCheckHistoryRow {
 
 export interface PlacementHistoryRow {
   id: string;
+  /** complete: all seeds observed; partial: some could not be checked; failed: no result. */
+  status?: 'complete' | 'partial' | 'failed';
   completedAt: string;
   seedCount: number | null;
+  /** Seeds actually observed: what the percentages are out of. */
+  observedCount?: number | null;
+  /** Seeds that could not be checked. Not counted as spam or missing. */
+  errorCount?: number | null;
+  failureReason?: string | null;
   primaryPct: number | null;
   promotionsPct: number | null;
   spamPct: number | null;
@@ -83,6 +90,8 @@ export interface PlacementHistoryRow {
 
 export interface ScoreHistoryResponse {
   current: number | null;
+  /** Share (0-100) of the score that rests on real, recent measurements. */
+  completeness?: number | null;
   trend: 'up' | 'down' | 'stable';
   history: { recordedAt: string; score: number }[];
 }

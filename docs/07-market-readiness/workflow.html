@@ -1,0 +1,557 @@
+<title>EmailWarm Workflow</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one working diagram you can step through, then short reference sections in a single reading column. */
+:root {
+  --bg: #f2f6f5; --surface: #ffffff; --sunk: #e7eeed;
+  --ink: #14272b; --muted: #52666a; --line: #b9c8c8; --line-soft: #d9e3e2;
+  --accent: #cf5a06; --accent-soft: #fde6d2;
+  --ok: #1c7448; --ok-soft: #d9f0e3; --warn: #8f5a00; --warn-soft: #fbeccb; --bad: #ad2a22; --bad-soft: #fadedb;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e191b; --surface: #16252800; --surface: #162528; --sunk: #1d3034;
+    --ink: #e3eeec; --muted: #94a9ab; --line: #3d5356; --line-soft: #26393c;
+    --accent: #ff8b3e; --accent-soft: #3d2715;
+    --ok: #62c996; --ok-soft: #153525; --warn: #e3b352; --warn-soft: #3a2d10; --bad: #f2837a; --bad-soft: #421c19;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e191b; --surface: #162528; --sunk: #1d3034;
+  --ink: #e3eeec; --muted: #94a9ab; --line: #3d5356; --line-soft: #26393c;
+  --accent: #ff8b3e; --accent-soft: #3d2715;
+  --ok: #62c996; --ok-soft: #153525; --warn: #e3b352; --warn-soft: #3a2d10; --bad: #f2837a; --bad-soft: #421c19;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.page { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 500; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 66ch; font-size: 17px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+header.top { display: flex; flex-direction: column; gap: 12px; }
+section { display: flex; flex-direction: column; gap: 18px; }
+.prose { max-width: 68ch; color: var(--muted); }
+.prose strong, .lede strong { color: var(--ink); font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- player ---------- */
+.player { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.seg button, .ctl button {
+  border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 14px; font-size: 14px;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.ctl { display: flex; gap: 6px; align-items: center; }
+.ctl .play { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 84px; font-weight: 600; }
+:root[data-theme="dark"] .ctl .play { color: #1a0d02; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ctl .play { color: #1a0d02; } }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }
+.canvas { overflow-x: auto; padding: 12px; min-width: 0; }
+.canvas svg { display: block; width: 100%; min-width: 700px; height: auto; }
+.side { border-left: 1px solid var(--line-soft); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.stepno { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.side h3 { font-size: 20px; font-weight: 700; }
+.side p { color: var(--muted); font-size: 15px; }
+.ledger { background: var(--sunk); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-family: var(--mono); font-size: 12.5px; margin-top: auto; }
+.ledger .cap { grid-column: 1 / -1; font-family: var(--body); font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+.ledger dt { color: var(--muted); }
+.ledger dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ledger dd.new { color: var(--accent); font-weight: 500; }
+.dots { display: flex; gap: 5px; padding: 12px 16px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
+.dots button { width: 22px; height: 8px; border-radius: 4px; border: 0; background: var(--line-soft); padding: 0; }
+.dots button.done { background: var(--line); }
+.dots button.cur { background: var(--accent); }
+@media (max-width: 820px) {
+  .stage { grid-template-columns: minmax(0, 1fr); }
+  .side { border-left: 0; border-top: 1px solid var(--line-soft); }
+}
+
+/* ---------- svg parts ---------- */
+.node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; transition: stroke .25s, fill .25s; }
+.node.on rect.box { stroke: var(--accent); fill: var(--accent-soft); stroke-width: 2; }
+.node text { fill: var(--ink); font-family: var(--body); font-size: 14px; font-weight: 600; }
+.node text.sub { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; font-weight: 400; }
+.folder rect { fill: var(--sunk); stroke: none; }
+.folder text { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; font-weight: 400; }
+.folder.has rect { fill: var(--accent); }
+.folder.has text { fill: var(--surface); font-weight: 500; }
+.edge { stroke: var(--line); stroke-width: 1.6; fill: none; marker-end: url(#ah); transition: stroke .25s; }
+.edge.two { marker-start: url(#ah-s); }
+.edge.on { stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 7 6; animation: flow 0.9s linear infinite; marker-end: url(#ah-on); }
+.edge.two.on { marker-start: url(#ah-s-on); }
+@keyframes flow { to { stroke-dashoffset: -13; } }
+.elabel { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.elabel.on { fill: var(--accent); }
+.mk { fill: var(--line); } .mk-on { fill: var(--accent); }
+#token rect { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+#token path { stroke: var(--surface); stroke-width: 1.4; fill: none; }
+.band { fill: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; }
+@media (prefers-reduced-motion: reduce) { .edge.on { animation: none; } }
+
+/* ---------- reference blocks ---------- */
+.hops { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.hop { flex: 1 1 190px; min-width: 0; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.hop b { font-family: var(--display); font-size: 16px; }
+.hop span { color: var(--muted); font-size: 14px; }
+.hop .tag { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+ol.flow { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+ol.flow li { counter-increment: s; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; font-size: 14.5px; color: var(--muted); min-width: 0; }
+ol.flow li::before { content: counter(s); font-family: var(--mono); font-size: 12px; color: var(--accent); display: block; margin-bottom: 4px; }
+ol.flow li b { color: var(--ink); font-weight: 600; display: block; margin-bottom: 2px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figure .scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px; }
+figure svg { display: block; width: 100%; height: auto; }
+figure svg.wide { min-width: 640px; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 70ch; }
+.st rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.st text { fill: var(--ink); font-family: var(--mono); font-size: 12px; }
+.st.good rect { fill: var(--ok-soft); stroke: var(--ok); } .st.good text { fill: var(--ok); }
+.st.bad rect { fill: var(--bad-soft); stroke: var(--bad); } .st.bad text { fill: var(--bad); }
+.st.hold rect { fill: var(--warn-soft); stroke: var(--warn); } .st.hold text { fill: var(--warn); }
+.sedge { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#ah2); }
+.mk2 { fill: var(--muted); }
+.slabel { fill: var(--muted); font-family: var(--body); font-size: 11.5px; }
+.tl-base { fill: var(--sunk); } .tl-win { fill: var(--accent); } .tl-tick { stroke: var(--line); stroke-width: 1; }
+.tl-text { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.tl-strong { fill: var(--ink); font-family: var(--body); font-size: 12.5px; font-weight: 600; }
+.tl-mark { stroke: var(--ink); stroke-width: 2; } .tl-dot { fill: var(--muted); }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 28px; margin: 0; padding: 0; list-style: none; }
+.rules li { padding-left: 16px; position: relative; font-size: 15px; color: var(--muted); }
+.rules li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 7px; height: 7px; border-radius: 2px; background: var(--accent); }
+.rules li b { color: var(--ink); font-weight: 600; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.note { color: var(--muted); }
+.pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
+.foot { color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--line-soft); padding-top: 18px; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <span class="eyebrow">EmailWarm · how it works today</span>
+    <h1>One warmup email, from schedule to WarmupHub</h1>
+    <p class="lede">EmailWarm builds sender reputation by having inboxes exchange small amounts of real mail and treat it well: open it, star it, reply, pull it out of spam. Step through the diagram to follow a single message through every part of the system. State as of 3 October 2026, branch <code>feat/mr-warmup-core</code>.</p>
+  </header>
+
+  <section aria-labelledby="h-player">
+    <h2 id="h-player">Follow one message</h2>
+    <div class="player">
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Scenario">
+          <button type="button" id="sc-normal" data-sc="normal" aria-pressed="true">Normal delivery</button>
+          <button type="button" id="sc-spam" data-sc="spam" aria-pressed="false">Lands in spam</button>
+          <button type="button" id="sc-lost" data-sc="lost" aria-pressed="false">Acknowledgement lost</button>
+        </div>
+        <div class="ctl">
+          <button type="button" id="prev" aria-label="Previous step">Back</button>
+          <button type="button" id="play" class="play">Pause</button>
+          <button type="button" id="next" aria-label="Next step">Next</button>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="canvas">
+          <svg viewBox="0 0 960 520" role="img" aria-label="System diagram: the scheduler reserves sends in the ledger, jobs go to the queue, the send worker submits over SMTP, the receive worker engages with the message over IMAP and records each action in the ledger.">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0 0L10 5L0 10z"/></marker>
+              <marker id="ah-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="mk-on" d="M0 0L10 5L0 10z"/></marker>
+              <marker id="ah-s" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M10 0L0 5L10 10z"/></marker>
+              <marker id="ah-s-on" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="mk-on" d="M10 0L0 5L10 10z"/></marker>
+            </defs>
+
+            <text class="band" x="40" y="20">PLAN</text>
+            <text class="band" x="40" y="180">WORKERS</text>
+            <text class="band" x="40" y="360">MAILBOXES</text>
+
+            <path id="e1" class="edge" d="M210 62 L395 62"/>
+            <text id="l-e1" class="elabel" x="302" y="52" text-anchor="middle">reserves today's slots</text>
+            <path id="e2" class="edge" d="M480 94 L480 190"/>
+            <text id="l-e2" class="elabel" x="490" y="146">jobs, after commit</text>
+            <path id="e3" class="edge" d="M395 222 L210 222"/>
+            <text id="l-e3" class="elabel" x="302" y="212" text-anchor="middle">send job, at slot time</text>
+            <path id="e4" class="edge two" d="M180 190 L410 94"/>
+            <text id="l-e4" class="elabel" x="282" y="128" text-anchor="end">claim, then result</text>
+            <path id="e5" class="edge" d="M125 254 L125 370"/>
+            <text id="l-e5" class="elabel" x="136" y="316">SMTP submit</text>
+            <path id="e6" class="edge" d="M210 410 L750 410"/>
+            <text id="l-e6" class="elabel" x="302" y="400" text-anchor="middle">hands off</text>
+            <text id="l-e6b" class="elabel" x="657" y="400" text-anchor="middle">delivers</text>
+            <path id="e7" class="edge" d="M565 222 L750 222"/>
+            <text id="l-e7" class="elabel" x="657" y="212" text-anchor="middle">receive job, later</text>
+            <path id="e8" class="edge" d="M835 254 L835 370"/>
+            <text id="l-e8" class="elabel" x="824" y="316" text-anchor="end">IMAP: find, flag, move</text>
+            <path id="e9" class="edge" d="M780 190 L550 94"/>
+            <text id="l-e9" class="elabel" x="678" y="128">records each action</text>
+            <path id="e10" class="edge" d="M750 465 L210 465"/>
+            <text id="l-e10" class="elabel" x="480" y="486" text-anchor="middle">reply, threaded to the original</text>
+            <path id="e11" class="edge" d="M750 240 C 520 300, 330 300, 200 370"/>
+            <text id="l-e11" class="elabel" x="470" y="318" text-anchor="middle">files the reply (IMAP)</text>
+
+            <g class="node" id="n-sched"><rect class="box" x="40" y="30" width="170" height="64" rx="8"/><text x="125" y="58" text-anchor="middle">Scheduler</text><text class="sub" x="125" y="76" text-anchor="middle">cron 05:00 UTC</text></g>
+            <g class="node" id="n-ledger"><rect class="box" x="395" y="30" width="170" height="64" rx="8"/><text x="480" y="58" text-anchor="middle">Ledger</text><text class="sub" x="480" y="76" text-anchor="middle">Postgres · warmup_sends</text></g>
+            <g class="node" id="n-send"><rect class="box" x="40" y="190" width="170" height="64" rx="8"/><text x="125" y="218" text-anchor="middle">Send worker</text><text class="sub" x="125" y="236" text-anchor="middle">warmup-send</text></g>
+            <g class="node" id="n-queue"><rect class="box" x="395" y="190" width="170" height="64" rx="8"/><text x="480" y="218" text-anchor="middle">Queue</text><text class="sub" x="480" y="236" text-anchor="middle">Redis · BullMQ</text></g>
+            <g class="node" id="n-recv"><rect class="box" x="750" y="190" width="170" height="64" rx="8"/><text x="835" y="218" text-anchor="middle">Receive worker</text><text class="sub" x="835" y="236" text-anchor="middle">warmup-receive</text></g>
+            <g class="node" id="n-smtp"><rect class="box" x="395" y="378" width="170" height="64" rx="8"/><text x="480" y="406" text-anchor="middle">Mail provider</text><text class="sub" x="480" y="424" text-anchor="middle">Gmail · Outlook · custom</text></g>
+            <g class="node" id="n-sbox"><rect class="box" x="40" y="370" width="170" height="112" rx="8"/><text x="125" y="392" text-anchor="middle">Sender mailbox</text>
+              <g class="folder" id="f-s-inbox"><rect x="56" y="402" width="138" height="20" rx="4"/><text x="64" y="416">INBOX</text></g>
+              <g class="folder" id="f-s-hub"><rect x="56" y="450" width="138" height="20" rx="4"/><text x="64" y="464">WarmupHub</text></g>
+            </g>
+            <g class="node" id="n-rbox"><rect class="box" x="750" y="370" width="170" height="112" rx="8"/><text x="835" y="392" text-anchor="middle">Partner mailbox</text>
+              <g class="folder" id="f-r-inbox"><rect x="766" y="402" width="138" height="20" rx="4"/><text x="774" y="416">INBOX</text></g>
+              <g class="folder" id="f-r-junk"><rect x="766" y="426" width="138" height="20" rx="4"/><text x="774" y="440">Junk</text></g>
+              <g class="folder" id="f-r-hub"><rect x="766" y="450" width="138" height="20" rx="4"/><text x="774" y="464">WarmupHub</text></g>
+            </g>
+
+            <g id="token" hidden><rect x="-11" y="-8" width="22" height="16" rx="3"/><path d="M-9 -6 L0 2 L9 -6"/></g>
+          </svg>
+        </div>
+        <aside class="side" aria-live="polite">
+          <span class="stepno" id="stepno">Step 1</span>
+          <h3 id="steptitle">Plan the day</h3>
+          <p id="stepdesc"></p>
+          <dl class="ledger" id="ledger"></dl>
+        </aside>
+      </div>
+      <div class="dots" id="dots" role="group" aria-label="Steps"></div>
+    </div>
+    <p class="prose">The ledger row on the right is the same database row throughout. Every worker writes its result there as it happens, which is what lets a retry pick up where a failed attempt stopped instead of repeating it.</p>
+  </section>
+
+  <section aria-labelledby="h-rules">
+    <h2 id="h-rules">Checked immediately before every send</h2>
+    <p class="prose">A slot is reserved hours before it fires, so the send worker checks again at the last moment. If any rule fails, the row is marked <code>canceled</code> and no mail leaves.</p>
+    <ul class="rules">
+      <li><b>Sender is active.</b> Paused, errored, pending and graduated inboxes send nothing.</li>
+      <li><b>Never the same domain.</b> A sender is never paired with a mailbox on its own domain.</li>
+      <li><b>Consent on both sides.</b> The shared pool needs recorded opt-in from sender and receiver.</li>
+      <li><b>Receiver is taking part.</b> Active inbox, active membership, not quarantined.</li>
+      <li><b>Private pool stays private.</b> A pool inbox is only used by the account that owns it.</li>
+      <li><b>One submission per slot.</b> The claim is a conditional update, so a job delivered twice sends once.</li>
+      <li><b>No stop switch is on.</b> An operator can halt all sending, one provider, or one account; queued sends obey it.</li>
+      <li><b>Bounce rate is under 3%.</b> An inbox over the limit is held until an operator reviews it.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="h-states">
+    <h2 id="h-states">The states a send can be in</h2>
+    <figure>
+      <div class="scroll">
+        <svg class="wide" viewBox="0 0 860 250" role="img" aria-label="State diagram: planned to submitting to accepted; submitting can also become failed, which may retry, or uncertain, which becomes accepted only when the message is found in the partner mailbox; planned can become canceled.">
+          <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk2" d="M0 0L10 5L0 10z"/></marker></defs>
+          <g class="st"><rect x="20" y="95" width="130" height="44" rx="22"/><text x="85" y="122" text-anchor="middle">planned</text></g>
+          <g class="st"><rect x="270" y="95" width="130" height="44" rx="22"/><text x="335" y="122" text-anchor="middle">submitting</text></g>
+          <g class="st good"><rect x="640" y="95" width="130" height="44" rx="22"/><text x="705" y="122" text-anchor="middle">accepted</text></g>
+          <g class="st bad"><rect x="270" y="190" width="130" height="44" rx="22"/><text x="335" y="217" text-anchor="middle">failed</text></g>
+          <g class="st hold"><rect x="455" y="14" width="130" height="44" rx="22"/><text x="520" y="41" text-anchor="middle">uncertain</text></g>
+          <g class="st"><rect x="20" y="190" width="130" height="44" rx="22"/><text x="85" y="217" text-anchor="middle">canceled</text></g>
+          <path class="sedge" d="M150 117 L270 117"/><text class="slabel" x="210" y="108" text-anchor="middle">worker claims</text>
+          <path class="sedge" d="M400 117 L640 117"/><text class="slabel" x="520" y="135" text-anchor="middle">server replied 250 OK</text>
+          <path class="sedge" d="M315 139 L315 190"/><text class="slabel" x="306" y="170" text-anchor="end">server said no</text>
+          <path class="sedge" d="M355 190 L355 139"/><text class="slabel" x="364" y="170">retry, up to 3</text>
+          <path class="sedge" d="M370 95 C 390 50, 420 38, 455 36"/><text class="slabel" x="372" y="50" text-anchor="end">connection lost mid-send</text>
+          <path class="sedge" d="M585 36 C 650 38, 690 60, 700 95"/><text class="slabel" x="672" y="46">found in partner mailbox</text>
+          <path class="sedge" d="M85 139 L85 190"/><text class="slabel" x="96" y="170">paused or not eligible</text>
+        </svg>
+      </div>
+      <figcaption>SMTP cannot promise exactly-once delivery. When the connection drops after the message was handed over, the send is <code>uncertain</code> and is never sent again; it becomes <code>accepted</code> only if the receive worker later finds it in the partner's mailbox.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h-day">
+    <h2 id="h-day">What runs when</h2>
+    <figure>
+      <div class="scroll">
+        <svg class="wide" viewBox="0 0 860 170" role="img" aria-label="A 24 hour UTC timeline: scheduling cron at 05:00, send window from 08:00 to 18:00, recovery sweep every five minutes and token refresh every 45 minutes all day.">
+          <rect class="tl-base" x="30" y="60" width="800" height="26" rx="4"/>
+          <rect class="tl-win" x="296.7" y="60" width="333.3" height="26" rx="4"/>
+          <line class="tl-mark" x1="196.7" y1="48" x2="196.7" y2="98"/>
+          <text class="tl-strong" x="196.7" y="38" text-anchor="middle">05:00 plan the day</text>
+          <text class="tl-strong" x="463" y="38" text-anchor="middle">08:00 to 18:00 send window, up to 76 sends per inbox</text>
+          <g class="tl-text">
+            <text x="30" y="106" text-anchor="middle">00</text><text x="230" y="106" text-anchor="middle">06</text><text x="430" y="106" text-anchor="middle">12</text><text x="630" y="106" text-anchor="middle">18</text><text x="830" y="106" text-anchor="middle">24</text>
+          </g>
+          <line class="tl-tick" x1="30" y1="130" x2="830" y2="130"/>
+          <g class="tl-dot"><circle cx="40" cy="130" r="2.5"/><circle cx="90" cy="130" r="2.5"/><circle cx="140" cy="130" r="2.5"/><circle cx="190" cy="130" r="2.5"/><circle cx="240" cy="130" r="2.5"/><circle cx="290" cy="130" r="2.5"/><circle cx="340" cy="130" r="2.5"/><circle cx="390" cy="130" r="2.5"/><circle cx="440" cy="130" r="2.5"/><circle cx="490" cy="130" r="2.5"/><circle cx="540" cy="130" r="2.5"/><circle cx="590" cy="130" r="2.5"/><circle cx="640" cy="130" r="2.5"/><circle cx="690" cy="130" r="2.5"/><circle cx="740" cy="130" r="2.5"/><circle cx="790" cy="130" r="2.5"/></g>
+          <text class="tl-text" x="30" y="154">all day: recovery sweep every 5 min · OAuth token refresh every 45 min per inbox · engagement jobs 2 to 240 min after each send</text>
+        </svg>
+      </div>
+      <figcaption>Times are UTC. Send times are drawn at random inside the window with at least 8 minutes between any two sends from one inbox, so no message goes out at a predictable instant. A late start only gets the slots that still fit.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h-connect">
+    <h2 id="h-connect">How a mailbox gets connected</h2>
+    <p class="prose">Three ways in. All of them end the same way: the mailbox is only activated after it has actually signed in over SMTP, and IMAP where it needs to receive.</p>
+    <ol class="flow">
+      <li><b>You choose a provider</b>Gmail or Outlook by sign-in, or any server by SMTP and IMAP details. A checkbox decides whether the inbox joins the shared pool.</li>
+      <li><b>A single-use ticket is issued</b>For Gmail and Outlook the API stores a random, five-minute ticket tied to your account, then sends you to the provider's consent screen.</li>
+      <li><b>The provider sends you back</b>The return address is a mailbox-only page, separate from account login. It works only while you are signed in.</li>
+      <li><b>The ticket is checked and burned</b>Edited, replayed, expired or someone else's tickets are rejected before any token is requested.</li>
+      <li><b>Tokens are stored encrypted</b>AES-256-GCM. The mailbox address comes from the provider's identity token, never from the browser.</li>
+      <li><b>Pre-check runs</b>Sign in over SMTP, sign in over IMAP, create the WarmupHub folder, look up DNS. Pass, and the inbox is active.</li>
+    </ol>
+    <p class="prose"><strong>Bulk import</strong> (CSV or JSON) creates inboxes as pending. A background job runs the same sign-in test, then marks each one active or errored. <strong>Reconnecting</strong> a mailbox you already have updates it in place and keeps its warmup day.</p>
+  </section>
+
+  <section aria-labelledby="h-auth">
+    <h2 id="h-auth">How your browser talks to the API</h2>
+    <div class="hops">
+      <div class="hop"><span class="tag">1 · browser</span><b>Dashboard</b><span>Calls <code>/api/backend/…</code> on the same site with your session cookie. Holds no API credential.</span></div>
+      <div class="hop"><span class="tag">2 · web server</span><b>Next.js proxy</b><span>Looks your session up in the store, checks the request came from this site, allows only known paths, signs a 60-second pass.</span></div>
+      <div class="hop"><span class="tag">3 · api</span><b>NestJS</b><span>Verifies the pass, takes your user id from it, and checks you own the inbox you asked about.</span></div>
+      <div class="hop"><span class="tag">4 · storage</span><b>Postgres and Redis</b><span>Accounts, inboxes, the send ledger, schedules; job queues for every worker.</span></div>
+    </div>
+    <p class="prose">Because the signing key never leaves the server, nothing a browser sends can change who the API thinks is calling.</p>
+  </section>
+
+  <section aria-labelledby="h-status">
+    <h2 id="h-status">What works today, and what does not yet</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Part</th><th>State</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Send, engage, reply, file</td><td><span class="pill ok">working</span></td><td class="note">Proven against real SMTP and IMAP servers in the local harness. Not yet run with real Gmail or Outlook mailboxes.</td></tr>
+          <tr><td>Daily scheduling, pause, resume</td><td><span class="pill ok">working</span></td><td class="note">One plan per inbox per day. Resume cannot add volume or skip a ramp day.</td></tr>
+          <tr><td>OAuth token refresh</td><td><span class="pill ok">working</span></td><td class="note">Refreshes on demand and every 45 minutes. A revoked mailbox stops and shows a reconnect prompt.</td></tr>
+          <tr><td>Gmail and Outlook sign-in connect</td><td><span class="pill warn">needs setup</span></td><td class="note">Code and tests done. The new return addresses must be added to the Google and Microsoft app registrations before a real connect.</td></tr>
+          <tr><td>Secure browser-to-API path</td><td><span class="pill ok">working</span></td><td class="note">Checked on the running app. Remove the old public secret from <code>frontend/.env.local</code>.</td></tr>
+          <tr><td>Shared-pool consent</td><td><span class="pill ok">working</span></td><td class="note">Opt-in on connect and on the inbox page. Withdrawal takes effect at the next send.</td></tr>
+          <tr><td>Billing</td><td><span class="pill warn">demo</span></td><td class="note">New accounts get 10 inboxes and 5 placement tests with <code>DEMO_MODE=true</code>. Stripe is not hardened.</td></tr>
+          <tr><td>Bounce protection and stop switches</td><td><span class="pill ok">working</span></td><td class="note">Pauses an inbox when more than 3% of its sends bounce in 24 hours. Operators can stop all sending, one provider, or one account. Not yet tested with real Gmail or Outlook bounce notices.</td></tr>
+          <tr><td>DNS and blocklist checks</td><td><span class="pill ok">working</span></td><td class="note">Results are pass, fail or unknown; a failed lookup is never reported as a missing record or a listing. Five live blocklists, not the 100+ once promised.</td></tr>
+          <tr><td>Placement tests</td><td><span class="pill warn">needs setup</span></td><td class="note">Per-seed results with honest partial and failed states. No seed mailboxes are provisioned, so tests cannot run yet.</td></tr>
+          <tr><td>Scores and graduation</td><td><span class="pill ok">working</span></td><td class="note">Unmeasured signals no longer count as healthy; the score shows how much of it is measured. Graduation needs 7 measured days averaging 80 and a recent placement result, so it also waits on seeds.</td></tr>
+          <tr><td>Limits on custom mail hosts</td><td><span class="pill ok">working</span></td><td class="note">Custom SMTP and IMAP hosts that resolve to internal or local addresses are refused. Imports are capped at 200 mailboxes. Rate limits are still to do.</td></tr>
+          <tr><td>Disconnect, export, delete account</td><td><span class="pill ok">working</span></td><td class="note">Disconnect erases an inbox's credentials. Deleting an account removes everything identifying and keeps only anonymous delivery records. Stripe is not notified.</td></tr>
+          <tr><td>Password reset</td><td><span class="pill warn">needs setup</span></td><td class="note">Built, but no reset email has been seen arriving; platform mail settings are placeholders locally.</td></tr>
+          <tr><td>Deployment</td><td><span class="pill warn">needs setup</span></td><td class="note">Both images build and start. The deploy workflow has never run, and the web app cannot yet reach a private API in the cloud.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="foot">Sources: <span class="mono">docs/07-market-readiness</span> (STATUS and verification files), and the code on <span class="mono">feat/mr-warmup-core</span>. Test evidence: 604 unit, 121 integration and 23 frontend tests passing locally.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  var EMPTY = { status: '—', sentAt: '—', openedAt: '—', starredAt: '—', landedInSpam: 'false', rescuedAt: '—', replyStatus: '—', filedAt: '—', replyFiledAt: '—' };
+  var FIELDS = ['status', 'sentAt', 'landedInSpam', 'rescuedAt', 'openedAt', 'starredAt', 'replyStatus', 'filedAt', 'replyFiledAt'];
+
+  // Each step: title, description, highlighted nodes, edges the envelope travels ([id, reversed]),
+  // where the message (r) and the reply (s) sit, and what changes in the ledger row.
+  var PLAN = {
+    t: 'Plan the day',
+    d: 'At 05:00 UTC the scheduler takes each active inbox, reads its ramp volume for today, picks partners and random send times, and writes one reserved row per send. Creating today\'s plan is the only thing that advances the warmup day.',
+    n: ['n-sched', 'n-ledger'], e: [['e1']], l: { status: 'planned' }
+  };
+  var QUEUE = {
+    t: 'Queue the jobs',
+    d: 'Only after those rows are committed does each send become a delayed job in Redis, timed for its slot. If Redis is down the rows simply expire; nothing is sent late in a burst.',
+    n: ['n-ledger', 'n-queue'], e: [['e2']], l: {}
+  };
+  var FIRE = {
+    t: 'The slot arrives',
+    d: 'The job fires and the send worker loads the reserved row. It rechecks everything: sender still active, partner still eligible, different domains, consent on both sides.',
+    n: ['n-queue', 'n-send'], e: [['e3']], l: {}
+  };
+  var CLAIM = {
+    t: 'Claim before sending',
+    d: 'The worker flips the row from planned to submitting with a conditional update. If two workers got the same job, only one update succeeds and only that worker sends.',
+    n: ['n-send', 'n-ledger'], e: [['e4']], l: { status: 'submitting' }
+  };
+  var SUBMIT = {
+    t: 'Submit over SMTP',
+    d: 'The message goes out through the sender\'s own mail account, with a fresh OAuth token if needed, a fixed Message-ID and a warmup header. The provider delivers it to the partner.',
+    n: ['n-send', 'n-sbox', 'n-smtp', 'n-rbox'], e: [['e5'], ['e6']], r: 'f-r-inbox', l: {}
+  };
+  var ACCEPT = {
+    t: 'Record acceptance',
+    d: 'The server answered 250 OK, so the row becomes accepted. The worker then queues an engagement job for a random time 2 to 240 minutes away, deciding now whether it will include a reply.',
+    n: ['n-send', 'n-ledger', 'n-queue'], e: [['e4'], ['e2']], r: 'f-r-inbox', l: { status: 'accepted', sentAt: '09:42:10' }
+  };
+  var WAKE = {
+    t: 'The engagement job wakes',
+    d: 'Some time later the receive worker picks the job up. If the partner inbox was paused in the meantime it stops here and touches nothing.',
+    n: ['n-queue', 'n-recv'], e: [['e7']], r: 'f-r-inbox', l: {}
+  };
+  var FILE = {
+    t: 'File into WarmupHub',
+    d: 'The message is moved out of the real inbox into the WarmupHub folder. Filing always runs, even when the reply failed, so warmup mail never stays in a working inbox.',
+    n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-hub', l: { filedAt: '11:17:08' }
+  };
+
+  var SCENARIOS = {
+    normal: [PLAN, QUEUE, FIRE, CLAIM, SUBMIT, ACCEPT, WAKE,
+      { t: 'Find the message', d: 'Over IMAP the worker searches the partner\'s folders by Message-ID: Inbox first, then Junk. Found in the Inbox. If it has not arrived yet, the job retries with growing delays for about ten hours.',
+        n: ['n-recv', 'n-rbox'], e: [['e8']], r: 'f-r-inbox', l: {} },
+      { t: 'Open and star', d: 'The worker marks the message read, then starred. Each action is saved to the ledger the moment it succeeds, so a retry never repeats one.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-inbox', l: { openedAt: '11:17:02', starredAt: '11:17:03' } },
+      { t: 'Reply to the sender', d: 'About 60% of messages get a reply. It is sent from the partner mailbox to the address the original was recorded as coming from, threaded onto it. The reply has its own ledger state.',
+        n: ['n-recv', 'n-rbox', 'n-sbox'], e: [['e10']], r: 'f-r-inbox', s: 'f-s-inbox', l: { replyStatus: 'accepted' } },
+      Object.assign({}, FILE, { s: 'f-s-inbox' }),
+      { t: 'File the reply too', d: 'A second job opens the original sender\'s mailbox, marks the reply read and moves it to WarmupHub. Both sides end with a clean inbox and a full record.',
+        n: ['n-recv', 'n-sbox', 'n-ledger'], e: [['e11'], ['e9']], r: 'f-r-hub', s: 'f-s-hub', l: { replyFiledAt: '11:41:30' } }
+    ],
+    spam: [PLAN, QUEUE, FIRE, CLAIM,
+      Object.assign({}, SUBMIT, { d: 'The message goes out normally, but the partner\'s provider files it under Junk.', r: 'f-r-junk' }),
+      Object.assign({}, ACCEPT, { r: 'f-r-junk' }),
+      Object.assign({}, WAKE, { r: 'f-r-junk' }),
+      { t: 'Find it in Junk', d: 'The search does not find it in the Inbox and moves on to Junk. Where this message was found is recorded before anything moves it, so the spam figure reflects real placement.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-junk', l: { landedInSpam: 'true' } },
+      { t: 'Rescue it', d: 'The worker moves the message from Junk to the Inbox. That move is the signal mail providers read as "this sender is wanted". Rescue depends on this message, not on an earlier one.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-inbox', l: { rescuedAt: '11:17:01' } },
+      { t: 'Open and star', d: 'Now in the Inbox, the message is marked read and starred, each action saved as it happens.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-inbox', l: { openedAt: '11:17:02', starredAt: '11:17:03' } },
+      FILE
+    ],
+    lost: [PLAN, QUEUE, FIRE, CLAIM,
+      { t: 'The connection drops', d: 'The worker hands the message to the mail server and the connection dies before the server\'s answer comes back. The message may have been accepted, or not. Nobody knows.',
+        n: ['n-send', 'n-sbox', 'n-smtp'], e: [['e5']], l: {} },
+      { t: 'Mark it uncertain', d: 'The row becomes uncertain and the job ends for good. It is not retried: sending again could put two copies in the partner\'s inbox. An engagement job is still queued, to go and look.',
+        n: ['n-send', 'n-ledger', 'n-queue'], e: [['e4'], ['e2']], l: { status: 'uncertain' } },
+      Object.assign({}, WAKE, { r: null }),
+      { t: 'Look in the partner mailbox', d: 'The receive worker searches for the Message-ID. It is there: the server had accepted it after all. Seeing it is proof of delivery, so the row is settled as accepted.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-inbox', l: { status: 'accepted', sentAt: '11:17:00' } },
+      { t: 'Open and star', d: 'From here it is a normal engagement. Had the message never turned up, the row would have stayed uncertain and the day\'s count would still include it, keeping volume under the cap.',
+        n: ['n-recv', 'n-rbox', 'n-ledger'], e: [['e8'], ['e9']], r: 'f-r-inbox', l: { openedAt: '11:17:02', starredAt: '11:17:03' } },
+      FILE
+    ]
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var scenario = 'normal', index = 0, playing = !reduced, timer = null, run = 0;
+  var token = $('token');
+  var STEP_MS = 6500, EDGE_MS = 1100;
+
+  function steps() { return SCENARIOS[scenario]; }
+
+  function ledgerAt(i) {
+    var row = Object.assign({}, EMPTY);
+    for (var k = 0; k <= i; k++) Object.assign(row, steps()[k].l);
+    return row;
+  }
+
+  function mailAt(i, key) {
+    for (var k = i; k >= 0; k--) if (key in steps()[k]) return steps()[k][key];
+    return null;
+  }
+
+  function moveToken(edges, id) {
+    if (!edges.length) { token.hidden = true; return; }
+    var e = 0;
+    function one() {
+      if (id !== run) return;
+      if (e >= edges.length) { e = 0; setTimeout(one, 700); return; }
+      var path = $(edges[e][0]), len = path.getTotalLength(), start = null;
+      token.hidden = false;
+      if (reduced) {
+        var end = path.getPointAtLength(len / 2);
+        token.setAttribute('transform', 'translate(' + end.x + ',' + end.y + ')');
+        return;
+      }
+      function frame(ts) {
+        if (id !== run) return;
+        if (start === null) start = ts;
+        var t = Math.min(1, (ts - start) / EDGE_MS);
+        var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        var p = path.getPointAtLength(eased * len);
+        token.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+        if (t < 1) requestAnimationFrame(frame); else { e++; one(); }
+      }
+      requestAnimationFrame(frame);
+    }
+    one();
+  }
+
+  function render() {
+    var list = steps(), step = list[index];
+    run++;
+    document.querySelectorAll('.node.on, .edge.on, .elabel.on, .folder.has').forEach(function (el) {
+      el.classList.remove('on'); el.classList.remove('has');
+    });
+    step.n.forEach(function (id) { $(id).classList.add('on'); });
+    step.e.forEach(function (pair) {
+      $(pair[0]).classList.add('on');
+      var label = $('l-' + pair[0]); if (label) label.classList.add('on');
+      if (pair[0] === 'e6') $('l-e6b').classList.add('on');
+    });
+    var r = mailAt(index, 'r'), s = mailAt(index, 's');
+    if (r) $(r).classList.add('has');
+    if (s) $(s).classList.add('has');
+
+    $('stepno').textContent = 'Step ' + (index + 1) + ' of ' + list.length;
+    $('steptitle').textContent = step.t;
+    $('stepdesc').textContent = step.d;
+
+    var row = ledgerAt(index), html = '<div class="cap">Ledger row for this send</div>';
+    FIELDS.forEach(function (f) {
+      var fresh = Object.prototype.hasOwnProperty.call(step.l, f);
+      html += '<dt>' + f + '</dt><dd' + (fresh ? ' class="new"' : '') + '>' + row[f] + '</dd>';
+    });
+    $('ledger').innerHTML = html;
+
+    var dots = $('dots'); dots.innerHTML = '';
+    list.forEach(function (st, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = i === index ? 'cur' : i < index ? 'done' : '';
+      b.setAttribute('aria-label', 'Step ' + (i + 1) + ': ' + st.t);
+      b.title = st.t;
+      b.addEventListener('click', function () { go(i, true); });
+      dots.appendChild(b);
+    });
+
+    moveToken(step.e, run);
+    schedule();
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    $('play').textContent = playing ? 'Pause' : 'Play';
+    if (!playing) return;
+    timer = setTimeout(function () { index = (index + 1) % steps().length; render(); }, STEP_MS);
+  }
+
+  function go(i, manual) {
+    var n = steps().length;
+    index = (i + n) % n;
+    if (manual) playing = false;
+    render();
+  }
+
+  $('prev').addEventListener('click', function () { go(index - 1, true); });
+  $('next').addEventListener('click', function () { go(index + 1, true); });
+  $('play').addEventListener('click', function () { playing = !playing; schedule(); });
+  document.querySelectorAll('.seg button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      scenario = btn.getAttribute('data-sc');
+      document.querySelectorAll('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
+      index = 0;
+      render();
+    });
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) clearTimeout(timer); else schedule();
+  });
+
+  render();
+})();
+</script>
