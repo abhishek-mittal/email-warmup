@@ -14,6 +14,10 @@ out/
 .env.*.local
 backend/.env
 frontend/.env
+# Local sync source for the GitHub staging Environment (real secret values).
+# The committed template is deploy/.env.staging.example (different name).
+.env.staging
+deploy/.env.staging
 
 # Logs
 *.log

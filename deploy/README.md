@@ -26,14 +26,33 @@ share that file and would bind the same port.
 4. **GHCR token:** a PAT with `read:packages` → GitHub secret `GHCR_PULL_TOKEN`.
 5. **SSH deploy key:** generate a CI-only keypair; add the public key to the
    box's `~/.ssh/authorized_keys`; store the private key as `EMAILWARM_DEPLOY_KEY`.
-6. **GitHub `staging` Environment:** add every key from `.env.staging.example`
-   (secrets vs variables per the spec), plus `EMAILWARM_HOST_IP`,
-   `EMAILWARM_DEPLOY_KEY`, `GHCR_PULL_TOKEN`, `POSTGRES_PASSWORD`. Every key
-   marked `[REQUIRED]` in `.env.staging.example` must be set non-empty — the
-   backend's env validation crash-loops the container otherwise, even in demo
-   mode.
+6. **GitHub `staging` Environment:** populate it with the sync script (below)
+   rather than by hand. Fill `deploy/.env.staging` and run
+   `bash deploy/sync-staging-env.sh`.
 7. **Bootstrap the box:** copy `deploy/bootstrap-staging.sh` to the VPS and run
    `sudo bash bootstrap-staging.sh`.
+
+## Syncing env to GitHub (`deploy/sync-staging-env.sh`)
+
+The GitHub `staging` Environment is fed from a local file — edit it and re-run
+the sync any time.
+
+```bash
+cp deploy/.env.staging.example deploy/.env.staging   # gitignored; never committed
+# fill in real values; point EMAILWARM_DEPLOY_KEY_FILE at your CI SSH private key
+bash deploy/sync-staging-env.sh --dry-run            # preview (no writes)
+bash deploy/sync-staging-env.sh                      # apply
+```
+
+The script creates the `staging` Environment if needed, then pushes each key as
+a **secret** or **variable** (classification fixed in the script, matching how
+`deploy-staging.yml` reads `secrets.X` vs `vars.X`). Values are piped via stdin,
+so secrets never appear in argv or shell history. Empty keys are skipped. The
+multiline SSH deploy key is read from the path in `EMAILWARM_DEPLOY_KEY_FILE`.
+Requires `gh` authenticated with `repo` + `workflow` scope.
+
+Every app key must end up non-empty before the first deploy — the backend's env
+validation crash-loops the container otherwise, even in demo mode.
 
 ## Deploy
 
