@@ -1,0 +1,95 @@
+name: emailwarm
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: emailwarm
+      POSTGRES_USER: emailwarm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emailwarm -d emailwarm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [emailwarm]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [emailwarm]
+
+  migrate:
+    image: ghcr.io/abhishek-mittal/emailwarm-backend:${IMAGE_TAG:-staging}
+    command: ["node", "dist/src/db/migrate"]
+    env_file: /etc/emailwarm/staging.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [emailwarm]
+
+  backend:
+    image: ghcr.io/abhishek-mittal/emailwarm-backend:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: /etc/emailwarm/staging.env
+    # PORT is pinned per-service here (compose `environment` overrides env_file)
+    # because frontend + backend share one env_file — a PORT key in that file
+    # would otherwise make BOTH bind the same port.
+    environment:
+      PORT: "4611"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4611/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [emailwarm]
+
+  frontend:
+    image: ghcr.io/abhishek-mittal/emailwarm-frontend:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: /etc/emailwarm/staging.env
+    # Pin the Next.js listen port/host here so a shared-env_file PORT (the
+    # backend's 4611) cannot make Next bind the wrong port.
+    environment:
+      PORT: "3100"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3100:3100"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3100/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [emailwarm]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  emailwarm:
+    name: emailwarm
