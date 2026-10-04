@@ -30,6 +30,24 @@ services:
       retries: 10
     networks: [emailwarm]
 
+  # SMTP -> Microsoft Graph relay for system/notification email. The backend
+  # sends to citadel-mailer:2525 over plain internal SMTP (no auth/TLS); it
+  # forwards via Graph as the From address (am@webnco.xyz, per the app policy).
+  # Vendored from webnco-id — see deploy/relay/. Internal only, no host port.
+  citadel-mailer:
+    image: ghcr.io/abhishek-mittal/emailwarm-mailer:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: /etc/emailwarm/staging.env
+    environment:
+      PORT: "2525"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(2525,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [emailwarm]
+
   migrate:
     image: ghcr.io/abhishek-mittal/emailwarm-backend:${IMAGE_TAG:-staging}
     command: ["node", "dist/src/db/migrate"]

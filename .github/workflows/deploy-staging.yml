@@ -22,6 +22,7 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: ghcr.io/abhishek-mittal/emailwarm-backend
   FRONTEND_IMAGE: ghcr.io/abhishek-mittal/emailwarm-frontend
+  MAILER_IMAGE: ghcr.io/abhishek-mittal/emailwarm-mailer
 
 jobs:
   build:
@@ -72,6 +73,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build + push mailer (SMTP -> Graph relay)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/relay
+          push: true
+          tags: |
+            ${{ env.MAILER_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.MAILER_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
     name: Deploy to VPS
     needs: build
@@ -103,11 +115,19 @@ jobs:
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           MICROSOFT_CLIENT_ID=${{ vars.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET=${{ secrets.MICROSOFT_CLIENT_SECRET }}
-          PLATFORM_SMTP_HOST=${{ vars.PLATFORM_SMTP_HOST }}
-          PLATFORM_SMTP_PORT=${{ vars.PLATFORM_SMTP_PORT }}
-          PLATFORM_SMTP_USER=${{ vars.PLATFORM_SMTP_USER }}
-          PLATFORM_SMTP_PASS=${{ secrets.PLATFORM_SMTP_PASS }}
-          PLATFORM_FROM_EMAIL=${{ vars.PLATFORM_FROM_EMAIL }}
+          # Platform mailer = the citadel-mailer SMTP->Graph relay sidecar.
+          # Fixed infra values (the relay ignores SMTP auth); the real secrets
+          # are the Graph app creds below. From must be a Graph-policy-permitted
+          # mailbox (am@webnco.xyz).
+          PLATFORM_SMTP_HOST=citadel-mailer
+          PLATFORM_SMTP_PORT=2525
+          PLATFORM_SMTP_USER=unused
+          PLATFORM_SMTP_PASS=unused
+          PLATFORM_FROM_EMAIL=EmailWarm <am@webnco.xyz>
+          # Microsoft Graph app for the relay (shared with webnco-id/Citadel).
+          MS_TENANT_ID=${{ vars.MS_TENANT_ID }}
+          MS_CLIENT_ID=${{ vars.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET=${{ secrets.MS_CLIENT_SECRET }}
           APP_URL=https://stg-ew.webnco.xyz
           CORS_ORIGINS=https://stg-ew.webnco.xyz
           LOG_LEVEL=info
@@ -126,12 +146,13 @@ jobs:
           if grep -q 'REPLACE_BEFORE_ENABLING' staging.env; then
             echo "staging.env still has placeholders — aborting"; exit 1
           fi
-          # Fail fast if any [REQUIRED] value rendered empty (the backend
-          # crash-loops on an empty required var).
+          # Fail fast if any required value rendered empty. Backend crash-loops
+          # on an empty backend var; the mailer relay exits on an empty MS_*
+          # (PLATFORM_SMTP_* are fixed literals above, so not checked here).
           for key in POSTGRES_PASSWORD ENCRYPTION_KEY BETTER_AUTH_SECRET INTERNAL_SECRET \
                      ANTHROPIC_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
-                     MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET PLATFORM_SMTP_HOST \
-                     PLATFORM_SMTP_PORT PLATFORM_SMTP_USER PLATFORM_SMTP_PASS PLATFORM_FROM_EMAIL; do
+                     MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET \
+                     MS_TENANT_ID MS_CLIENT_ID MS_CLIENT_SECRET; do
             if grep -qE "^${key}=$" staging.env; then
               echo "required env ${key} is empty — set it in the staging Environment"; exit 1
             fi
