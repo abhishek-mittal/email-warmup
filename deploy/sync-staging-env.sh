@@ -58,9 +58,14 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   key="${line%%=*}"; key="${key//[[:space:]]/}"
   [[ "$key" =~ ^[A-Z0-9_]+$ ]] || continue
   val="${line#*=}"
-  # strip one layer of matching surrounding quotes
-  if [[ "$val" == \"*\" ]]; then val="${val%\"}"; val="${val#\"}"; fi
-  if [[ "$val" == \'*\' ]]; then val="${val%\'}"; val="${val#\'}"; fi
+  # Quoted value: take it verbatim inside the quotes. Unquoted: strip a trailing
+  # inline comment (whitespace then #...) and trailing whitespace — so a value
+  # pasted before a template comment ("ip   # how to get") stores just "ip".
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+    *)     val="$(printf '%s' "$val" | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//')" ;;
+  esac
   VALS["$key"]="$val"
 done < "$ENV_FILE"
 
