@@ -1,21 +1,39 @@
-FROM node:22-alpine AS builder
-WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@11.8.0 --activate
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm run build && pnpm prune --prod
+# syntax=docker/dockerfile:1
 
-FROM node:22-alpine
-ENV NODE_ENV=production
+FROM node:22-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable
 WORKDIR /app
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/package.json ./
-# The build emits to dist/src (drizzle.config.ts sits beside src/).
-# Migration files, for the release job: `node dist/src/db/migrate.js`
-COPY --from=builder --chown=node:node /app/src/db/migrations ./migrations
-ENV MIGRATIONS_DIR=/app/migrations
-USER node
+
+# --- deps + build ---
+FROM base AS build
+COPY package.json pnpm-lock.yaml ./
+# pnpm 10+ blocks dependency build scripts by default (ERR_PNPM_IGNORED_BUILDS).
+# --frozen-lockfile + pnpm's supply-chain verification bound this to the exact
+# pinned tree (the same scripts local dev runs), so allow them in the image.
+RUN pnpm install --frozen-lockfile --config.dangerously-allow-all-builds=true
+COPY . .
+RUN pnpm build
+# nest build does not copy .sql — migrator resolves ./migrations next to the
+# compiled file (dist/src/db/migrate.js), so place the SQL there explicitly.
+RUN cp -r src/db/migrations dist/src/db/migrations
+
+# --- production deps only ---
+FROM base AS proddeps
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile --config.dangerously-allow-all-builds=true
+
+# --- runtime ---
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --system --uid 1001 --create-home appuser
+COPY --from=proddeps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./
+USER appuser
 EXPOSE 4611
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/src/main"]
