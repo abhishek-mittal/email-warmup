@@ -21,7 +21,7 @@ export function PlacementBar({ primary, promotions, spam, missing = 0 }: Props) 
 
   return (
     <div className="space-y-3">
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-stone-100">
         <div
           style={{ width: `${pPct}%`, backgroundColor: PRIMARY_COLOR }}
           className="h-full transition-all"
@@ -63,8 +63,8 @@ function Legend({ label, value, color }: { label: string; value: number; color: 
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <span className="text-slate-600">{label}</span>
-      <span className="ml-auto font-semibold text-slate-900">{value}%</span>
+      <span className="text-stone-600">{label}</span>
+      <span className="ml-auto font-semibold text-stone-900">{value}%</span>
     </div>
   );
 }

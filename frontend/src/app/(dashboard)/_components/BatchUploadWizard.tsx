@@ -213,28 +213,28 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
       >
         {label}
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-900/40 p-4">
           <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Add via wizard</h2>
+              <h2 className="text-lg font-semibold text-stone-900">Add via wizard</h2>
               <button
                 type="button"
                 onClick={closeModal}
                 aria-label="Close"
-                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
               >
                 ✕
               </button>
             </div>
 
             {collected.length > 0 ? (
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-stone-600">
                 {collected.length} inbox{collected.length === 1 ? '' : 'es'} queued: {collected.map((c) => c.email).join(', ')}
               </p>
             ) : null}
@@ -247,8 +247,8 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
                   onClick={() => update('provider', p)}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors ${
                     form.provider === p
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                      : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                      ? 'border-brand-600 bg-brand-50 text-brand-700'
+                      : 'border-stone-300 text-stone-700 hover:bg-stone-50'
                   }`}
                 >
                   {p}
@@ -274,7 +274,7 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
                     /* no-op: already custom */
                   }}
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-stone-500">
                   Pick a provider above to pre-fill the SMTP and IMAP hostnames + ports —
                   you still enter the email and password.
                 </p>
@@ -322,7 +322,7 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
                 <>
                   <Field label="SMTP host" value={form.smtpHost ?? ''} onChange={(v) => update('smtpHost', v)} />
                   <div className="space-y-1.5">
-                    <span className="mb-1 block text-xs font-medium text-slate-700">SMTP port</span>
+                    <span className="mb-1 block text-xs font-medium text-stone-700">SMTP port</span>
                     <SmtpPortChips
                       name="smtpPort"
                       value={form.smtpPort ?? 587}
@@ -384,7 +384,7 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
               <button
                 type="button"
                 onClick={addAnother}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
               >
                 Add another
               </button>
@@ -392,7 +392,7 @@ export function BatchUploadWizard({ endpoint, label = 'Add via wizard', onUpload
                 type="button"
                 onClick={finishAndSubmit}
                 disabled={busy}
-                className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
               >
                 {busy ? 'Submitting…' : 'Done'}
               </button>
@@ -421,12 +421,12 @@ function Field({
 }) {
   return (
     <label className={`block text-sm ${className ?? ''}`}>
-      <span className="mb-1 block text-xs font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-stone-700">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
       />
     </label>
   );

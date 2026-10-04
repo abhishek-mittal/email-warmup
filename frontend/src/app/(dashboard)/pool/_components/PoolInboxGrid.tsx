@@ -9,6 +9,7 @@ import { PulseDot, type PulseState } from '@/components/PulseDot';
 import { RemovePoolInboxButton } from './RemovePoolInboxButton';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { ReadinessBadge } from './ReadinessBadge';
+import { LeavePoolButton } from './LeavePoolButton';
 
 interface Props {
   poolInboxes: PoolInbox[];
@@ -28,7 +29,7 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
   return (
     <>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-stone-500">
           <PulseDot
             state={pollState}
             label={
@@ -44,17 +45,18 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
         >
           Refresh
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <table className="min-w-full divide-y divide-stone-200 text-sm">
+          <thead className="bg-stone-50 text-left text-xs font-medium uppercase tracking-wide text-stone-500">
             <tr>
               <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Provider</th>
               <th className="px-4 py-3">DNS Health</th>
               <th className="px-4 py-3">Issues</th>
@@ -64,17 +66,32 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-stone-100">
             {poolInboxes.map((p) => {
               const status = poolInboxStatusColor(p.status);
+              const owned = p.source === 'owned';
+              // Owned rows are the user's own inboxes — their detail lives at
+              // /inboxes/:id. Dedicated pool_inboxes open the pool detail page.
+              const href = owned ? `/inboxes/${p.id}` : `/pool/${p.id}`;
               return (
                 <tr
-                  key={p.id}
-                  onClick={() => router.push(`/pool/${p.id}`)}
-                  className="cursor-pointer hover:bg-slate-50"
+                  key={`${p.source}-${p.id}`}
+                  onClick={() => router.push(href)}
+                  className="cursor-pointer hover:bg-stone-50"
                 >
-                  <td className="px-4 py-3 font-medium text-slate-900">{p.email}</td>
-                  <td className="px-4 py-3 capitalize text-slate-600">{p.provider}</td>
+                  <td className="px-4 py-3 font-medium text-stone-900">{p.email}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        owned
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-violet-100 text-violet-700'
+                      }`}
+                    >
+                      {owned ? 'Owned' : 'Dedicated'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 capitalize text-stone-600">{p.provider}</td>
                   <td className="px-4 py-3">
                     <HealthChip analysis={p.analysis} />
                   </td>
@@ -92,14 +109,20 @@ export function PoolInboxGrid({ poolInboxes, pollState = 'idle' }: Props) {
                       <ReadinessBadge status={p.status} analysis={p.analysis} />
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(p.createdAt)}</td>
+                  <td className="px-4 py-3 text-stone-600">{formatDate(p.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <div
                       className="inline-flex items-center gap-1.5"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <ReanalyzeButton poolInboxId={p.id} />
-                      <RemovePoolInboxButton poolInboxId={p.id} email={p.email} />
+                      {owned ? (
+                        <LeavePoolButton inboxId={p.id} email={p.email} />
+                      ) : (
+                        <>
+                          <ReanalyzeButton poolInboxId={p.id} />
+                          <RemovePoolInboxButton poolInboxId={p.id} email={p.email} />
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

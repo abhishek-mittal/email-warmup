@@ -96,12 +96,12 @@ function LiveStatusPollerInner({ poolInboxId, onRetry }: InnerProps) {
 
   return (
     <section
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm"
       data-testid="live-status-panel"
     >
       <div className="flex items-center gap-2">
         <PulseDot state={pulseState} label="Live warmup-receive status" />
-        <h2 className="text-sm font-semibold text-slate-900">Live status</h2>
+        <h2 className="text-sm font-semibold text-stone-900">Live status</h2>
       </div>
 
       {error ? (
@@ -116,21 +116,21 @@ function LiveStatusPollerInner({ poolInboxId, onRetry }: InnerProps) {
           </button>
         </div>
       ) : active.length === 0 && upcoming.length === 0 ? (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-stone-500">
           No warmup activity scheduled right now — jobs run on a jittered 2&ndash;240 minute
           delay after each send, so this is normal between sends.
         </p>
       ) : (
         <div className="mt-3 space-y-2">
           {active.map((job: PoolLiveJob) => (
-            <p key={job.jobId} className="text-sm text-slate-800">
+            <p key={job.jobId} className="text-sm text-stone-800">
               <span className="font-medium text-emerald-700">Processing now</span> &mdash;{' '}
               {describeActions(job.actions)} email from{' '}
               <span className="font-mono text-xs">{job.senderEmail ?? 'unknown sender'}</span>
             </p>
           ))}
           {upcoming.map((job: PoolLiveJob) => (
-            <p key={job.jobId} className="text-sm text-slate-600">
+            <p key={job.jobId} className="text-sm text-stone-600">
               Will {describeActions(job.actions)} email from{' '}
               <span className="font-mono text-xs">{job.senderEmail ?? 'unknown sender'}</span>{' '}
               {formatRelativeFuture(job.executeAt)}

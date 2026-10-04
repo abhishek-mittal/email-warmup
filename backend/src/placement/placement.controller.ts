@@ -1,4 +1,5 @@
 import { Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { desc, eq } from 'drizzle-orm';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
@@ -47,6 +48,7 @@ export interface PlacementResultResponse {
 export class PlacementController {
   constructor(private readonly placementService: PlacementService) {}
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post(':id/placement-test')
   async createTest(
     @Param('id') inboxId: string,

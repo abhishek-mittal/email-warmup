@@ -49,11 +49,11 @@ export function PlacementTab({ inboxId }: Props) {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-700">Most recent placement</h2>
-            <p className="text-xs text-slate-500">
+            <h2 className="text-sm font-semibold text-stone-700">Most recent placement</h2>
+            <p className="text-xs text-stone-500">
               {latest ? `Completed ${formatDateTime(latest.completedAt)}` : 'No placement tests yet'}
             </p>
           </div>
@@ -61,7 +61,7 @@ export function PlacementTab({ inboxId }: Props) {
         </header>
 
         {loading && !latest ? (
-          <p className="mt-6 text-sm text-slate-500">Loading…</p>
+          <p className="mt-6 text-sm text-stone-500">Loading…</p>
         ) : latest && latest.status === 'failed' ? (
           <div
             role="status"
@@ -81,12 +81,12 @@ export function PlacementTab({ inboxId }: Props) {
             missing={latest.missingPct ?? 0}
           />
         ) : (
-          <p className="mt-6 text-sm text-slate-500">
+          <p className="mt-6 text-sm text-stone-500">
             No placement tests run yet. Click &ldquo;Run Placement Test&rdquo; to start.
           </p>
         )}
         {latest && latest.status !== 'failed' ? (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-stone-500">
             Based on {latest.observedCount ?? latest.seedCount ?? 0} of {latest.seedCount ?? 0} seed
             mailboxes.
             {latest.status === 'partial'
@@ -99,11 +99,11 @@ export function PlacementTab({ inboxId }: Props) {
       </div>
 
       {rows.length > 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-700">History</h2>
+        <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-stone-700">History</h2>
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <table className="min-w-full divide-y divide-stone-200 text-left text-sm">
+              <thead className="bg-stone-50 text-xs uppercase tracking-wider text-stone-500">
                 <tr>
                   <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Seeds</th>
@@ -114,11 +114,11 @@ export function PlacementTab({ inboxId }: Props) {
                   <th className="px-3 py-2">Score</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-stone-100">
                 {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-700">{formatDateTime(row.completedAt)}</td>
-                    <td className="px-3 py-2 text-slate-700">
+                  <tr key={row.id} className="hover:bg-stone-50">
+                    <td className="whitespace-nowrap px-3 py-2 text-stone-700">{formatDateTime(row.completedAt)}</td>
+                    <td className="px-3 py-2 text-stone-700">
                       {row.status === 'failed'
                         ? `0 of ${row.seedCount ?? '—'}`
                         : row.status === 'partial'
@@ -134,8 +134,8 @@ export function PlacementTab({ inboxId }: Props) {
                         <td className="px-3 py-2 text-emerald-700">{pct(row.primaryPct)}</td>
                         <td className="px-3 py-2 text-amber-700">{pct(row.promotionsPct)}</td>
                         <td className="px-3 py-2 text-rose-700">{pct(row.spamPct)}</td>
-                        <td className="px-3 py-2 text-slate-700">{pct(row.missingPct)}</td>
-                        <td className="px-3 py-2 font-mono text-slate-700">{row.placementScore ?? '—'}</td>
+                        <td className="px-3 py-2 text-stone-700">{pct(row.missingPct)}</td>
+                        <td className="px-3 py-2 font-mono text-stone-700">{row.placementScore ?? '—'}</td>
                       </>
                     )}
                   </tr>
@@ -172,7 +172,7 @@ function PlacementBar({ primary, promotions, spam, missing }: PlacementBarProps)
 
   return (
     <div className="mt-6 space-y-4">
-      <div className="flex h-6 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="flex h-6 w-full overflow-hidden rounded-full bg-stone-100">
         <div style={{ width: seg(primary), backgroundColor: '#10b981' }} title={`Primary ${primary}%`} />
         <div style={{ width: seg(promotions), backgroundColor: '#f59e0b' }} title={`Promotions ${promotions}%`} />
         <div style={{ width: seg(spam), backgroundColor: '#e11d48' }} title={`Spam ${spam}%`} />
@@ -194,8 +194,8 @@ function BarLegend({ label, value, color }: { label: string; value: number; colo
   return (
     <div className="flex items-center gap-2">
       <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} aria-hidden />
-      <span className="text-slate-600">{label}</span>
-      <span className="ml-auto font-semibold text-slate-900">{value}%</span>
+      <span className="text-stone-600">{label}</span>
+      <span className="ml-auto font-semibold text-stone-900">{value}%</span>
     </div>
   );
 }

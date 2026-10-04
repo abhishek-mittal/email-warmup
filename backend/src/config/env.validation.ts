@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { validateSync, IsString, IsNotEmpty, MinLength, ValidateIf } from 'class-validator';
+import { validateSync, IsString, IsNotEmpty, MinLength, Matches, ValidateIf } from 'class-validator';
 
 // Stripe is not configured in demo mode (DEMO_MODE=true): accounts run on
 // fixed test credits and no payment calls are made.
@@ -14,8 +14,14 @@ class EnvironmentVariables {
   @IsNotEmpty()
   REDIS_URL: string;
 
+  // AES-256-GCM key: exactly 32 bytes, supplied as 64 hex characters. Checked
+  // at boot so a malformed key fails the process immediately rather than
+  // throwing lazily on the first encrypt/decrypt (see common/crypto.ts).
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[0-9a-fA-F]{64}$/, {
+    message: 'ENCRYPTION_KEY must be 32 bytes encoded as 64 hex characters',
+  })
   ENCRYPTION_KEY: string;
 
   // Better-auth (self-hosted). Must match BETTER_AUTH_SECRET on the frontend

@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { genericOAuth } from 'better-auth/plugins';
 import { Pool as PgPool } from 'pg';
 import { syncUserToBackend } from './user-sync';
 
@@ -55,6 +56,14 @@ function makeAuth() {
     database: getPool(),
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+    // App-local role on the user. Citadel gates WHICH apps you can enter (the
+    // grant); EmailWarm owns the fine-grained role. Default 'member'; founders
+    // are seeded from FOUNDER_EMAILS and manage roles from the founder dashboard.
+    user: {
+      additionalFields: {
+        role: { type: 'string', required: false, defaultValue: 'member', input: false },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       // The reset link works once, for 30 minutes, and choosing a new
@@ -73,16 +82,23 @@ function makeAuth() {
         '/reset-password': { window: 60 * 15, max: 10 },
       },
     },
-    socialProviders: {
-      google: {
-        clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      },
-      microsoft: {
-        clientId: process.env.MICROSOFT_CLIENT_ID ?? '',
-        clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
-      },
-    },
+    // Login is delegated to Citadel (WebNCO ID) over OIDC. Google / Microsoft
+    // are configured once in Citadel, not here. Mailbox-connect OAuth is a
+    // separate concern and is untouched.
+    plugins: [
+      genericOAuth({
+        config: [
+          {
+            providerId: 'citadel',
+            discoveryUrl: `${process.env.ZITADEL_ISSUER}/.well-known/openid-configuration`,
+            clientId: process.env.ZITADEL_CLIENT_ID ?? '',
+            clientSecret: process.env.ZITADEL_CLIENT_SECRET ?? '',
+            scopes: ['openid', 'email', 'profile'],
+            pkce: true,
+          },
+        ],
+      }),
+    ],
     session: {
       cookieCache: { enabled: true, maxAge: 60 * 5 },
       expiresIn: 60 * 60 * 24 * 7, // 7 days
@@ -101,6 +117,15 @@ function makeAuth() {
     databaseHooks: {
       user: {
         create: {
+          // Seed the role before insert: founders from FOUNDER_EMAILS, else member.
+          before: async (user: { email?: string } & Record<string, unknown>) => {
+            const founders = (process.env.FOUNDER_EMAILS ?? '')
+              .split(',')
+              .map((e) => e.trim().toLowerCase())
+              .filter(Boolean);
+            const role = founders.includes((user.email ?? '').toLowerCase()) ? 'founder' : 'member';
+            return { data: { ...user, role } };
+          },
           after: async (user: { id: string; email: string }) => {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
             const secret = process.env.INTERNAL_SECRET ?? '';

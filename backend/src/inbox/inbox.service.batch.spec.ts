@@ -15,6 +15,7 @@ jest.mock('@/db', () => ({
   db: {
     select: jest.fn(),
     insert: jest.fn(),
+    transaction: jest.fn(),
   },
 }));
 
@@ -26,7 +27,11 @@ jest.mock('@/common/crypto', () => ({
 describe('InboxService.batchUpload', () => {
   let service: InboxService;
   let queueService: { add: jest.Mock };
-  let billingService: { assertInboxLimit: jest.Mock; remainingInboxSlots: jest.Mock };
+  let billingService: {
+    assertInboxLimit: jest.Mock;
+    remainingInboxSlots: jest.Mock;
+    lockInboxSlots: jest.Mock;
+  };
 
   function mockSelectExisting(existingEmails: string[]) {
     (db.select as jest.Mock).mockReturnValue({
@@ -43,6 +48,21 @@ describe('InboxService.batchUpload', () => {
     }));
   }
 
+  // batchUpload runs inside a single db.transaction; each row insert is a
+  // nested savepoint (tx.transaction). The tx handle reuses the db.select and
+  // db.insert mocks so the existing assertions on `db.insert` still apply.
+  function wireTransaction() {
+    (db.transaction as jest.Mock).mockImplementation(async (cb: (tx: any) => any) =>
+      cb({
+        execute: jest.fn().mockResolvedValue(undefined),
+        select: db.select,
+        transaction: jest.fn().mockImplementation(async (spCb: (sp: any) => any) =>
+          spCb({ insert: db.insert }),
+        ),
+      }),
+    );
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
     (encrypt as jest.Mock).mockImplementation((v: string) => `enc(${v})`);
@@ -51,7 +71,9 @@ describe('InboxService.batchUpload', () => {
     billingService = {
       assertInboxLimit: jest.fn(),
       remainingInboxSlots: jest.fn().mockResolvedValue(Number.POSITIVE_INFINITY),
+      lockInboxSlots: jest.fn().mockResolvedValue(Number.POSITIVE_INFINITY),
     };
+    wireTransaction();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,7 +115,7 @@ describe('InboxService.batchUpload', () => {
 
   it('stops at the plan’s inbox limit and reports the rows it refused', async () => {
     mockSelectExisting([]);
-    billingService.remainingInboxSlots.mockResolvedValue(2);
+    billingService.lockInboxSlots.mockResolvedValue(2);
     let counter = 0;
     mockInsertReturning(() => `inbox-${++counter}`);
     const entry = (email: string) =>

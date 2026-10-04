@@ -26,6 +26,8 @@ Sign in at <http://localhost:3000/sign-in>. Every account uses the same password
 
 Not seeded yet on your machine? Run section 1. What each account is for: section 2.
 
+**Demo data for every screen:** `cd backend && pnpm db:seed:dev` fills these accounts with mailboxes, warm-up history, scores, placement tests, diagnostics and pool inboxes (all on `.test` domains, local database only). Re-run to reset, or `pnpm db:seed:dev --reset` to remove it.
+
 ---
 
 ## 1. Seed the accounts
@@ -68,7 +70,7 @@ other environment.**
 | **Domain** | `@emailwarm.dev` (never resolves publicly — by design) |
 
 ### Accounts
-
+bdgu khhm bexb cbxc
 | Email | Role | Plan | Trial | What to test with it |
 |---|---|---|---|---|
 | `admin@emailwarm.dev` | super_admin | enterprise | none | Admin flows. No plan gates. Use to inspect the system from a top-tier view. |

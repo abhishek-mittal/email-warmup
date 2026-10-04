@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
@@ -231,14 +231,19 @@ export class InboxService {
         .returning();
     } else {
       try {
-        await this.billing.assertInboxLimit(userId);
+        // Reserve the plan slot and insert atomically (race-safe cap).
+        [inbox] = await this.billing.withReservedInboxSlot(userId, (tx) =>
+          tx.insert(inboxes).values({ userId, email, ...credentials }).returning(),
+        );
       } catch (err: any) {
-        throw new MailboxLinkError('limit', err?.message ?? 'Inbox limit reached for your plan.');
+        if (err instanceof ForbiddenException) {
+          throw new MailboxLinkError(
+            'limit',
+            err?.message ?? 'Inbox limit reached for your plan.',
+          );
+        }
+        throw err;
       }
-      [inbox] = await db
-        .insert(inboxes)
-        .values({ userId, email, ...credentials })
-        .returning();
     }
     this.logger.info(
       { userId, inboxId: inbox.id, provider, relinked: Boolean(mine) },
@@ -293,7 +298,6 @@ export class InboxService {
       },
       'inbox connect attempt',
     );
-    await this.billing.assertInboxLimit(userId);
 
     // Normalize: an all-or-nothing IMAP block. If the user opted in, all
     // four fields must be present. If they didn't, the IMAP columns stay
@@ -313,21 +317,25 @@ export class InboxService {
           imapPass: null as unknown as string,
         };
 
-    const [inbox] = await db
-      .insert(inboxes)
-      .values({
-        userId,
-        email: dto.email,
-        provider: 'custom',
-        smtpHost: dto.smtpHost,
-        smtpPort: dto.smtpPort,
-        smtpUser: dto.smtpUser,
-        smtpPass: encrypt(dto.smtpPass),
-        ...imapFields,
-        dkimSelector: dto.dkimSelector,
-        status: 'pending',
-      })
-      .returning();
+    // Reserve the plan slot and insert atomically so two concurrent connects
+    // cannot both slip past the cap (see BillingService.withReservedInboxSlot).
+    const [inbox] = await this.billing.withReservedInboxSlot(userId, (tx) =>
+      tx
+        .insert(inboxes)
+        .values({
+          userId,
+          email: dto.email,
+          provider: 'custom',
+          smtpHost: dto.smtpHost,
+          smtpPort: dto.smtpPort,
+          smtpUser: dto.smtpUser,
+          smtpPass: encrypt(dto.smtpPass),
+          ...imapFields,
+          dkimSelector: dto.dkimSelector,
+          status: 'pending',
+        })
+        .returning(),
+    );
 
     let precheck;
     try {
@@ -449,52 +457,67 @@ export class InboxService {
     entries: BatchInboxEntry[],
   ): Promise<{ created: number; failed: { email: string; reason: string }[] }> {
     const failed: { email: string; reason: string }[] = [];
-    let created = 0;
+    const createdInboxIds: string[] = [];
 
-    const existingRows = await db
-      .select({ email: inboxes.email })
-      .from(inboxes)
-      .where(eq(inboxes.userId, userId));
-    const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
-    const seenInBatch = new Set<string>();
-    // The same plan limit single connects are held to; rows past it are
-    // reported per row rather than silently accepted.
-    let slotsLeft = await this.billing.remainingInboxSlots(userId);
+    // The whole batch reserves its slots inside one locked transaction so a
+    // concurrent connect or a second parallel import cannot share-count the
+    // same free slots and together overrun the plan cap. Rows past the limit,
+    // in-batch duplicates and malformed rows land in `failed[]` — the batch
+    // never aborts (T020 partial success).
+    await db.transaction(async (tx) => {
+      let slotsLeft = await this.billing.lockInboxSlots(tx, userId);
+      const existingRows = await tx
+        .select({ email: inboxes.email })
+        .from(inboxes)
+        .where(eq(inboxes.userId, userId));
+      const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
+      const seenInBatch = new Set<string>();
 
-    for (const entry of entries) {
-      const email = entry?.email ?? '(unknown)';
-      try {
-        const validationError = validateBatchEntry(entry);
-        if (validationError) {
-          failed.push({ email, reason: validationError });
-          continue;
+      for (const entry of entries) {
+        const email = entry?.email ?? '(unknown)';
+        try {
+          const validationError = validateBatchEntry(entry);
+          if (validationError) {
+            failed.push({ email, reason: validationError });
+            continue;
+          }
+
+          const normalizedEmail = entry.email.toLowerCase();
+          if (existingEmails.has(normalizedEmail) || seenInBatch.has(normalizedEmail)) {
+            failed.push({ email, reason: 'duplicate email — already exists for this user' });
+            continue;
+          }
+
+          if (slotsLeft <= 0) {
+            failed.push({ email, reason: 'inbox limit reached for your plan' });
+            continue;
+          }
+
+          const values = buildInboxInsertValues(userId, entry);
+          // Each insert runs in its own savepoint (a nested drizzle
+          // transaction). A row-level DB error rolls back only that savepoint —
+          // in plain Postgres a failed statement aborts the whole transaction
+          // and poisons every later command, so the savepoint is what keeps
+          // the batch's partial-success contract intact.
+          const [inbox] = await tx.transaction((sp) =>
+            sp.insert(inboxes).values(values).returning(),
+          );
+
+          seenInBatch.add(normalizedEmail);
+          createdInboxIds.push(inbox.id);
+          slotsLeft -= 1;
+        } catch (err: any) {
+          failed.push({ email, reason: err?.message || 'failed to process row' });
         }
-
-        const normalizedEmail = entry.email.toLowerCase();
-        if (existingEmails.has(normalizedEmail) || seenInBatch.has(normalizedEmail)) {
-          failed.push({ email, reason: 'duplicate email — already exists for this user' });
-          continue;
-        }
-
-        if (slotsLeft <= 0) {
-          failed.push({ email, reason: 'inbox limit reached for your plan' });
-          continue;
-        }
-
-        const values = buildInboxInsertValues(userId, entry);
-        const [inbox] = await db.insert(inboxes).values(values).returning();
-
-        seenInBatch.add(normalizedEmail);
-        created += 1;
-        slotsLeft -= 1;
-
-        await this.queue.add('inbox-analysis', { inboxId: inbox.id, userId });
-      } catch (err: any) {
-        failed.push({ email, reason: err?.message || 'failed to process row' });
       }
+    });
+
+    // Enqueue analysis only after the slots are durably committed.
+    for (const inboxId of createdInboxIds) {
+      await this.queue.add('inbox-analysis', { inboxId, userId });
     }
 
-    return { created, failed };
+    return { created: createdInboxIds.length, failed };
   }
 
   private async runPrecheck(inboxId: string, provider: string, poolConsent = false) {

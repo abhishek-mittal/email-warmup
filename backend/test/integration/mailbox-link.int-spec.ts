@@ -1,10 +1,10 @@
 import { createHash } from 'crypto';
-import { ForbiddenException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { inboxes, oauthLinkStates } from '../../src/db/schema';
 import { decrypt, encrypt } from '../../src/common/crypto';
 import { makePinoLoggerStub } from '../../src/common/pino-logger.stub';
+import { BillingService } from '../../src/billing/billing.service';
 import { InboxService } from '../../src/inbox/inbox.service';
 import { DnsService } from '../../src/monitor/dns.service';
 import { GoogleOAuthService } from '../../src/inbox/oauth/google-oauth.service';
@@ -24,7 +24,7 @@ describe('mailbox OAuth linking (MR-01)', () => {
   let microsoft: MicrosoftOAuthService;
   let inboxService: InboxService;
   let link: MailboxLinkService;
-  let billing: { assertInboxLimit: jest.Mock };
+  let billing: BillingService;
   let exchange: jest.SpyInstance;
   let userId: string;
 
@@ -36,10 +36,10 @@ describe('mailbox OAuth linking (MR-01)', () => {
     userId = await createUser();
     google = new GoogleOAuthService();
     microsoft = new MicrosoftOAuthService();
-    billing = { assertInboxLimit: jest.fn() };
+    billing = new BillingService(makePinoLoggerStub(), engine.queue as any);
     inboxService = new InboxService(
       makePinoLoggerStub(),
-      billing as any,
+      billing,
       engine.imap,
       engine.smtp,
       engine.queue as any,
@@ -242,13 +242,19 @@ describe('mailbox OAuth linking (MR-01)', () => {
   });
 
   it('reports the plan limit as a typed error', async () => {
-    billing.assertInboxLimit.mockRejectedValue(new ForbiddenException('Inbox limit reached'));
+    // Fill the trial plan's 3 inbox slots, then a real reservation must refuse
+    // the link with a typed 'limit' error (no assertInboxLimit mock — the
+    // atomic reservation in BillingService enforces the cap).
+    for (let i = 0; i < 3; i++) {
+      await createInbox(userId, { email: `filler-${i}@owner.test`, status: 'active' });
+    }
     const { state } = await startGmail();
 
     await expect(link.complete(userId, 'gmail', { code: 'c', state })).rejects.toMatchObject({
       code: 'limit',
     });
-    expect(await userInboxes(userId)).toHaveLength(0);
+    // Still exactly the 3 fillers — the linked mailbox was never inserted.
+    expect(await userInboxes(userId)).toHaveLength(3);
   });
 
   it('linking a mailbox the user already has reconnects it in place', async () => {
@@ -274,8 +280,8 @@ describe('mailbox OAuth linking (MR-01)', () => {
     expect(mine[0].warmupDay).toBe(12);
     expect(decrypt(mine[0].oauthRefreshToken!)).toBe('refresh-1');
     expect(mine[0].oauthClientId).toBeNull();
-    // A reconnect does not consume another inbox slot.
-    expect(billing.assertInboxLimit).not.toHaveBeenCalled();
+    // A reconnect does not consume another inbox slot: the user still has one.
+    expect(mine).toHaveLength(1);
   });
 
   it('works for outlook with its own callback and scopes', async () => {

@@ -12,6 +12,7 @@ const isPublicRoute = (path: string) =>
   path.startsWith('/sign-in') ||
   path.startsWith('/sign-up') ||
   path.startsWith('/forgot-password') ||
+  path.startsWith('/invite') ||
   path.startsWith('/reset-password') ||
   path.startsWith('/api/auth') ||
   // These validate the session themselves and answer with a proper 401 /

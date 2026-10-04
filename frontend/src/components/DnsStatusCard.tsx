@@ -28,12 +28,12 @@ export function DnsStatusCard({ type, status, record }: Props) {
   return (
     <div
       className={`rounded-xl border bg-white p-4 shadow-sm transition-colors ${
-        isCriticalIssue ? 'border-rose-200' : 'border-slate-200'
+        isCriticalIssue ? 'border-rose-200' : 'border-stone-200'
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-900">{TYPE_LABELS[type]}</span>
+          <span className="text-sm font-semibold text-stone-900">{TYPE_LABELS[type]}</span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${colors.bg} ${colors.text}`}
           >
@@ -48,9 +48,9 @@ export function DnsStatusCard({ type, status, record }: Props) {
           </span>
         </div>
       </div>
-      <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{TYPE_DESCRIPTIONS[type]}</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{TYPE_DESCRIPTIONS[type]}</p>
       {record ? (
-        <p className="mt-2 truncate rounded bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-600">
+        <p className="mt-2 truncate rounded bg-stone-50 px-2 py-1 font-mono text-[10px] text-stone-600">
           {record}
         </p>
       ) : null}

@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { UserThrottlerGuard } from './common/throttler-user.guard';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HealthModule } from './health/health.module';
@@ -56,10 +59,32 @@ import { AccountModule } from './account/account.module';
         // App-layer logs (logger.info({...}, '...')) must never include
         // these either — see the skill file's "Never log these fields".
         redact: [
+          // Request/response auth material and cookies.
           'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers["x-internal-secret"]',
+          'res.headers["set-cookie"]',
+          // Top-level credential fields.
           'req.body.smtpPassword',
           'req.body.imapPassword',
+          'req.body.smtpPass',
+          'req.body.imapPass',
           'req.body.password',
+          'req.body.clientSecret',
+          'req.body.refreshToken',
+          'req.body.accessToken',
+          // OAuth callback params.
+          'req.body.code',
+          'req.body.state',
+          'req.query.code',
+          'req.query.state',
+          // Nested batch-import credentials (alias + canonical names).
+          'req.body.inboxes[*].smtpPassword',
+          'req.body.inboxes[*].imapPassword',
+          'req.body.inboxes[*].smtpPass',
+          'req.body.inboxes[*].imapPass',
+          'req.body.inboxes[*].clientSecret',
+          'req.body.inboxes[*].refreshToken',
         ],
         // Attach inboxId from the request path/params to every HTTP log line.
         customProps: (req) => ({
@@ -74,6 +99,15 @@ import { AccountModule } from './account/account.module';
       },
     }),
     ScheduleModule.forRoot(),
+    // Rate limiting. One global ceiling for ordinary dashboard traffic; the
+    // expensive/abusable routes (inbox connect, batch import, placement runs)
+    // tighten this with a per-route @Throttle override. A single named
+    // throttler is used deliberately — every named throttler in this array is
+    // enforced on every route, so a second one here would cap all traffic to
+    // the lower limit.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 300 }],
+    }),
     HealthModule,
     QueueModule,
     AuthModule,
@@ -93,6 +127,6 @@ import { AccountModule } from './account/account.module';
     AccountModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: UserThrottlerGuard }],
 })
 export class AppModule {}

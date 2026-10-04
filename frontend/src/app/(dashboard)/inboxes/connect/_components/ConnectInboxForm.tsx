@@ -7,6 +7,7 @@ import { useToasts } from '@/components/Toast';
 import {
   ProviderQuickFill,
   ProviderAppPasswordNote,
+  ZohoRegionChips,
   SmtpPortChips,
   errorHint,
   type Provider,
@@ -35,7 +36,7 @@ export function ConnectInboxForm() {
   const [poolConsent, setPoolConsent] = useState(false);
   const linkError = useSearchParams().get('link_error');
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-2xl border border-stone-200 bg-white shadow-sm">
       {linkError ? (
         <div
           role="alert"
@@ -44,7 +45,7 @@ export function ConnectInboxForm() {
           {LINK_ERRORS[linkError] ?? LINK_ERRORS.provider_error}
         </div>
       ) : null}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-stone-200">
         <TabButton active={tab === 'gmail'} onClick={() => setTab('gmail')}>
           Gmail
         </TabButton>
@@ -73,17 +74,17 @@ function PoolConsentField({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mt-6 rounded-xl border border-stone-200 bg-stone-50 p-4">
       <label className="flex items-start gap-3">
         <input
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
-          className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          className="mt-1 h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
         />
-        <span className="text-sm text-slate-700">
-          <span className="font-medium text-slate-900">Join the shared warmup pool</span>
-          <span className="mt-1 block text-slate-600">
+        <span className="text-sm text-stone-700">
+          <span className="font-medium text-stone-900">Join the shared warmup pool</span>
+          <span className="mt-1 block text-stone-600">
             This inbox will exchange automated warmup emails with other customers’ inboxes: it
             sends to them, and it automatically opens, stars, replies to and files the warmup
             emails it receives into a “WarmupHub” folder. Leave this off to warm only against
@@ -110,8 +111,8 @@ function TabButton({
       onClick={onClick}
       className={`flex-1 px-5 py-3 text-sm font-medium transition-colors ${
         active
-          ? 'border-b-2 border-indigo-600 text-indigo-700'
-          : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900'
+          ? 'border-b-2 border-brand-600 text-brand-700'
+          : 'border-b-2 border-transparent text-stone-600 hover:text-stone-900'
       }`}
     >
       {children}
@@ -139,8 +140,8 @@ function GmailConnect({ poolConsent }: { poolConsent: boolean }) {
   }
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Connect with Google</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-stone-900">Connect with Google</h2>
+      <p className="text-sm text-stone-600">
         We request Gmail send + read access to run warmup traffic. Tokens are encrypted at rest
         with AES-256-GCM and never shared.
       </p>
@@ -148,7 +149,7 @@ function GmailConnect({ poolConsent }: { poolConsent: boolean }) {
         type="button"
         onClick={startGmail}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         <GoogleMark /> {busy ? 'Redirecting…' : 'Connect with Google'}
       </button>
@@ -176,8 +177,8 @@ function OutlookConnect({ poolConsent }: { poolConsent: boolean }) {
   }
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Connect with Microsoft</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-stone-900">Connect with Microsoft</h2>
+      <p className="text-sm text-stone-600">
         We request Mail send + read access for warmup. Tokens are encrypted with AES-256-GCM at
         rest.
       </p>
@@ -185,7 +186,7 @@ function OutlookConnect({ poolConsent }: { poolConsent: boolean }) {
         type="button"
         onClick={startOutlook}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         <MicrosoftMark /> {busy ? 'Redirecting…' : 'Connect with Microsoft'}
       </button>
@@ -309,7 +310,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Custom SMTP / IMAP</h2>
+      <h2 className="text-base font-semibold text-stone-900">Custom SMTP / IMAP</h2>
 
       {/* T028: provider quick-fill chips + App Password hint */}
       <ProviderQuickFill
@@ -332,6 +333,9 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
         }}
       />
       <ProviderAppPasswordNote provider={provider} />
+      {provider === 'zoho' ? (
+        <ZohoRegionChips currentSmtpHost={smtpHost} onPick={applyProviderPreset} />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Email address" name="email" type="email" required className="sm:col-span-2" />
@@ -343,7 +347,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
           onChange={(v) => setSmtpHost(v)}
         />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-slate-700" htmlFor="smtpPort">
+          <label className="text-xs font-medium text-stone-700" htmlFor="smtpPort">
             SMTP port
           </label>
           <SmtpPortChips name="smtpPort" value={smtpPort} onChange={setSmtpPort} />
@@ -352,7 +356,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
             type="number"
             value={smtpPort}
             onChange={(e) => setSmtpPort(Number(e.target.value || 587))}
-            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
             placeholder="Or type a custom port"
             min={1}
             max={65535}
@@ -363,16 +367,16 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
         <Field label="DKIM selector (optional)" name="dkimSelector" className="sm:col-span-2" />
       </div>
 
-      <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+      <label className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
         <input
           type="checkbox"
           checked={useImap}
           onChange={(e) => setUseImap(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
         />
         <span>
-          <span className="block font-medium text-slate-900">Also configure IMAP (recommended)</span>
-          <span className="block text-xs text-slate-600">
+          <span className="block font-medium text-stone-900">Also configure IMAP (recommended)</span>
+          <span className="block text-xs text-stone-600">
             IMAP lets us open, reply to, and rescue-from-spam the warmup emails we send
             you, and is required to join the warmup pool. Leave unchecked if your SMTP
             provider does not expose IMAP — sending will still work.
@@ -390,7 +394,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
             onChange={(v) => setImapHost(v)}
           />
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-700" htmlFor="imapPort">
+            <label className="text-xs font-medium text-stone-700" htmlFor="imapPort">
               IMAP port
             </label>
             <input
@@ -398,7 +402,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
               type="number"
               value={imapPort}
               onChange={(e) => setImapPort(Number(e.target.value || 993))}
-              className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
               min={1}
               max={65535}
             />
@@ -457,7 +461,7 @@ function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
       <button
         type="submit"
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         {busy ? 'Connecting…' : 'Connect inbox'}
       </button>
@@ -486,7 +490,7 @@ function Field({
 }) {
   return (
     <label className={`block text-sm ${className ?? ''}`}>
-      <span className="text-xs font-medium text-slate-700">{label}</span>
+      <span className="text-xs font-medium text-stone-700">{label}</span>
       <input
         name={name}
         type={type}
@@ -494,7 +498,7 @@ function Field({
         defaultValue={defaultValue}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+        className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
       />
     </label>
   );

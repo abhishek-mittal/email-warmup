@@ -38,18 +38,28 @@ export interface InboxAnalysis {
 
 export type PoolInboxStatus = 'pending' | 'active' | 'removed' | 'error';
 
+/**
+ * Where a Warming Pool row comes from:
+ *   - 'dedicated' — a `pool_inboxes` row (added via CSV / wizard upload)
+ *   - 'owned'     — one of the user's own connected inboxes that consented
+ *                   to the shared pool. Managed from the inbox detail page.
+ */
+export type PoolInboxSource = 'dedicated' | 'owned';
+
 export interface PoolInbox {
   id: string;
   userId: string;
   email: string;
   provider: Provider;
-  status: PoolInboxStatus;
+  // Owned rows carry raw inbox statuses (e.g. 'paused', 'graduated') too.
+  status: PoolInboxStatus | 'paused' | 'graduated' | 'disconnected';
   displayName: string | null;
   lastUsedAt: string | null;
   activePairs: number;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
+  source: PoolInboxSource;
   analysis: InboxAnalysis | null;
 }
 

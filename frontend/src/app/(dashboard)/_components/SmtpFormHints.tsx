@@ -57,6 +57,27 @@ export const PROVIDER_PRESETS: Record<Exclude<Provider, 'custom'>, ProviderConfi
   },
 };
 
+/**
+ * Zoho runs a separate mail cluster per data center, each with its own
+ * SMTP/IMAP hostname. A mailbox created in (say) the EU DC will reject
+ * logins against `smtp.zoho.com` (US) outright, so picking the wrong region
+ * is a common "wrong password" false alarm. Ports are the same everywhere
+ * (SMTP 587 STARTTLS, IMAP 993 TLS); only the host suffix changes.
+ *
+ * Your DC is shown at Zoho Mail → Settings, or inferred from the sign-in URL
+ * (mail.zoho.eu → EU, mail.zoho.in → IN, …).
+ */
+export const ZOHO_REGIONS: Array<{ key: string; label: string; config: ProviderConfig }> = [
+  { key: 'com', label: 'US / Global (.com)', config: { smtpHost: 'smtp.zoho.com', smtpPort: 587, imapHost: 'imap.zoho.com', imapPort: 993 } },
+  { key: 'eu', label: 'Europe (.eu)', config: { smtpHost: 'smtp.zoho.eu', smtpPort: 587, imapHost: 'imap.zoho.eu', imapPort: 993 } },
+  { key: 'in', label: 'India (.in)', config: { smtpHost: 'smtp.zoho.in', smtpPort: 587, imapHost: 'imap.zoho.in', imapPort: 993 } },
+  { key: 'au', label: 'Australia (.com.au)', config: { smtpHost: 'smtp.zoho.com.au', smtpPort: 587, imapHost: 'imap.zoho.com.au', imapPort: 993 } },
+  { key: 'jp', label: 'Japan (.jp)', config: { smtpHost: 'smtp.zoho.jp', smtpPort: 587, imapHost: 'imap.zoho.jp', imapPort: 993 } },
+  { key: 'ca', label: 'Canada (zohocloud.ca)', config: { smtpHost: 'smtp.zohocloud.ca', smtpPort: 587, imapHost: 'imap.zohocloud.ca', imapPort: 993 } },
+  { key: 'sa', label: 'Saudi Arabia (.sa)', config: { smtpHost: 'smtp.zoho.sa', smtpPort: 587, imapHost: 'imap.zoho.sa', imapPort: 993 } },
+  { key: 'cn', label: 'China (.com.cn)', config: { smtpHost: 'smtp.zoho.com.cn', smtpPort: 587, imapHost: 'imap.zoho.com.cn', imapPort: 993 } },
+];
+
 interface QuickFillProps {
   /** Called when the user clicks a provider chip. Receives the preset
    *  values; parent writes them into the relevant form fields. */
@@ -76,7 +97,7 @@ export function ProviderQuickFill({ onPick, onCustom, current }: QuickFillProps)
   ];
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-slate-600">Fill settings for:</span>
+      <span className="text-xs font-medium text-stone-600">Fill settings for:</span>
       {chips.map((c) => (
         <button
           key={c.key}
@@ -88,8 +109,8 @@ export function ProviderQuickFill({ onPick, onCustom, current }: QuickFillProps)
           }
           className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
             current === c.key
-              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
           }`}
           data-testid={`provider-fill-${c.key}`}
         >
@@ -119,7 +140,7 @@ export function SmtpPortChips({ name, value, onChange }: PortChipsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input type="hidden" name={name} value={value} />
-      <span className="text-xs font-medium text-slate-600">SMTP port:</span>
+      <span className="text-xs font-medium text-stone-600">SMTP port:</span>
       {COMMON_PORTS.map((p) => (
         <button
           key={p.port}
@@ -127,8 +148,8 @@ export function SmtpPortChips({ name, value, onChange }: PortChipsProps) {
           onClick={() => onChange(p.port)}
           className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
             numValue === p.port
-              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
           }`}
         >
           {p.label}
@@ -163,6 +184,42 @@ export function ProviderAppPasswordNote({ provider }: { provider: Provider }) {
   );
 }
 
+interface ZohoRegionChipsProps {
+  /** Current SMTP host — used to highlight the matching region chip. */
+  currentSmtpHost: string;
+  /** Called with the region's full SMTP+IMAP config when a chip is clicked. */
+  onPick: (config: ProviderConfig) => void;
+}
+
+/**
+ * Data-center picker shown only when the Zoho provider is active. Zoho's
+ * SMTP/IMAP hostnames differ per region (see `ZOHO_REGIONS`); the Zoho
+ * quick-fill chip defaults to US/Global, and this row lets the user switch
+ * to their actual DC in one click.
+ */
+export function ZohoRegionChips({ currentSmtpHost, onPick }: ZohoRegionChipsProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-stone-600">Zoho region:</span>
+      {ZOHO_REGIONS.map((r) => (
+        <button
+          key={r.key}
+          type="button"
+          onClick={() => onPick(r.config)}
+          className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+            currentSmtpHost === r.config.smtpHost
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
+          }`}
+          data-testid={`zoho-region-${r.key}`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Map a known SMTP/IMAP error code to a plain-English explanation
  * + fix hint. Returns `null` if the code is unknown — the caller
@@ -174,6 +231,19 @@ export function errorHint(
   port?: number,
 ): string | null {
   if (!errCode) return null;
+
+  // Zoho-specific: a login that fails against a zoho host is most often IMAP
+  // access being switched off (off by default), the wrong data center, or
+  // 2FA needing an app-specific password — not a mistyped password.
+  const isZohoHost = (host ?? '').includes('zoho');
+  if (isZohoHost && (errCode === 'IMAP_EAUTH' || errCode === 'EAUTH')) {
+    return (
+      'Zoho login refused. Most likely: (1) IMAP is off — enable it at Zoho Mail → Settings → Mail Accounts → IMAP Access → Enable; ' +
+      '(2) 2FA is on — generate an app-specific password at Zoho Account → Security → App Passwords and use that; ' +
+      '(3) wrong data center — pick your Zoho region above so the host matches your mailbox.'
+    );
+  }
+
   switch (errCode) {
     case 'EAUTH':
       return 'Wrong username or password. Gmail / Yahoo / Outlook require an App Password, not your account password.';

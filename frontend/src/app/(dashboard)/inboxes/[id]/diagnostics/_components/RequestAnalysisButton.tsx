@@ -18,8 +18,8 @@ export function RequestAnalysisButton({ inboxId, canRun }: Props) {
 
   if (!canRun) {
     return (
-      <div className="text-xs text-slate-500">
-        <span className="font-medium text-slate-700">Upgrade required.</span> AI analysis is
+      <div className="text-xs text-stone-500">
+        <span className="font-medium text-stone-700">Upgrade required.</span> AI analysis is
         available on the Growth plan and above.
       </div>
     );
@@ -45,7 +45,7 @@ export function RequestAnalysisButton({ inboxId, canRun }: Props) {
         type="button"
         onClick={run}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         {busy ? 'Requesting…' : 'Request new analysis'}
       </button>

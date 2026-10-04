@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { and, eq, count, ne } from 'drizzle-orm';
+import { and, eq, count, ne, sql } from 'drizzle-orm';
 import Stripe from 'stripe';
-import { db } from '../db';
+import { db, DbExecutor } from '../db';
 import { users, inboxes } from '../db/schema';
 import { QueueService } from '../queue/queue.service';
 
@@ -115,19 +115,63 @@ export class BillingService {
    * How many more inboxes the user's plan allows (Infinity for unlimited
    * plans, 0 for unknown/free ones). Batch imports use this so an upload
    * can't walk past the limit that single connects are held to.
+   *
+   * Pass a transaction executor to count inside a locked transaction (see
+   * `lockInboxSlots`); without one it reads with the root handle.
    */
-  async remainingInboxSlots(userId: string): Promise<number> {
-    const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  async remainingInboxSlots(userId: string, executor: DbExecutor = db): Promise<number> {
+    const userRows = await executor.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = userRows[0];
     if (!user) return 0;
     const limit = PLAN_LIMITS[user.plan]?.inboxes ?? 0;
     if (limit === -1) return Number.POSITIVE_INFINITY;
-    const [result] = await db
+    const [result] = await executor
       .select({ count: count() })
       .from(inboxes)
       // A disconnected inbox no longer uses a slot.
       .where(and(eq(inboxes.userId, userId), ne(inboxes.status, 'disconnected')));
     return Math.max(0, limit - Number(result.count));
+  }
+
+  /**
+   * Serializes inbox-slot accounting per user. A plain count-then-insert races:
+   * two concurrent connects both read `count = limit - 1` and both insert,
+   * overrunning the cap. Callers must run this inside a `db.transaction` and
+   * then perform the insert on the SAME transaction handle, so the advisory
+   * lock (released at commit) holds the slot for the duration of the write.
+   *
+   * Throws ForbiddenException when no slot is free. Returns the number of slots
+   * still free AFTER this reservation would be taken, for callers (batch) that
+   * reserve several in one transaction.
+   */
+  async lockInboxSlots(tx: DbExecutor, userId: string): Promise<number> {
+    // Advisory xact lock: same key space as placement ('inbox:'+userId), freed
+    // automatically when the transaction commits or rolls back.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'inbox:' + userId}))`);
+    return this.remainingInboxSlots(userId, tx);
+  }
+
+  /**
+   * Atomically reserve one inbox slot and run `insert` to create the row,
+   * inside a single locked transaction. Throws ForbiddenException if the plan
+   * is full. The insert callback receives the transaction handle and must use
+   * it so the slot check and the write commit together.
+   */
+  async withReservedInboxSlot<T>(
+    userId: string,
+    insert: (tx: DbExecutor) => Promise<T>,
+  ): Promise<T> {
+    return db.transaction(async (tx) => {
+      const remaining = await this.lockInboxSlots(tx, userId);
+      if (remaining <= 0) {
+        const userRows = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+        const plan = userRows[0]?.plan ?? 'free';
+        const limit = PLAN_LIMITS[plan]?.inboxes ?? 0;
+        this.logger.warn({ userId, plan, inboxLimit: limit }, 'inbox slot reservation rejected');
+        throw new ForbiddenException(`Inbox limit reached for ${plan} plan (${limit} inboxes)`);
+      }
+      return insert(tx);
+    });
   }
 
   /** Creates a Stripe Checkout session in subscription mode. Enterprise is rejected — handled manually. */

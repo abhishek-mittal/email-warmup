@@ -112,11 +112,11 @@ function DnsCard({ dns, loading, busy, onRun }: DnsCardProps) {
   const latest = dns[0] ?? null;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">DNS</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-stone-700">DNS</h2>
+          <p className="text-xs text-stone-500">
             {latest ? `Last checked ${formatDateTime(latest.checkedAt)}` : 'No DNS checks yet'}
           </p>
         </div>
@@ -124,7 +124,7 @@ function DnsCard({ dns, loading, busy, onRun }: DnsCardProps) {
           type="button"
           onClick={onRun}
           disabled={busy}
-          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? (
             <>
@@ -138,7 +138,7 @@ function DnsCard({ dns, loading, busy, onRun }: DnsCardProps) {
       </header>
 
       {loading && !latest ? (
-        <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        <p className="mt-4 text-sm text-stone-500">Loading…</p>
       ) : latest ? (
         <div className="mt-4 space-y-2">
           <DnsRow label="SPF" status={latest.spfValid} detail={null} />
@@ -148,17 +148,17 @@ function DnsCard({ dns, loading, busy, onRun }: DnsCardProps) {
           <DnsRow label="rDNS" status={latest.rdnsValid} detail={null} />
         </div>
       ) : (
-        <p className="mt-4 text-sm text-slate-500">No DNS checks yet. Click &ldquo;Run DNS Check Now&rdquo; to start.</p>
+        <p className="mt-4 text-sm text-stone-500">No DNS checks yet. Click &ldquo;Run DNS Check Now&rdquo; to start.</p>
       )}
 
       {dns.length > 1 ? (
         <div className="mt-6">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">History</h3>
-          <ul className="mt-2 divide-y divide-slate-100 text-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">History</h3>
+          <ul className="mt-2 divide-y divide-stone-100 text-sm">
             {dns.slice(1).map((row) => (
               <li key={row.id} className="flex items-center justify-between py-2">
-                <span className="text-slate-700">{formatDateTime(row.checkedAt)}</span>
-                <span className="text-slate-500">
+                <span className="text-stone-700">{formatDateTime(row.checkedAt)}</span>
+                <span className="text-stone-500">
                   Score {typeof row.score === 'number' ? row.score : '—'}
                 </span>
               </li>
@@ -173,19 +173,19 @@ function DnsCard({ dns, loading, busy, onRun }: DnsCardProps) {
 function DnsRow({ label, status, detail }: { label: string; status: boolean | null; detail: string | null }) {
   const color =
     status === null
-      ? 'bg-slate-100 text-slate-600'
+      ? 'bg-stone-100 text-stone-600'
       : status
       ? 'bg-emerald-100 text-emerald-700'
       : 'bg-rose-100 text-rose-700';
   const mark =
     status === null ? '–' : status ? '✓' : '✗';
   return (
-    <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <div className="flex items-center justify-between rounded-lg border border-stone-100 px-3 py-2 text-sm">
+      <span className="font-medium text-stone-700">{label}</span>
       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
         {mark} {status === null ? 'Unknown' : status ? 'Valid' : 'Invalid'}
       </span>
-      {detail ? <span className="text-xs text-slate-500">{detail}</span> : null}
+      {detail ? <span className="text-xs text-stone-500">{detail}</span> : null}
     </div>
   );
 }
@@ -204,7 +204,7 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
 
   const verdictColor =
     isClean === null
-      ? 'text-slate-400'
+      ? 'text-stone-400'
       : isClean
       ? 'text-emerald-600'
       : 'text-rose-600';
@@ -229,11 +229,11 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
   const unansweredCount = rblStatuses.length - answeredCount;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">Blacklist</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-stone-700">Blacklist</h2>
+          <p className="text-xs text-stone-500">
             {latest ? `Last checked ${formatDateTime(latest.checkedAt)}` : 'No blacklist checks yet'}
           </p>
         </div>
@@ -241,7 +241,7 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
           type="button"
           onClick={onRun}
           disabled={busy}
-          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? (
             <>
@@ -255,11 +255,11 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
       </header>
 
       {loading && !latest ? (
-        <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        <p className="mt-4 text-sm text-stone-500">Loading…</p>
       ) : latest ? (
         <div className="mt-4 space-y-3">
           <p className={`text-base font-semibold ${verdictColor}`}>{verdictLabel}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-stone-500">
             {answeredCount} of {rblStatuses.length} lists answered.
             {unansweredCount > 0
               ? ` ${unansweredCount} gave no result (query refused, timed out, list retired, or it needs a sending IP that isn’t set for this inbox). No result is not the same as clean.`
@@ -279,18 +279,18 @@ function BlacklistCard({ blacklist, loading, busy, onRun }: BlacklistCardProps) 
           ) : null}
         </div>
       ) : (
-        <p className="mt-4 text-sm text-slate-500">
+        <p className="mt-4 text-sm text-stone-500">
           No blacklist checks yet. Click &ldquo;Run Blacklist Check Now&rdquo; to start.
         </p>
       )}
 
       {blacklist.length > 1 ? (
         <div className="mt-6">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">History</h3>
-          <ul className="mt-2 divide-y divide-slate-100 text-sm">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">History</h3>
+          <ul className="mt-2 divide-y divide-stone-100 text-sm">
             {blacklist.slice(1).map((row) => (
               <li key={row.id} className="flex items-center justify-between py-2">
-                <span className="text-slate-700">{formatDateTime(row.checkedAt)}</span>
+                <span className="text-stone-700">{formatDateTime(row.checkedAt)}</span>
                 <span className={row.isClean ? 'text-emerald-600' : 'text-rose-600'}>
                   {row.isClean ? 'Clean' : `Listed (${row.listedCount ?? '?'})`}
                 </span>

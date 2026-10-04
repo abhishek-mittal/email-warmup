@@ -3,6 +3,7 @@ import { db } from '../../src/db';
 import { inboxes, poolInboxes, poolMembers } from '../../src/db/schema';
 import { encrypt } from '../../src/common/crypto';
 import { makePinoLoggerStub } from '../../src/common/pino-logger.stub';
+import { BillingService } from '../../src/billing/billing.service';
 import { InboxService } from '../../src/inbox/inbox.service';
 import { DnsService } from '../../src/monitor/dns.service';
 import { AnalysisService } from '../../src/analysis/analysis.service';
@@ -35,7 +36,7 @@ describe('connect, consent and activation (MR-08 / MR-10)', () => {
     userId = await createUser();
     inboxService = new InboxService(
       makePinoLoggerStub(),
-      { assertInboxLimit: jest.fn() } as any,
+      new BillingService(makePinoLoggerStub(), engine.queue as any),
       engine.imap,
       engine.smtp,
       engine.queue as any,
@@ -173,6 +174,26 @@ describe('connect, consent and activation (MR-08 / MR-10)', () => {
 
     expect((await inboxRow(inbox.id)).status).toBe('active');
     expect(await members(inbox.id)).toHaveLength(0);
+  });
+
+  it('enforces the plan inbox cap under concurrent connects (no overrun)', async () => {
+    // Trial plan allows 3 inboxes. Five connects fired at once must not race
+    // past the cap: exactly 3 succeed, 2 are refused, and the DB holds 3.
+    const attempts = Array.from({ length: 5 }, () =>
+      inboxService.connectCustomSmtp(userId, smtpDto(uniqueEmail('race'))),
+    );
+    const settled = await Promise.allSettled(attempts);
+
+    const fulfilled = settled.filter((s) => s.status === 'fulfilled');
+    const rejected = settled.filter((s) => s.status === 'rejected');
+    expect(fulfilled).toHaveLength(3);
+    expect(rejected).toHaveLength(2);
+    for (const r of rejected as PromiseRejectedResult[]) {
+      expect(String(r.reason?.message ?? r.reason)).toMatch(/limit/i);
+    }
+
+    const rows = await db.select().from(inboxes).where(eq(inboxes.userId, userId));
+    expect(rows.filter((row) => row.status !== 'disconnected')).toHaveLength(3);
   });
 
   describe('imported inboxes are activated by transport, not by DNS', () => {

@@ -19,7 +19,7 @@ export function Toast({ message, kind = 'info', onDone }: ToastProps) {
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
       : kind === 'error'
       ? 'border-rose-200 bg-rose-50 text-rose-800'
-      : 'border-slate-200 bg-slate-50 text-slate-800';
+      : 'border-stone-200 bg-stone-50 text-stone-800';
 
   return (
     <div

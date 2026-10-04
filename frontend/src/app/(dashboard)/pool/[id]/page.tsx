@@ -28,17 +28,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="space-y-6">
-      <Link href="/pool" className="text-sm text-indigo-600 hover:underline">
+      <Link href="/pool" className="text-sm text-brand-600 hover:underline">
         &larr; Back to Warming Pool
       </Link>
 
       <header className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-slate-900">{poolInbox.email}</h1>
+            <h1 className="text-2xl font-semibold text-stone-900">{poolInbox.email}</h1>
             <ReadinessBadge status={poolInbox.status} analysis={poolInbox.analysis} />
           </div>
-          <p className="mt-1 text-sm capitalize text-slate-600">
+          <p className="mt-1 text-sm capitalize text-stone-600">
             {poolInbox.provider} &middot; added {formatDate(poolInbox.createdAt)}
           </p>
         </div>

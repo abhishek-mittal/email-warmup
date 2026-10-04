@@ -9,6 +9,8 @@ loadDotenv({ path: ['.env', '../.env'] });
 
 import { NestFactory, Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import * as bodyParser from 'body-parser';
 import { markUnready } from './health/health.controller';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
@@ -32,6 +34,31 @@ async function bootstrap() {
   // needed here.)
   app.use('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }));
   app.use(bodyParser.json());
+  // Security headers on every response. This is a JSON API consumed by the
+  // frontend proxy, not a browser-rendered site, so CSP (geared at HTML) is
+  // left off and the resource policies that would block the proxy are relaxed;
+  // the useful headers here are nosniff, frameguard, HSTS and referrer policy.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+  // Validate and strip every incoming DTO. `whitelist` drops unknown
+  // properties, `forbidNonWhitelisted` rejects requests that send them, and
+  // `transform` coerces payloads into the DTO classes (so `@Type`/typed params
+  // are honoured). This is the single enforcement point the MR-11 DTO sweep
+  // relies on; per-route manual validators remain only where a payload shape
+  // cannot be expressed as a class (e.g. the batch import alias handling).
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
   // The browser reaches the API only through the frontend's same-origin
   // proxy, so no other origin has a reason to call it from a page.
   app.enableCors({

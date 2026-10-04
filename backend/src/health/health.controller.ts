@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import { Public } from '../auth/public.decorator';
@@ -23,6 +24,7 @@ function withTimeout<T>(work: Promise<T>, label: string): Promise<T> {
 }
 
 @Controller('health')
+@SkipThrottle()
 export class HealthController {
   constructor(private readonly queueService: QueueService) {}
 

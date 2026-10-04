@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmailWarm Getting Started Guide</title>
+<style>
+/* Print-first, white A4 business guide. One accent (ember). Tints print via color-adjust. */
+:root{
+  --ink:#1b2130; --soft:#55607a; --faint:#8893a8; --line:#d7dce6; --line2:#e7eaf1;
+  --accent:#c6490c; --accent-soft:#fcecdf; --accent-ink:#8a3204;
+  --ok:#0e7a52; --ok-soft:#e4f4ec; --warn:#9a5a00; --warn-soft:#fcefd4; --bad:#a81f36; --bad-soft:#fbe2e6;
+  --panel:#f6f8fb;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --mono:'SFMono-Regular',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);font-size:11.3pt;line-height:1.55}
+.page{max-width:760px;margin:0 auto;padding:28px 26px 60px}
+h1{font-family:var(--serif);font-size:30pt;line-height:1.1;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-size:19pt;margin:0 0 4px;letter-spacing:-.01em}
+h3{font-size:12.5pt;margin:0 0 3px}
+h4{font-size:11pt;margin:14px 0 4px;color:var(--accent-ink)}
+p{margin:0 0 9px} ul,ol{margin:0 0 9px;padding-left:20px} li{margin-bottom:4px}
+b,strong{font-weight:700}
+a{color:var(--accent-ink);text-decoration:none}
+code{font-family:var(--mono);font-size:9.6pt;background:var(--panel);border:1px solid var(--line2);border-radius:4px;padding:0 4px}
+.sub{color:var(--soft)}
+
+/* cover */
+.cover{padding:34px 0 20px;border-bottom:3px solid var(--accent)}
+.kicker{font-family:var(--mono);font-size:9pt;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:14px}
+.lede{font-size:13pt;color:var(--soft);max-width:60ch}
+.meta{margin-top:18px;font-size:9.5pt;color:var(--faint);font-family:var(--mono)}
+
+/* contents */
+.toc{margin:22px 0 0;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:14px 20px}
+.toc h3{font-family:var(--sans);margin-bottom:8px}
+.toc ol{columns:2;column-gap:26px;margin:0;font-size:10.3pt}
+.toc li{break-inside:avoid;margin-bottom:3px}
+
+/* parts */
+.part{break-before:page;padding-top:6px}
+.part-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--line);padding-bottom:7px;margin-bottom:14px}
+.part-head .pn{font-family:var(--mono);font-size:10pt;font-weight:700;letter-spacing:.06em;color:var(--accent);white-space:nowrap}
+
+/* steps */
+.step{break-inside:avoid;border:1px solid var(--line2);border-radius:8px;padding:12px 15px;margin-bottom:11px}
+.step-n{display:inline-block;min-width:24px;height:24px;line-height:24px;text-align:center;background:var(--accent);color:#fff;font-weight:700;border-radius:50%;font-size:10.5pt;margin-right:8px}
+.step h3{display:inline}
+.expect{break-inside:avoid;margin-top:9px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0;padding:7px 11px}
+.ifnot{break-inside:avoid;margin-top:9px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0;padding:7px 11px}
+.note{break-inside:avoid;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0;padding:8px 12px;margin:10px 0}
+.warnbox{break-inside:avoid;border:2px solid var(--bad);background:var(--bad-soft);border-radius:8px;padding:11px 15px;margin:12px 0}
+.lbl{font-family:var(--mono);font-size:8.5pt;font-weight:700;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:2px}
+.expect .lbl{color:var(--ok)} .ifnot .lbl{color:var(--warn)} .note .lbl{color:var(--accent-ink)} .warnbox .lbl{color:var(--bad)}
+.tag{font-family:var(--mono);font-size:8pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);color:var(--soft);border-radius:20px;padding:1px 8px;margin-left:6px;vertical-align:middle}
+.tag.opt{background:#eef3fb;border-color:#cfe0f5;color:#1f5fbf}
+
+/* tables */
+.tw{break-inside:avoid}
+table{border-collapse:collapse;width:100%;font-size:10pt;margin:6px 0 10px}
+th,td{text-align:left;padding:6px 9px;border:1px solid var(--line2);vertical-align:top}
+th{background:var(--panel);font-size:8.6pt;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--soft)}
+tr{break-inside:avoid}
+
+/* setup code box */
+.cmd{break-inside:avoid;background:#0f1522;color:#dde3f0;border-radius:7px;padding:10px 13px;font-family:var(--mono);font-size:9.3pt;line-height:1.55;white-space:pre-wrap;margin:7px 0}
+.where{font-family:var(--mono);font-size:8.5pt;color:var(--faint);margin:2px 0}
+
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0;font-size:10pt}
+.flow .b{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:4px 9px}
+.flow .arr{color:var(--accent);font-weight:700}
+
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.cards .c{break-inside:avoid;border:1px solid var(--line2);border-radius:8px;padding:11px 13px}
+.cards .c h3{color:var(--accent-ink)}
+.cards .c p{font-size:10pt;margin:0}
+
+.foot{margin-top:40px;border-top:1px solid var(--line2);padding-top:10px;font-size:9pt;color:var(--faint)}
+
+@page{size:A4;margin:16mm 15mm}
+@media print{
+  .page{max-width:none;margin:0;padding:0}
+  a{color:var(--ink)}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<section class="cover">
+  <div class="kicker">EmailWarm · Getting Started</div>
+  <h1>Your step-by-step guide to warming up real mailboxes</h1>
+  <p class="lede">Written for business users, not engineers. Follow it in order and you will connect your own email addresses — your personal Gmail, your Outlook, or a company address on your own domain — and watch EmailWarm quietly build their reputation so your mail reaches the inbox.</p>
+  <div class="meta">No technical background needed &nbsp;·&nbsp; Read time 15 minutes &nbsp;·&nbsp; Hands-on time about an hour, then a few minutes a day</div>
+  <div class="toc">
+    <h3>What's inside</h3>
+    <ol>
+      <li>What EmailWarm does</li>
+      <li>What you'll need</li>
+      <li>Which email addresses you can use</li>
+      <li>Turn on the app &amp; sign in</li>
+      <li>Get an "app password" for each mailbox</li>
+      <li>Add your helper mailboxes</li>
+      <li>Connect the mailbox you want to warm</li>
+      <li>Check the mailbox is healthy</li>
+      <li>Start warming &amp; what to expect</li>
+      <li>Run an inbox placement test</li>
+      <li>Score, graduation &amp; advice</li>
+      <li>Everyday use: pause, resume, remove</li>
+      <li>If something goes wrong</li>
+      <li>Plain-English word list</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 1 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 1</span><h2>What EmailWarm does</h2></div>
+  <p>Email providers like Gmail, Outlook and Yahoo are cautious about new or quiet email addresses. If an address that normally sends nothing suddenly sends lots of mail, they assume it might be spam and hide it in the spam folder. That means the people you write to never see your messages.</p>
+  <p><b>EmailWarm fixes this by building trust slowly.</b> It sends a small number of friendly, harmless emails each day from your address to a set of helper mailboxes. Those helpers open the emails, reply to them, and — if an email lands in spam — move it back to the inbox. Each day it sends a few more. After a few weeks, the providers have learned that your address is a normal, trusted sender, and your real mail starts landing in the inbox.</p>
+  <div class="flow">
+    <span class="b">Your mailbox</span><span class="arr">sends →</span>
+    <span class="b">Helper mailbox</span><span class="arr">opens · replies · rescues from spam →</span>
+    <span class="b">Trust goes up</span>
+  </div>
+  <h4>The three kinds of mailbox in this guide</h4>
+  <div class="cards">
+    <div class="c"><h3>The mailbox you want to warm</h3><p>The address whose reputation you want to build — for example your personal Gmail or your work address. The app calls this an <b>inbox</b>.</p></div>
+    <div class="c"><h3>Helper mailboxes</h3><p>Other real addresses that trade warm-up emails with it. They are never warmed themselves; they just help. The app calls these <b>pool inboxes</b>. You need at least two.</p></div>
+    <div class="c"><h3>Judge mailboxes</h3><p>Used only for a placement test (Part 10) to see where your mail lands. The app calls these <b>seeds</b>. Optional until you reach that part.</p></div>
+    <div class="c"><h3>Good to know</h3><p>This is your own private setup on one computer. Everything stays with you; no outside companies are involved in the warming.</p></div>
+  </div>
+  <div class="warnbox"><span class="lbl">Please read before connecting anything</span>
+    Warming sends <b>real emails</b> from whatever address you connect, and once an email is sent it cannot be called back. For your first try, use an address you are comfortable experimenting with — a spare or personal one — rather than your most important business mailbox. Most importantly, your <b>helper mailboxes must be on a different email domain</b> than the mailbox you are warming. (The domain is the part after the @ sign.) For example, warm <code>you@yourcompany.com</code> and use helpers at <code>@gmail.com</code> and <code>@outlook.com</code>. The app will refuse to pair two addresses that share the same domain.</div>
+</section>
+
+<!-- 2 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 2</span><h2>What you'll need</h2></div>
+  <p>Gather these before you start. Tick them off as you go.</p>
+  <div class="step"><h3><span class="step-n">1</span>One mailbox you want to warm</h3>
+    <p>A real email address you can log in to. A personal Gmail or Outlook address is perfect for a first run. Note its domain (the part after @).</p></div>
+  <div class="step"><h3><span class="step-n">2</span>Two or three helper mailboxes on other domains</h3>
+    <p>For example, if you are warming a <code>@gmail.com</code> address, your helpers could be an <code>@outlook.com</code> address and a <code>@yahoo.com</code> address. A mix of providers works best. You'll need to log in to each helper to see the emails arrive.</p></div>
+  <div class="step"><h3><span class="step-n">3</span>Three more mailboxes as "judges" <span class="tag opt">only for Part 10</span></h3>
+    <p>Needed only when you run a placement test. You can add these later.</p></div>
+  <div class="step"><h3><span class="step-n">4</span>The EmailWarm app, running on a computer</h3>
+    <p>If a colleague has set this up for you, you only need the web address (usually <code>http://localhost:3000</code>). If not, Part 4 shows the three short commands to start it, or you can ask whoever set up the project to start it for you.</p></div>
+  <div class="step"><h3><span class="step-n">5</span>Two-step verification switched on for each mailbox</h3>
+    <p>Gmail and Yahoo only let you create the special "app password" (Part 5) when two-step verification is already on. Turn it on now in each account's security settings — it takes two minutes per account.</p></div>
+</section>
+
+<!-- 3 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 3</span><h2>Which email addresses you can use</h2></div>
+  <p>You can warm almost any real mailbox. Here is exactly what works and what to expect for each.</p>
+
+  <h4>Personal Gmail (name@gmail.com)</h4>
+  <p>Fully supported, and the easiest to start with. You will turn on two-step verification, create an app password, and make sure IMAP is switched on (that's the setting that lets the app read the mailbox). All three are quick and are covered in Part 5.</p>
+
+  <h4>Personal Outlook / Hotmail / Live (name@outlook.com, @hotmail.com, @live.com)</h4>
+  <p>Supported. Personal Microsoft accounts can create an app password once two-step verification is on. A few older accounts hide this option; if yours does, use a Gmail or Yahoo address for your first run instead.</p>
+
+  <h4>Yahoo (name@yahoo.com)</h4>
+  <p>Supported, the same way as Gmail: two-step verification, then an app password.</p>
+
+  <h4>Your own company domain (name@yourcompany.com)</h4>
+  <p>Supported. How you get the settings depends on who runs your email:</p>
+  <ul>
+    <li><b>Google Workspace</b> (your company uses Gmail behind the scenes): treat it exactly like personal Gmail. Create an app password at your Google account. If the option is missing, your IT admin has turned it off — ask them to allow app passwords, or to enable it for your account.</li>
+    <li><b>Microsoft 365</b> (company Outlook): treat it like personal Outlook. Many company accounts block app passwords by policy; if so, ask IT, or use a different mailbox for testing.</li>
+    <li><b>Zoho, GoDaddy, Namecheap, cPanel, or another host</b>: you'll need the mail server details (below). You usually find these in your host's help pages under a title like "email client setup", "IMAP settings", or "connect with Outlook". Your IT person or host's support can give them in a minute.</li>
+  </ul>
+
+  <div class="note"><span class="lbl">The one thing every mailbox needs</span>
+    EmailWarm needs to both <b>send</b> and <b>read</b> mail for the address. "Read" is done through a setting called <b>IMAP</b>. If IMAP is turned off, the app can send but cannot open, reply or file the warm-up mail — and the mailbox can't take part. For Gmail, turn IMAP on under Settings → See all settings → Forwarding and POP/IMAP. For most others it is already on.</div>
+
+  <h4>Mail server cheat sheet</h4>
+  <p>You'll type these into the app in Part 6 and Part 7. The app also has buttons that fill them in for you for the common providers.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Provider</th><th>Outgoing (SMTP)</th><th>Port</th><th>Incoming (IMAP)</th><th>Port</th></tr></thead>
+    <tbody>
+      <tr><td>Gmail / Google Workspace</td><td>smtp.gmail.com</td><td>587</td><td>imap.gmail.com</td><td>993</td></tr>
+      <tr><td>Outlook / Microsoft 365</td><td>smtp-mail.outlook.com</td><td>587</td><td>outlook.office365.com</td><td>993</td></tr>
+      <tr><td>Yahoo</td><td>smtp.mail.yahoo.com</td><td>587</td><td>imap.mail.yahoo.com</td><td>993</td></tr>
+      <tr><td>Zoho</td><td>smtp.zoho.com</td><td>587</td><td>imap.zoho.com</td><td>993</td></tr>
+      <tr><td>Other host</td><td colspan="4">Ask your host, or look up "[your host] IMAP SMTP settings". Outgoing port is usually 587, incoming 993.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 4 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 4</span><h2>Turn on the app &amp; sign in</h2></div>
+
+  <div class="step"><h3><span class="step-n">1</span>Check whether the app is already running</h3>
+    <p>Open a web browser and go to <code>http://localhost:3000/sign-in</code>. If a sign-in page appears, the app is running — skip to step 3. If the page won't load, do step 2 first.</p></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Start the app <span class="tag opt">only if the page didn't load</span></h3>
+    <p>This part needs a colleague who is comfortable with a computer terminal, or you can follow along. Open three terminal windows in the project folder and run one block in each:</p>
+    <div class="where">Window 1 — the database</div>
+    <div class="cmd">docker compose up -d</div>
+    <div class="where">Window 2 — the engine (leave it open)</div>
+    <div class="cmd">cd backend
+pnpm install
+pnpm db:migrate
+pnpm start:dev</div>
+    <div class="where">Window 3 — the website (leave it open)</div>
+    <div class="cmd">cd frontend
+pnpm install
+pnpm dev</div>
+    <div class="expect"><span class="lbl">What to expect</span>After a minute or two, the website window says "Ready". Now <code>http://localhost:3000/sign-in</code> will open.</div>
+    <div class="note"><span class="lbl">Clear the sample data first</span>
+      The app may come with pretend practice mailboxes. If you leave them in, they become your warm-up partners and the emails to them bounce, which pauses your real mailbox. Clear them once, in a terminal in the <code>backend</code> folder, with: <code>pnpm db:seed:dev --reset</code>. Your real mailboxes are never affected — it only removes practice addresses that end in <code>.test</code>.</div></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Sign in</h3>
+    <p>On the sign-in page, use the ready-made test account:</p>
+    <div class="tw"><table><tbody>
+      <tr><th>Email</th><td><code>admin@emailwarm.dev</code></td></tr>
+      <tr><th>Password</th><td><code>EmailWarm-Phase1-Test!</code></td></tr>
+    </tbody></table></div>
+    <div class="expect"><span class="lbl">What to expect</span>You land on the <b>Overview</b> page. On the left is the menu you'll use throughout: Overview, Accounts, Analytics, Deliverability, Warming pool, and more. The list of mailboxes is empty for now.</div></div>
+</section>
+
+<!-- 5 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 5</span><h2>Get an "app password" for each mailbox</h2></div>
+  <p>An <b>app password</b> is a one-off password that lets a program use your mailbox safely, without your real password. You create one on the email provider's own website, and you'll do this once for every address you connect — your mailbox to warm and each helper. Your normal password will not work.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Gmail (and Google Workspace)</h3>
+    <ol>
+      <li>Make sure two-step verification is on (Google account → Security).</li>
+      <li>Go to <code>myaccount.google.com/apppasswords</code>.</li>
+      <li>Type a name such as "EmailWarm" and click <b>Create</b>.</li>
+      <li>Google shows a 16-letter code. Copy it now — you won't see it again. Spaces don't matter.</li>
+      <li>Turn on IMAP: Gmail → Settings (gear) → See all settings → Forwarding and POP/IMAP → Enable IMAP → Save.</li>
+    </ol>
+    <div class="ifnot"><span class="lbl">If the app-passwords page says it's unavailable</span>Two-step verification isn't on yet, or (for Workspace) your admin has disabled app passwords. Turn on two-step verification, or ask your admin — or use a personal Gmail for the first run.</div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Outlook / Hotmail / Microsoft 365</h3>
+    <ol>
+      <li>Sign in at <code>account.microsoft.com</code> → Security.</li>
+      <li>Open two-step / advanced security options and turn on two-step verification.</li>
+      <li>Find <b>App passwords</b> and create one named "EmailWarm". Copy the code.</li>
+    </ol>
+    <div class="ifnot"><span class="lbl">If there is no "App passwords" option</span>Some personal and many company Microsoft accounts hide it. For your first run, use Gmail or Yahoo instead; you can add Outlook later.</div></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Yahoo</h3>
+    <ol>
+      <li>Yahoo → Account Info → Account Security (two-step verification on).</li>
+      <li>Click <b>Generate app password</b>, choose "Other app", name it "EmailWarm", copy the code.</li>
+    </ol></div>
+
+  <div class="step"><h3><span class="step-n">4</span>Your own company domain</h3>
+    <p>If it's Google Workspace or Microsoft 365, follow step 1 or 2 above. For other hosts (Zoho, GoDaddy, cPanel, and so on), you typically use your <b>normal mailbox password</b> together with the server details from the Part 3 cheat sheet — unless the host offers app passwords, in which case use one. Your host's support or your IT person can confirm which.</p></div>
+
+  <div class="note"><span class="lbl">Keep these safe</span>Treat each app password like a key to that mailbox. Keep the codes somewhere private while you set up, and don't share them. You'll paste each one into the app in the next two parts.</div>
+</section>
+
+<!-- 6 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 6</span><h2>Add your helper mailboxes</h2></div>
+  <p>Do this <b>before</b> connecting the mailbox you want to warm, so it has partners to practise with from its very first email.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Open the Warming Pool page</h3>
+    <p>In the left-hand menu, click <b>Warming pool</b>. It says "No pool inboxes yet." At the top right are two buttons: <b>Add via wizard</b> and <b>Add via CSV</b>.</p></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Add the first helper with the wizard</h3>
+    <ol>
+      <li>Click <b>Add via wizard</b>.</li>
+      <li>Set the type to <b>Custom</b> — even for a Gmail or Outlook helper. (The Gmail and Outlook options here ask for developer keys you don't have.)</li>
+      <li>Fill in: the helper's <b>email address</b>; the <b>outgoing (SMTP)</b> server, port, user and password; and the <b>incoming (IMAP)</b> server, port, user and password. The "user" is the full email address. The "password" is the app password from Part 5, entered in both the SMTP and IMAP boxes. Use the Part 3 cheat sheet for the servers and ports.</li>
+      <li>Save. Use <b>Add another</b> to add the next helper straight away.</li>
+    </ol>
+    <div class="expect"><span class="lbl">What to expect</span>The helper appears in a grid, first as <b>pending</b>, then turning <b>active</b> within a minute once the app has checked its settings. A health score appears beside it.</div>
+    <div class="ifnot"><span class="lbl">If it says "Couldn't add this entry"</span>Read the reason shown underneath. Usually it's a typo in the app password or a wrong port. "Duplicate email" means that address is already in the pool.</div></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Add two or three helpers in total, on different domains</h3>
+    <p>More helpers means more realistic practice, and each helper only handles a limited amount per day. Make sure at least one helper uses a different provider from the others, and that none of them shares the domain of the mailbox you're about to warm.</p>
+    <div class="expect"><span class="lbl">What to expect</span>All helpers show <b>active</b>. Click one to open its page — it has tabs for Activity, Pairings and Logs, which stay empty until warm-up emails start flowing.</div></div>
+</section>
+
+<!-- 7 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 7</span><h2>Connect the mailbox you want to warm</h2></div>
+
+  <div class="step"><h3><span class="step-n">1</span>Open the connect page</h3>
+    <p>In the left menu, click <b>Accounts</b>, then the button to connect a mailbox (or go to <code>localhost:3000/inboxes/connect</code>). You'll see three choices: <b>Connect with Google</b>, <b>Connect with Microsoft</b>, and <b>Custom SMTP / IMAP</b>.</p>
+    <div class="note"><span class="lbl">Use the Custom option</span>The Google and Microsoft buttons need sign-in keys that aren't set up on this computer yet. The <b>Custom SMTP / IMAP</b> card works with any mailbox — including Gmail and Outlook — using your app password.</div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Fill in the Custom form</h3>
+    <ol>
+      <li>Click the quick-fill button for your provider (Gmail, Outlook, Yahoo or Zoho). It fills in the servers and ports, and switches on IMAP for you.</li>
+      <li>Type the <b>email address</b>, the <b>SMTP user</b> (the full address) and the <b>SMTP password</b> (your app password).</li>
+      <li>Check the <b>IMAP</b> section is filled in — same user, same app password.</li>
+      <li>Leave <b>DKIM selector</b> empty.</li>
+      <li>Leave <b>Join the shared warmup pool</b> switched off for this first run. (It's for trading mail with other companies; you'll look at it in Part 12.)</li>
+    </ol></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Click Connect and wait for the check</h3>
+    <p>The app now logs in to the sending server, then the receiving server, then creates a folder called <b>WarmupHub</b> in your mailbox. This takes between 5 and 30 seconds.</p>
+    <div class="expect"><span class="lbl">What to expect</span>A green result showing both checks passed, then the mailbox on the <b>Accounts</b> page marked <b>active</b>. Open the real mailbox in another browser tab — a new folder (a label in Gmail) called <b>WarmupHub</b> is now there. That proves the app can log in and file mail correctly.</p></div>
+    <div class="ifnot"><span class="lbl">If the check fails</span>The message tells you which step failed. "Wrong username or password" means the app password (check for typos; the username is the full address). A timeout usually means a wrong port or a network that blocks mail. Nothing is saved when a check fails, so just correct the field and try again. More help is in Part 13.</div></div>
+</section>
+
+<!-- 8 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 8</span><h2>Check the mailbox is healthy</h2></div>
+  <p>Before warming, confirm the address is set up properly. These are behind-the-scenes records that prove an email genuinely comes from you.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Open the mailbox and its DNS tab</h3>
+    <p>On <b>Accounts</b>, click your mailbox. At the top you see its status, score and a trend arrow. Below are tabs: Activity Feed, DNS &amp; Blacklist, Sent Emails, Placement and Logs. Open <b>DNS &amp; Blacklist</b> and click <b>Run DNS Check Now</b>.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Record</th><th>What it means, simply</th></tr></thead>
+      <tbody>
+        <tr><td>SPF</td><td>A list of which servers are allowed to send mail for your address.</td></tr>
+        <tr><td>DKIM</td><td>A hidden signature proving the email wasn't tampered with.</td></tr>
+        <tr><td>DMARC</td><td>Your instructions for what to do with mail that fails the checks above.</td></tr>
+        <tr><td>MX</td><td>Where mail for your domain is delivered.</td></tr>
+        <tr><td>rDNS</td><td>Your sending server points back to your domain. Minor, but helps.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="expect"><span class="lbl">What to expect</span>Green ticks for at least SPF, DKIM and MX. Gmail, Outlook and Yahoo addresses are set up by the provider, so they usually pass. "Unknown" means the app couldn't check — that's different from a failure.</div>
+    <div class="ifnot"><span class="lbl">If a record is red on your own company domain</span>Open the mailbox's diagnostics page for plain-English fix steps, add the record where you manage your domain's DNS (your registrar or host), and run the check again. DNS changes can take up to an hour to show.</div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Run the blocklist check</h3>
+    <p>On the same tab, click <b>Run Blacklist Check Now</b>. This asks several public "bad sender" lists whether your address or domain is on them.</p>
+    <div class="expect"><span class="lbl">What to expect</span>"Clean". If something is listed, warm-up pauses on its own and the mailbox page explains why.</div></div>
+</section>
+
+<!-- 9 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 9</span><h2>Start warming &amp; what to expect</h2></div>
+
+  <div class="warnbox"><span class="lbl">Don't panic if nothing sends immediately — this is normal</span>
+    EmailWarm plans each day's emails once a day, at <b>10:30 in the morning (India time)</b>, and then spreads them out between about <b>1:30 pm and 11:30 pm</b>, with random gaps and at least a few minutes between each one. The very first day it sends only a handful of emails (3 on the normal speed). So a freshly connected mailbox often shows no activity for a while. The next step lets you kick off today's batch right away.</div>
+
+  <div class="step"><h3><span class="step-n">1</span>Start today's emails now</h3>
+    <p>On the mailbox page, click <b>Pause</b>, then click <b>Resume</b>. Resuming schedules today's emails straight away (as long as the current time is before about 11:30 pm India time).</p>
+    <div class="expect"><span class="lbl">What to expect</span>Status returns to <b>active</b>. On the <b>Activity Feed</b> tab, upcoming emails appear and then turn into "sent" over the next minutes and hours.</div>
+    <div class="ifnot"><span class="lbl">If nothing gets scheduled</span>Check three things: the mailbox is <b>active</b>; you have at least one active helper <b>on a different domain</b>; and it's before late evening. With no eligible partner, the app sends nothing on purpose.</div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Follow an email through its life</h3>
+    <p>Keep the mailbox page on <b>Activity Feed</b>, and log in to one helper mailbox in another tab. Over minutes to hours you'll see:</p>
+    <div class="tw"><table>
+      <thead><tr><th>Event</th><th>What happened</th></tr></thead>
+      <tbody>
+        <tr><td>Sent</td><td>An email went from your mailbox to a helper.</td></tr>
+        <tr><td>Filed</td><td>The helper tidied it into its WarmupHub folder, away from its real inbox.</td></tr>
+        <tr><td>Rescued</td><td>It had landed in spam, and the helper moved it back out — a great sign.</td></tr>
+        <tr><td>Opened / Starred</td><td>The helper read it, sometimes starring it.</td></tr>
+        <tr><td>Replied</td><td>The helper wrote back; the reply lands in your mailbox's WarmupHub folder.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="expect"><span class="lbl">What to expect over the first day</span>Several "sent", most "filed", some "opened", a few "replied". Opens and replies are deliberately delayed to look natural, so check back later rather than waiting on the screen. The <b>Sent Emails</b> and <b>Logs</b> tabs show more detail, and each helper's own page shows the other side of the conversation.</div></div>
+</section>
+
+<!-- 10 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 10</span><h2>Run an inbox placement test</h2></div>
+  <p>This answers the big question: <b>where does my mail actually land?</b> It sends a test email to a set of "judge" mailboxes and reports whether it reached the inbox or spam. It needs at least three working judges.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Add judge mailboxes <span class="tag opt">one-time, slightly technical</span></h3>
+    <p>Judges are added with a short command rather than a web page. If this part is uncomfortable, ask whoever set up the app to run it for you, giving them three spare mailbox addresses and their app passwords. (The command uses a private key from the project's settings; it should never be shared publicly.)</p>
+    <div class="expect"><span class="lbl">What to expect</span>Each judge is checked to confirm it can be logged in to. Any judge that can't log in is set aside automatically and not used.</div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Run the test</h3>
+    <p>Open your mailbox page, go to the <b>Placement</b> tab, and click <b>Run Placement Test</b>.</p>
+    <div class="expect"><span class="lbl">What to expect</span>The test starts as "queued", becomes "running", and finishes in a few minutes. The result shows the share of judges where your email reached the <b>Primary</b> inbox, the <b>Promotions</b> tab, or <b>Spam</b>, plus any that didn't arrive. For a new address, a high spam share is normal — it should shrink as warming continues.</div>
+    <div class="ifnot"><span class="lbl">If it says "too few seed mailboxes"</span>You have fewer than three working judges. Add more, or fix the one that failed its check, then run the test again. (The admin test account can run unlimited tests.)</div></div>
+</section>
+
+<!-- 11 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 11</span><h2>Score, graduation &amp; advice</h2></div>
+
+  <div class="step"><h3><span class="step-n">1</span>Read the score</h3>
+    <p>The score (0–100) is worked out once a day from three things: your DNS health, your blocklist status, and your placement results. The arrow beside it shows whether it's rising, falling or steady. It only counts days where real measurements were available, so the first day or two can look low — that's expected.</p></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Understand "graduation"</h3>
+    <p>A mailbox <b>graduates</b> when all of these are true: it has been warming long enough (about 3 weeks on the fast speed, 5 weeks on normal, 8 weeks on slow); it has seven days of measured scores averaging 80 or more; and a recent placement test shows spam at 5% or less. When it's otherwise ready and has no recent test, the app runs one free test by itself.</p>
+    <p>On graduation, the mailbox is marked <b>graduated</b>, it leaves the pool, and you get an email plus a short readiness report with a recommended daily sending amount. You can't skip the waiting time — building real trust is the whole point.</p></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Ask for an AI explanation <span class="tag opt">needs a setup key</span></h3>
+    <p>The mailbox's diagnostics page can ask an AI to explain, in plain words, what's holding the mailbox back and how to fix it, in order. This needs an AI key to be added to the app's settings (it's a placeholder on a fresh install). Without it, you still get a clear list of detected problems and fix steps — just not the AI summary.</p></div>
+</section>
+
+<!-- 12 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 12</span><h2>Everyday use: pause, resume, remove</h2></div>
+
+  <div class="step"><h3><span class="step-n">1</span>Pause and resume</h3>
+    <p>On a mailbox's page, <b>Pause</b> stops all new emails and clears any that were waiting. <b>Resume</b> starts it again. Pausing is always safe, and warm-up progress is kept.</p>
+    <p>Sometimes the app pauses a mailbox for you, and the page says why:</p>
+    <div class="tw"><table>
+      <thead><tr><th>Reason shown</th><th>What it means</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>Bounce rate</td><td>Too many emails to partners were rejected.</td><td>Check your helper addresses are real and active, then resume.</td></tr>
+        <tr><td>Blocklist</td><td>The address appeared on a "bad sender" list.</td><td>Follow the diagnostics steps to get removed; it resumes after a clean check.</td></tr>
+        <tr><td>Access revoked</td><td>The app password was cancelled or changed.</td><td>Create a new app password and use the reconnect button.</td></tr>
+      </tbody>
+    </table></div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>The shared pool, and removing a mailbox</h3>
+    <p>On the mailbox page, <b>Pool participation</b> lets this mailbox also trade emails with other companies' mailboxes. On your own setup there are no other companies, so you'll see only the status change. To stop entirely, use the disconnect option — it erases the saved password and stops all activity. The <b>Account</b> page can export all your data or delete the account; only delete when you're finished.</p></div>
+
+  <div class="note"><span class="lbl">A note on the preview screens</span>Some pages show sample data and a dashed "Preview" banner — Analytics, Deliverability, Placement tests, Sending domains, and most Settings pages. These are design drafts, not yet connected, so don't judge the real product by them. Everything on Accounts, Warming pool, and each mailbox's own page is real and live.</div>
+</section>
+
+<!-- 13 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 13</span><h2>If something goes wrong</h2></div>
+  <div class="tw"><table>
+    <thead><tr><th>What you see</th><th>Likely reason</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td>"Wrong username or password"</td><td>Normal password used, or a typo.</td><td>Use an app password (Part 5). The username is the full email address.</td></tr>
+      <tr><td>Sending works, receiving fails</td><td>IMAP is off, or IMAP details are wrong.</td><td>Turn IMAP on in the mailbox's settings; re-check the IMAP server, port 993 and password.</td></tr>
+      <tr><td>"Connection timed out"</td><td>Wrong port, or the network blocks mail.</td><td>Use port 587 to send and 993 to receive; try a different network.</td></tr>
+      <tr><td>Stuck on "pending"</td><td>The connection check didn't finish.</td><td>Reconnect the mailbox. A failed check saves nothing.</td></tr>
+      <tr><td>Active, but nothing sent</td><td>No helper on a different domain, or it's late evening, or today's batch was already made.</td><td>Add a helper on another domain, then Pause and Resume earlier in the day.</td></tr>
+      <tr><td>Paused for "bounce rate"</td><td>Emails to a helper bounced.</td><td>Make sure every helper address is real; remove any practice ones; then resume.</td></tr>
+      <tr><td>Everything lands in spam</td><td>Normal for a brand-new address.</td><td>Keep warming; re-run a placement test after a week and compare.</td></tr>
+      <tr><td>No alert emails arrive</td><td>The app's own email sending isn't set up on this computer.</td><td>Expected on a local setup. Watch the mailbox page instead; alerts are still recorded.</td></tr>
+      <tr><td>A plain "404" page</td><td>You opened a page that was removed.</td><td>Use the left menu, or click Overview.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 14 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 14</span><h2>Plain-English word list</h2></div>
+  <div class="tw"><table><tbody>
+    <tr><th>Warm-up</th><td>Slowly raising how much a new address sends, with friendly engagement, so providers learn to trust it.</td></tr>
+    <tr><th>Inbox</th><td>The app's word for the mailbox you are warming.</td></tr>
+    <tr><th>Pool inbox</th><td>A helper mailbox that trades warm-up emails with it.</td></tr>
+    <tr><th>Seed</th><td>A judge mailbox used in a placement test.</td></tr>
+    <tr><th>WarmupHub</th><td>The folder or label the app makes so warm-up mail never mixes with your real mail.</td></tr>
+    <tr><th>Rescue</th><td>Moving an email out of spam back to the inbox — it teaches the provider the sender is wanted.</td></tr>
+    <tr><th>SPF, DKIM, DMARC</th><td>Three behind-the-scenes records that prove an email is really yours (Part 8).</td></tr>
+    <tr><th>Blocklist</th><td>A public list of bad senders; being on one gets mail blocked.</td></tr>
+    <tr><th>Bounce</th><td>An email that couldn't be delivered.</td></tr>
+    <tr><th>Placement</th><td>Where an email lands: inbox (Primary), Promotions, or Spam.</td></tr>
+    <tr><th>Graduation</th><td>The point at which a mailbox is warm enough to send real campaigns (Part 11).</td></tr>
+    <tr><th>App password</th><td>A special password for a program, created on the provider's website (Part 5).</td></tr>
+    <tr><th>IMAP / SMTP</th><td>The settings for reading (IMAP) and sending (SMTP) mail.</td></tr>
+  </tbody></table></div>
+  <div class="foot">EmailWarm — Getting Started Guide. Written for business users. Screen labels may vary slightly on your version; trust the screen and keep the intent of each step.</div>
+</section>
+
+</div>
+</body>
+</html>

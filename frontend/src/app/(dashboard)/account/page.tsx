@@ -56,11 +56,11 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Account</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Account</h1>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">Your data</h2>
-        <p className="mt-1 text-sm text-slate-600">
+      <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-stone-900">Your data</h2>
+        <p className="mt-1 text-sm text-stone-600">
           Everything we hold about your account, inboxes and warmup emails, as JSON. Saved
           passwords and tokens are never included.
         </p>
@@ -69,7 +69,7 @@ export default function AccountPage() {
             type="button"
             onClick={exportData}
             disabled={exporting}
-            className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
             {exporting ? 'Preparing…' : 'Show my data'}
           </button>
@@ -77,7 +77,7 @@ export default function AccountPage() {
             <button
               type="button"
               onClick={copyExport}
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50"
             >
               Copy
             </button>
@@ -89,21 +89,21 @@ export default function AccountPage() {
             readOnly
             value={exported}
             aria-label="Your exported data"
-            className="mt-4 h-64 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-800"
+            className="mt-4 h-64 w-full rounded-lg border border-stone-200 bg-stone-50 p-3 font-mono text-xs text-stone-800"
           />
         ) : null}
       </section>
 
       <section className="rounded-2xl border border-rose-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-rose-800">Delete account</h2>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-stone-600">
           This stops all warmup, erases your saved credentials, removes your email addresses, mail
           server details, diagnostics and sign-in, and signs you out everywhere. It cannot be
           undone. Anonymous delivery records (no addresses or subjects) are kept so other
           customers’ statistics stay correct.
         </p>
         <form onSubmit={deleteAccount} className="mt-4 space-y-3">
-          <label htmlFor="confirm-email" className="block text-sm font-medium text-slate-800">
+          <label htmlFor="confirm-email" className="block text-sm font-medium text-stone-800">
             Type your account email to confirm
           </label>
           <input
@@ -113,7 +113,7 @@ export default function AccountPage() {
             autoComplete="off"
             value={confirmEmail}
             onChange={(e) => setConfirmEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-rose-500 focus:outline-none"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-rose-500 focus:outline-none"
           />
           {deleteError ? (
             <p role="alert" className="text-sm text-rose-700">

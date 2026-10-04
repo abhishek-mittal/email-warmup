@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import { AuthShell } from '@/components/brand/AuthShell';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authClient } from '@/lib/auth';
@@ -20,7 +21,7 @@ function ResetForm() {
     return (
       <p role="alert" className="mt-4 text-sm text-rose-700">
         This reset link is no longer valid. It may have expired or already been used.{' '}
-        <Link href="/forgot-password" className="text-indigo-600 hover:underline">
+        <Link href="/forgot-password" className="text-brand-600 hover:underline">
           Request a new one
         </Link>
         .
@@ -47,7 +48,7 @@ function ResetForm() {
 
   return (
     <form onSubmit={onSubmit} className="mt-4 space-y-3">
-      <label htmlFor="new-password" className="block text-sm text-slate-600">
+      <label htmlFor="new-password" className="block text-sm text-stone-600">
         New password (at least {MIN_LENGTH} characters)
       </label>
       <input
@@ -58,7 +59,7 @@ function ResetForm() {
         autoComplete="new-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+        className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
       />
       {error ? (
         <p role="alert" className="text-sm text-rose-700">
@@ -68,11 +69,11 @@ function ResetForm() {
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
       >
         {busy ? 'Saving…' : 'Set new password'}
       </button>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-stone-500">
         Setting a new password signs you out on every device.
       </p>
     </form>
@@ -81,13 +82,11 @@ function ResetForm() {
 
 export default function Page() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
-        <h1 className="text-2xl font-semibold text-slate-900">Choose a new password</h1>
+    <AuthShell>
+        <h1 className="text-2xl font-semibold text-stone-900">Choose a new password</h1>
         <Suspense fallback={null}>
           <ResetForm />
         </Suspense>
-      </div>
-    </div>
+      </AuthShell>
   );
 }

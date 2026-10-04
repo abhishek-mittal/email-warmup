@@ -1,15 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #faf9f7;
+  --foreground: #1c1917;
   --sidebar: #ffffff;
-  --border: #e2e8f0;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --brand: #4f46e5;
+  --border: #e7e5e4;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --brand: #d94f0b;
   --brand-foreground: #ffffff;
-  --accent: #4f46e5;
+  --accent: #d94f0b;
+}
+
+/*
+ * EmailWarm brand: "ember" on warm stone neutrals. Every `brand-*` utility in
+ * the app resolves to this scale; neutrals use Tailwind's built-in `stone`.
+ * Status colors stay semantic and separate: emerald = healthy, amber = watch,
+ * rose = problem. Ember is the action color, never a status.
+ */
+@theme {
+  --color-brand-50: #fff6ef;
+  --color-brand-100: #ffe9d9;
+  --color-brand-200: #ffd0b0;
+  --color-brand-300: #ffaf7a;
+  --color-brand-400: #fb8240;
+  --color-brand-500: #f06418;
+  --color-brand-600: #d94f0b;
+  --color-brand-700: #b53d0b;
+  --color-brand-800: #923210;
+  --color-brand-900: #772c11;
+  --color-brand-950: #411306;
 }
 
 @theme inline {
@@ -45,6 +65,29 @@ textarea::placeholder {
 
 button {
   cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Small uppercase section label used across headers, stat tiles and nav groups. */
+.eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 button:disabled {

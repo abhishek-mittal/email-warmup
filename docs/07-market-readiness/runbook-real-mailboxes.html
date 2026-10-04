@@ -1,0 +1,443 @@
+<title>EmailWarm Real Mailbox Runbook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one calm reading column with a sticky progress bar; each step is a tick-box card (do this / you should see / if not). */
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --surface2:#eceff4; --ink:#171c27; --muted:#556073; --line:#d6dbe4;
+  --accent:#d94f0b; --accent-soft:#fde8dc; --accent-ink:#8f3305;
+  --ok:#0f7a55; --ok-soft:#dcf3e9; --warn:#a85f00; --warn-soft:#fbeccd; --bad:#b4233a; --bad-soft:#fbdde2; --info:#1f5fbf; --info-soft:#dfe9fa;
+  --code:#111725; --code-ink:#dbe2f0;
+  --sans:'Atkinson Hyperlegible',system-ui,-apple-system,'Segoe UI',sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f131b; --surface:#171c27; --surface2:#1f2633; --ink:#e9edf5; --muted:#9aa6ba; --line:#2b3345;
+  --accent:#ff7a3d; --accent-soft:#3a2216; --accent-ink:#ffb48f;
+  --ok:#3ccf91; --ok-soft:#10301f; --warn:#f0b04a; --warn-soft:#37290c; --bad:#ff7a8d; --bad-soft:#3a1620; --info:#7fb0ff; --info-soft:#14284a;
+  --code:#0a0d14; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f131b; --surface:#171c27; --surface2:#1f2633; --ink:#e9edf5; --muted:#9aa6ba; --line:#2b3345;
+  --accent:#ff7a3d; --accent-soft:#3a2216; --accent-ink:#ffb48f;
+  --ok:#3ccf91; --ok-soft:#10301f; --warn:#f0b04a; --warn-soft:#37290c; --bad:#ff7a8d; --bad-soft:#3a1620; --info:#7fb0ff; --info-soft:#14284a;
+  --code:#0a0d14; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.65;padding-inline:16px;padding-block:0 80px}
+.wrap{max-width:820px;margin:0 auto}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.15;margin:0 0 10px;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:clamp(22px,3.4vw,28px);line-height:1.25;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+h3{font-size:18px;margin:0 0 4px}
+p{margin:0 0 12px} ul,ol{margin:0 0 12px;padding-left:22px} li{margin-bottom:6px}
+a{color:var(--info)} code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:1px 6px;border-radius:5px}
+.bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 0;display:flex;gap:12px;align-items:center}
+.bar .track{flex:1;height:8px;background:var(--surface2);border-radius:99px;overflow:hidden}
+.bar .fill{height:100%;width:0;background:var(--ok);transition:width .25s}
+.bar span{font-size:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.bar button{font:inherit;font-size:13px;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+header.hero{padding:34px 0 18px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:block}
+.lede{font-size:19px;color:var(--muted);max-width:60ch}
+.toc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:18px 0 8px}
+.toc ol{columns:2;column-gap:28px;margin:6px 0 0;padding-left:20px;font-size:15.5px} .toc li{break-inside:avoid;margin-bottom:3px}
+.part{margin-top:44px}
+.part>header{margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+.part>header .n{font:700 13px var(--mono);color:var(--accent);letter-spacing:.06em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px}
+.step>input{width:24px;height:24px;margin-top:2px;accent-color:var(--ok);cursor:pointer}
+.step.done{border-color:var(--ok);background:linear-gradient(0deg,var(--surface),var(--surface))}
+.step.done h3{color:var(--ok)}
+.step h3{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tag{font:500 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:99px;background:var(--surface2);color:var(--muted)}
+.tag.opt{background:var(--info-soft);color:var(--info)} .tag.time{background:var(--warn-soft);color:var(--warn)}
+.say{border-left:4px solid var(--ok);background:var(--ok-soft);padding:9px 13px;border-radius:0 8px 8px 0;margin:10px 0 0}
+.say b:first-child,.if b:first-child,.tip b:first-child,.stop b:first-child{display:block;font:700 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+.say b:first-child{color:var(--ok)}
+.if{border-left:4px solid var(--warn);background:var(--warn-soft);padding:9px 13px;border-radius:0 8px 8px 0;margin:10px 0 0}
+.if b:first-child{color:var(--warn)}
+.tip{border-left:4px solid var(--info);background:var(--info-soft);padding:9px 13px;border-radius:0 8px 8px 0;margin:10px 0 0}
+.tip b:first-child{color:var(--info)}
+.stop{border:2px solid var(--bad);background:var(--bad-soft);padding:11px 15px;border-radius:10px;margin:14px 0}
+.stop b:first-child{color:var(--bad)}
+.say p:last-child,.if p:last-child,.tip p:last-child,.stop p:last-child{margin-bottom:0}
+.cmd{position:relative;margin:10px 0}
+.cmd pre{margin:0;background:var(--code);color:var(--code-ink);font:400 14px/1.6 var(--mono);padding:12px 76px 12px 14px;border-radius:9px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.cmd button{position:absolute;top:8px;right:8px;font:500 12px var(--sans);background:#2b3550;color:#dbe2f0;border:0;border-radius:6px;padding:4px 10px;cursor:pointer}
+.cmd button:hover{background:#3a4770}
+.cmd .where{font:500 12px var(--mono);color:var(--muted);margin-bottom:4px;display:block}
+table{border-collapse:collapse;width:100%;font-size:15.5px;margin:8px 0 14px}
+.tw{overflow-x:auto}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:700 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin:14px 0}
+.cast .card{margin:0}
+.cast h3{color:var(--accent-ink)}
+.cast .card p{font-size:15.5px;margin:0}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;font-size:15px}
+.flow span.b{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:6px 11px}
+.flow span.a{color:var(--accent)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 16px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:700}
+button:focus-visible,summary:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (max-width:640px){body{font-size:16.5px}.toc ol{columns:1}.step{grid-template-columns:26px minmax(0,1fr);gap:9px}.card{padding:14px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="bar"><div class="wrap" style="display:flex;gap:12px;align-items:center;width:100%">
+  <strong style="white-space:nowrap">Runbook</strong>
+  <div class="track" aria-hidden="true"><div class="fill" id="fill"></div></div>
+  <span id="count">0 of 0 steps</span>
+  <button type="button" id="reset" aria-label="Clear all ticks">Clear ticks</button>
+</div></div>
+
+<div class="wrap">
+<header class="hero">
+  <span class="eyebrow">EmailWarm · local testing guide</span>
+  <h1>Warm up your own real mailboxes, step by step</h1>
+  <p class="lede">You will connect real email addresses, watch EmailWarm trade harmless emails between them, and check that every feature works. No experience needed. Tick each box as you go; the page remembers where you stopped.</p>
+  <nav class="toc" aria-label="Contents"><strong>Parts</strong>
+    <ol start="0">
+      <li><a href="#p0">What this tool does, in plain words</a></li>
+      <li><a href="#p1">Gather what you need</a></li>
+      <li><a href="#p2">Start the app</a></li>
+      <li><a href="#p3">Get app passwords</a></li>
+      <li><a href="#p4">Add your helper mailboxes</a></li>
+      <li><a href="#p5">Connect the mailbox to warm</a></li>
+      <li><a href="#p6">Check its health</a></li>
+      <li><a href="#p7">Make it send, and watch</a></li>
+      <li><a href="#p8">Run a placement test</a></li>
+      <li><a href="#p9">Score, graduation, diagnostics</a></li>
+      <li><a href="#p10">Pause, resume, disconnect</a></li>
+      <li><a href="#p11">Is it working? Final checklist</a></li>
+      <li><a href="#p12">When something goes wrong</a></li>
+      <li><a href="#p13">Words you will meet</a></li>
+    </ol>
+  </nav>
+</header>
+
+<section class="part" id="p0">
+  <header><span class="n">PART 0</span><h2>What this tool does, in plain words</h2></header>
+  <p>A brand-new email address is a stranger to the big mail companies (Gmail, Outlook, Yahoo). If it suddenly sends a lot of mail, they get suspicious and put the mail in spam.</p>
+  <p>EmailWarm builds trust slowly. Your new address sends a few harmless emails a day to friendly helper addresses. The helpers open them, reply, and rescue them if they land in spam. Every day it sends a few more. After a few weeks the mail companies treat your address as normal and trustworthy.</p>
+  <div class="flow" aria-label="How one email travels"><span class="b">Mailbox to warm</span><span class="a">sends →</span><span class="b">Helper mailbox</span><span class="a">opens, replies, files in WarmupHub →</span><span class="b">Mailbox to warm</span><span class="a">score goes up</span></div>
+  <h3>The four kinds of mailbox</h3>
+  <div class="cast">
+    <div class="card"><h3>Mailbox to warm</h3><p>The address you want to build a reputation for. EmailWarm calls it an <b>inbox</b>. You connect it on the <b>Accounts</b> page.</p></div>
+    <div class="card"><h3>Helper mailbox</h3><p>A friend address that trades emails with the one being warmed. EmailWarm calls it a <b>pool inbox</b>. It is never warmed itself. You add it on the <b>Warming Pool</b> page.</p></div>
+    <div class="card"><h3>Judge mailbox</h3><p>Used only in a placement test. A test email goes to several judges, and they report whether it landed in the inbox or in spam. EmailWarm calls them <b>seeds</b>.</p></div>
+    <div class="card"><h3>Other customers</h3><p>The shared pool. On your own computer there are no other customers, so your helpers do all the work.</p></div>
+  </div>
+  <div class="stop"><b>Read before you connect anything</b><p>Warming sends <em>real</em> emails from the address you connect, and nobody can recall them. Start with an address you can afford to lose, not your main business mailbox. Helper addresses must be on a <em>different domain</em> from the mailbox being warmed (for example, warm <code>you@yourcompany.com</code> and use helpers at <code>@gmail.com</code> and <code>@outlook.com</code>). The tool refuses to pair two mailboxes on the same domain.</p></div>
+</section>
+
+<section class="part" id="p1">
+  <header><span class="n">PART 1</span><h2>Gather what you need</h2><p>About 20 minutes. Tick each item when you have it.</p></header>
+  <div class="card step"><input type="checkbox" id="s1" aria-labelledby="t-s1"><div><h3 id="t-s1">One mailbox to warm</h3>
+    <p>A real address you can log in to. Ideally a new or low-stakes one. Write down its domain (the part after the @).</p></div></div>
+  <div class="card step"><input type="checkbox" id="s2" aria-labelledby="t-s2"><div><h3 id="t-s2">Two or three helper mailboxes</h3>
+    <p>Real addresses on <b>different domains</b> from the mailbox to warm. A mix works best: one Gmail, one Outlook or Yahoo, one more if you have it. You will need to log in to each one to read what arrives.</p></div></div>
+  <div class="card step"><input type="checkbox" id="s3" aria-labelledby="t-s3"><div><h3 id="t-s3">Three more mailboxes as judges <span class="tag opt">only for Part 8</span></h3>
+    <p>Placement tests need at least 3 judge mailboxes. Gmail, Outlook and Yahoo addresses work. Keep them separate from your helpers if you can. You can skip them for now and add them when you reach Part 8.</p></div></div>
+  <div class="card step"><input type="checkbox" id="s4" aria-labelledby="t-s4"><div><h3 id="t-s4">A computer with Docker, Node and pnpm</h3>
+    <p>This is the project you already run. If <code>docker --version</code> and <code>pnpm --version</code> both print a number in a terminal, you are ready.</p></div></div>
+  <div class="card step"><input type="checkbox" id="s5" aria-labelledby="t-s5"><div><h3 id="t-s5">Two-step login switched on for every mailbox <span class="tag">needed for app passwords</span></h3>
+    <p>Gmail and Yahoo only give out app passwords (Part 3) when two-step verification is on. Turn it on in each account's security settings now.</p></div></div>
+</section>
+
+<section class="part" id="p2">
+  <header><span class="n">PART 2</span><h2>Start the app</h2><p>You need three things running: the database, the backend (the engine) and the frontend (the website).</p></header>
+
+  <div class="card step"><input type="checkbox" id="s6" aria-labelledby="t-s6"><div><h3 id="t-s6">Start the database and Redis</h3>
+    <p>Open a terminal and run:</p>
+    <div class="cmd"><span class="where">Terminal 1, in the email-warmup folder</span><pre>docker compose up -d</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>Two lines ending in "Running" or "Started". Done.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s7" aria-labelledby="t-s7"><div><h3 id="t-s7">Start the backend</h3>
+    <div class="cmd"><span class="where">Terminal 2</span><pre>cd backend
+pnpm install
+pnpm db:migrate
+pnpm start:dev</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>After about a minute, a line saying the app is listening on port 4611. Leave this terminal open. It is where the warm-up emails are logged.</p></div>
+    <p>To double-check, open a third terminal and run:</p>
+    <div class="cmd"><pre>curl localhost:4611/health</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>A short reply that contains "ok".</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s8" aria-labelledby="t-s8"><div><h3 id="t-s8">Start the website</h3>
+    <div class="cmd"><span class="where">Terminal 3</span><pre>cd frontend
+pnpm install
+pnpm dev</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>"Ready" and a local address. Open <a href="http://localhost:3000/sign-in">localhost:3000/sign-in</a> in your browser.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s9" aria-labelledby="t-s9"><div><h3 id="t-s9">Remove the demo data</h3>
+    <p>Your database may hold pretend mailboxes made for screen testing. They would become your warm-up partners, and emails sent to them bounce, which makes the tool pause your real mailbox. Remove them first:</p>
+    <div class="cmd"><span class="where">Terminal 3 or any terminal, in the backend folder</span><pre>cd backend
+pnpm db:seed:dev --reset</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>"Demo data removed." Your real mailboxes are never touched by this command. It only removes pretend addresses ending in <code>.test</code>.</p></div>
+    <div class="tip"><b>Later</b><p>When you want the pretend data back for screen design, run <code>pnpm db:seed:dev</code> again. Remove it again before the next real test.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s10" aria-labelledby="t-s10"><div><h3 id="t-s10">Sign in</h3>
+    <p>Use the test account that has every feature switched on:</p>
+    <table><tbody><tr><th>Email</th><td><code>admin@emailwarm.dev</code></td></tr><tr><th>Password</th><td><code>EmailWarm-Phase1-Test!</code></td></tr></tbody></table>
+    <div class="say"><b>You should see</b><p>The Overview page with an empty list of mailboxes.</p></div></div></div>
+</section>
+
+<section class="part" id="p3">
+  <header><span class="n">PART 3</span><h2>Get app passwords</h2>
+    <p>An <b>app password</b> is a special password that lets one program use your mailbox without your real password. Use one for every mailbox you add. Your normal password will not work. You do this once per mailbox, in the mail company's own website.</p></header>
+
+  <div class="card step"><input type="checkbox" id="s11" aria-labelledby="t-s11"><div><h3 id="t-s11">Gmail</h3>
+    <ol><li>Go to <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a> and sign in.</li><li>Type a name such as "EmailWarm" and press <b>Create</b>.</li><li>Copy the 16-letter code Google shows. You will not see it again. Spaces do not matter.</li></ol>
+    <div class="if"><b>If the page says it is not available</b><p>Two-step verification is off for that account, or a company admin has turned app passwords off (common on Google Workspace). Turn on two-step verification first, or use a personal Gmail instead.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s12" aria-labelledby="t-s12"><div><h3 id="t-s12">Yahoo</h3>
+    <ol><li>Open Yahoo Account Security and go to <b>Generate app password</b>.</li><li>Pick "Other app", name it "EmailWarm", and copy the code.</li></ol></div></div>
+
+  <div class="card step"><input type="checkbox" id="s13" aria-labelledby="t-s13"><div><h3 id="t-s13">Outlook or Microsoft 365 <span class="tag opt">can be fussy</span></h3>
+    <p>In your Microsoft account's security settings, under two-step verification, look for <b>App passwords</b> and create one. Many Microsoft work and school accounts have this turned off, and then no password will work for SMTP. If Outlook refuses, use Gmail, Yahoo or Zoho for this test instead, and add Outlook later once you have set up the Google and Microsoft sign-in (see "Advanced" at the end of Part 5).</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s14" aria-labelledby="t-s14"><div><h3 id="t-s14">Your own domain (for example you@yourcompany.com)</h3>
+    <p>Ask whoever hosts your mail (Zoho, GoDaddy, Namecheap, cPanel, and so on) for four things: the <b>SMTP server and port</b>, the <b>IMAP server and port</b>, and the <b>username</b> (usually the full email address) and password. Port 587 is the usual SMTP port and 993 the usual IMAP port.</p></div></div>
+
+  <h3>Settings cheat sheet</h3>
+  <div class="tw"><table><thead><tr><th>Provider</th><th>SMTP server</th><th>SMTP port</th><th>IMAP server</th><th>IMAP port</th></tr></thead><tbody>
+    <tr><td>Gmail</td><td><code>smtp.gmail.com</code></td><td>587</td><td><code>imap.gmail.com</code></td><td>993</td></tr>
+    <tr><td>Outlook</td><td><code>smtp-mail.outlook.com</code></td><td>587</td><td><code>outlook.office365.com</code></td><td>993</td></tr>
+    <tr><td>Yahoo</td><td><code>smtp.mail.yahoo.com</code></td><td>587</td><td><code>imap.mail.yahoo.com</code></td><td>993</td></tr>
+    <tr><td>Zoho</td><td><code>smtp.zoho.com</code></td><td>587</td><td><code>imap.zoho.com</code></td><td>993</td></tr>
+  </tbody></table></div>
+  <div class="tip"><b>Good to know</b><p>The connect form has quick-fill buttons for Gmail, Outlook, Yahoo and Zoho that type these in for you.</p></div>
+</section>
+
+<section class="part" id="p4">
+  <header><span class="n">PART 4</span><h2>Add your helper mailboxes</h2><p>Do this <em>before</em> connecting the mailbox to warm, so it has partners from its very first send.</p></header>
+
+  <div class="card step"><input type="checkbox" id="s15" aria-labelledby="t-s15"><div><h3 id="t-s15">Open the Warming Pool page</h3>
+    <p>In the left menu click <b>Warming pool</b>. It says "No pool inboxes yet." At the top right are two buttons: <b>Add via wizard</b> and <b>Add via CSV</b>.</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s16" aria-labelledby="t-s16"><div><h3 id="t-s16">Add the first helper with the wizard</h3>
+    <ol><li>Click <b>Add via wizard</b>.</li><li>Set the provider to <b>Custom</b>, even for a Gmail or Outlook address. Do not pick Gmail or Outlook here: those ask for a Client ID, Client secret and Refresh token that you do not have. Then press a provider quick-fill button to type in the servers and ports for you.</li><li>Fill in: <b>Email address</b>, <b>SMTP host / port / user / password</b>, and <b>IMAP host / port / user / password</b>. The user is the full email address. The password is the app password from Part 3, in both places.</li><li>Press add. Use <b>Add another</b> to add the next helper in the same sitting.</li></ol>
+    <div class="say"><b>You should see</b><p>The helper appears in a grid. Its status starts as <b>pending</b> and turns <b>active</b> within a minute, after the tool checks its settings.</p></div>
+    <div class="if"><b>If it says "Couldn't add this entry"</b><p>Read the reason under it. The usual cause is a typo in the app password or a wrong port. A "duplicate email" message means that address is already in the pool.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s17" aria-labelledby="t-s17"><div><h3 id="t-s17">Add two or three helpers in total</h3>
+    <p>More helpers means more variety, and each helper only handles a limited number of partners a day. Make sure at least one helper uses a different provider from the others.</p>
+    <div class="say"><b>You should see</b><p>All helpers showing <b>active</b> and a health score. Click one to open its page. It has tabs for Activity, Pairings and Logs, which stay empty until emails flow.</p></div></div></div>
+
+  <div class="tip"><b>Prefer a spreadsheet?</b><p>"Add via CSV" takes a file with a header row and these columns in any order: email, provider, and the SMTP and IMAP fields. Use it when you have many helpers. For two or three, the wizard is easier.</p></div>
+</section>
+
+<section class="part" id="p5">
+  <header><span class="n">PART 5</span><h2>Connect the mailbox to warm</h2></header>
+
+  <div class="card step"><input type="checkbox" id="s18" aria-labelledby="t-s18"><div><h3 id="t-s18">Open the connect page</h3>
+    <p>Click <b>Accounts</b> in the left menu, then the connect button, or go straight to <a href="http://localhost:3000/inboxes/connect">localhost:3000/inboxes/connect</a>. You will see three cards: <b>Connect with Google</b>, <b>Connect with Microsoft</b>, and <b>Custom SMTP / IMAP</b>.</p>
+    <div class="if"><b>Use the third card</b><p>The Google and Microsoft buttons need sign-in keys that are not set up on your computer yet (they are placeholders). The Custom card works with any mailbox, including Gmail and Outlook, using the app password.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s19" aria-labelledby="t-s19"><div><h3 id="t-s19">Fill in the Custom SMTP / IMAP form</h3>
+    <ol><li>Press the quick-fill button for your provider (Gmail, Outlook, Yahoo or Zoho). The servers and ports fill in.</li><li>Type the <b>Email address</b>, <b>SMTP user</b> (the full address) and <b>SMTP password</b> (the app password).</li><li>Make sure the <b>IMAP</b> box is ticked (the quick-fill button ticks it for you) and fill the IMAP user and password the same way. <b>This matters:</b> without IMAP the tool can send but cannot receive, open, reply or file mail, so the mailbox cannot join the pool.</li><li>Leave <b>DKIM selector</b> empty for now.</li><li>The box <b>Join the shared warmup pool</b> is for swapping mail with other customers. With no other customers on your computer, leave it off for this first run. You will try it in Part 10.</li></ol></div></div>
+
+  <div class="card step"><input type="checkbox" id="s20" aria-labelledby="t-s20"><div><h3 id="t-s20">Press Connect and wait for the test</h3>
+    <p>The tool now tries to log in to the sending server, then to the receiving server, then creates a folder called <b>WarmupHub</b> in your mailbox. This takes 5 to 30 seconds.</p>
+    <div class="say"><b>You should see</b><p>A green result showing the SMTP and IMAP checks with the time each took, then the mailbox on the Accounts page with status <b>active</b>. Open the real mailbox in another tab: a new folder (a label in Gmail) called <b>WarmupHub</b> is there. That proves the tool can log in and file mail.</p></div>
+    <div class="if"><b>If the test fails</b><p>The message tells you which step failed. "Wrong username or password" means the app password. A timeout usually means a wrong port or a network that blocks mail ports. Nothing is saved when the test fails, so just fix the field and try again. More fixes are in Part 12.</p></div></div></div>
+
+  <details><summary>Advanced, optional: make the Google and Microsoft buttons work</summary>
+    <p>Only needed if you want one-click sign-in for mailboxes. In the Google Cloud or Azure console, create an OAuth app and add this redirect address: <code>http://localhost:3000/api/mailbox-oauth/callback/gmail</code> (use <code>/outlook</code> for Microsoft). Put the client ID and secret into <code>backend/.env</code> (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET) and into <code>frontend/.env.local</code>, then restart both. Google may mark an unreviewed app as "testing"; add your own address as a test user.</p>
+  </details>
+</section>
+
+<section class="part" id="p6">
+  <header><span class="n">PART 6</span><h2>Check its health</h2><p>Before sending, make sure the sending address is set up properly in DNS. These records are what prove an email really comes from you.</p></header>
+
+  <div class="card step"><input type="checkbox" id="s21" aria-labelledby="t-s21"><div><h3 id="t-s21">Open the mailbox page</h3>
+    <p>On <b>Accounts</b>, click your mailbox. At the top you see its status, score and trend. Below are five tabs: <b>Activity Feed</b>, <b>DNS &amp; Blacklist</b>, <b>Sent Emails</b>, <b>Placement</b>, and <b>Logs</b>.</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s22" aria-labelledby="t-s22"><div><h3 id="t-s22">Run the DNS check</h3>
+    <p>Open the <b>DNS &amp; Blacklist</b> tab and press <b>Run DNS Check Now</b>. It shows five rows:</p>
+    <div class="tw"><table><thead><tr><th>Row</th><th>What it means in plain words</th></tr></thead><tbody>
+      <tr><td>SPF</td><td>A list saying which servers may send mail for your domain.</td></tr>
+      <tr><td>DKIM</td><td>A secret signature that proves the email was not changed on the way.</td></tr>
+      <tr><td>DMARC</td><td>Your instructions to receivers about what to do with mail that fails the other two.</td></tr>
+      <tr><td>MX</td><td>Where mail for your domain is delivered.</td></tr>
+      <tr><td>rDNS</td><td>Your sending address looks up back to your domain. Rarely blocks mail but helps.</td></tr>
+    </tbody></table></div>
+    <div class="say"><b>You should see</b><p>Green ticks for SPF, DKIM and MX at least. Gmail, Outlook and Yahoo addresses are set up by the provider, so they usually pass. A row marked "unknown" means the tool could not check, which is different from failing.</p></div>
+    <div class="if"><b>If a row is red on your own domain</b><p>Open the diagnostics page for the fix steps in plain words, then add the record where you manage your domain's DNS (your domain registrar or host) and press the check button again. DNS changes can take up to an hour.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s23" aria-labelledby="t-s23"><div><h3 id="t-s23">Run the blocklist check</h3>
+    <p>On the same tab press <b>Run Blacklist Check Now</b>. This asks several public "bad sender" lists whether your address or domain is on them.</p>
+    <div class="say"><b>You should see</b><p>"Clean". If one list is listed, warm-up pauses on its own and you will see why on the mailbox page.</p></div></div></div>
+</section>
+
+<section class="part" id="p7">
+  <header><span class="n">PART 7</span><h2>Make it send, and watch</h2></header>
+
+  <div class="stop"><b>The most common surprise: nothing sends right away</b>
+    <p>EmailWarm plans each day's emails once, at <b>05:00 UTC</b> (10:30 in the morning in India). It then spreads them across the window from <b>08:00 to 18:00 UTC</b> (1:30 pm to 11:30 pm India time), with random delays and at least 8 minutes between emails. The first day sends only 3 emails on the Medium speed (2 on Slow, 5 on Fast).</p>
+    <p>If you connect during the window, you can start now with the Pause then Resume trick in the next step. If you connect after 18:00 UTC, no slot is left today and the first emails go out tomorrow. That is normal.</p></div>
+
+  <div class="card step"><input type="checkbox" id="s24" aria-labelledby="t-s24"><div><h3 id="t-s24">Start today's sends now</h3>
+    <ol><li>On the mailbox page, press <b>Pause</b>. The status becomes paused.</li><li>Press <b>Resume</b>. Its hint says "schedule today's sends immediately".</li></ol>
+    <div class="say"><b>You should see</b><p>Status back to <b>active</b>. In the backend terminal (Terminal 2) lines appear about scheduling the day. On the <b>Activity Feed</b> tab, upcoming sends appear and then turn into "sent" events over the next minutes and hours.</p></div>
+    <div class="if"><b>If nothing is scheduled</b><p>Check three things: the mailbox is <b>active</b>; you have at least one active helper on a <b>different domain</b> (Part 4); and the current time is before 18:00 UTC. With no partner the tool sends nothing, by design.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s25" aria-labelledby="t-s25"><div><h3 id="t-s25">Follow one email through its life</h3>
+    <p>Keep the mailbox page open on <b>Activity Feed</b>, and log in to one helper mailbox in another tab. Over a few minutes to a few hours you will see these events:</p>
+    <div class="tw"><table><thead><tr><th>Event</th><th>What happened</th><th>Where to see it</th></tr></thead><tbody>
+      <tr><td>Sent</td><td>The tool delivered an email to a helper.</td><td>Activity Feed; Sent Emails tab; the helper's inbox or spam folder</td></tr>
+      <tr><td>Filed</td><td>The helper moved it into its WarmupHub folder so it never clutters a real inbox.</td><td>The helper's WarmupHub folder</td></tr>
+      <tr><td>Rescued</td><td>The email landed in spam and the helper moved it out. A good sign that the tool is working.</td><td>Activity Feed</td></tr>
+      <tr><td>Opened / Starred</td><td>The helper read it, sometimes starring it.</td><td>Activity Feed</td></tr>
+      <tr><td>Replied</td><td>The helper wrote back. The reply arrives in your warmed mailbox's WarmupHub folder.</td><td>Activity Feed; your mailbox's WarmupHub folder</td></tr>
+      <tr><td>Spam landed</td><td>The email went to spam before rescue.</td><td>Activity Feed (red)</td></tr>
+    </tbody></table></div>
+    <div class="say"><b>You should see</b><p>Within a day: several "sent", most "filed", some "opened", a few "replied". Also open the <b>Logs</b> tab for the technical story, and the helper's own page on the Warming Pool page (Activity, Pairings and Logs tabs) for the other side.</p></div>
+    <div class="tip"><b>Patience</b><p>Opens and replies are deliberately delayed to look human, so they can arrive minutes or hours after the send. Check back later instead of pressing buttons.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s26" aria-labelledby="t-s26"><div><h3 id="t-s26">Look at the live pool status</h3>
+    <p>Open the <b>Warming pool</b> page and click a helper. The live status panel updates by itself every few seconds and shows what the helper is doing right now. If it ever shows a short error, it keeps trying and recovers.</p></div></div>
+</section>
+
+<section class="part" id="p8">
+  <header><span class="n">PART 8</span><h2>Run a placement test</h2><p>This answers the question that matters most: where does my mail actually land? It needs at least 3 working judge mailboxes.</p></header>
+
+  <div class="card step"><input type="checkbox" id="s27" aria-labelledby="t-s27"><div><h3 id="t-s27">Add your judge mailboxes</h3>
+    <p>Judges are added by an operator command, not on a web page. First find your internal secret: open <code>backend/.env</code> and copy the value after <code>INTERNAL_SECRET=</code>. Treat it like a password and do not paste it anywhere public. Then run this once per judge, filling in the capitals:</p>
+    <div class="cmd"><span class="where">Any terminal</span><pre>curl -X POST localhost:4611/internal/seeds \
+  -H "x-internal-secret: YOUR_INTERNAL_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"email":"JUDGE@gmail.com","provider":"gmail","imapHost":"imap.gmail.com","imapPort":993,"imapPass":"APP_PASSWORD"}'</pre><button type="button">Copy</button></div>
+    <p>For Outlook use <code>"provider":"outlook"</code> and <code>outlook.office365.com</code>. For Yahoo use <code>"provider":"yahoo"</code> and <code>imap.mail.yahoo.com</code>.</p>
+    <p>Then ask the tool to check that every judge can log in:</p>
+    <div class="cmd"><pre>curl -X POST localhost:4611/internal/seeds/check \
+  -H "x-internal-secret: YOUR_INTERNAL_SECRET"</pre><button type="button">Copy</button></div>
+    <div class="say"><b>You should see</b><p>Each judge reported as healthy. A judge that cannot log in is set aside automatically and not counted.</p></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s28" aria-labelledby="t-s28"><div><h3 id="t-s28">Run the test</h3>
+    <ol><li>Open your mailbox page and the <b>Placement</b> tab.</li><li>Press <b>Run Placement Test</b>.</li></ol>
+    <div class="say"><b>You should see</b><p>A test that starts as queued, then running, and finishes in a few minutes. The result shows the share of judges where the email landed in <b>Primary</b>, <b>Promotions</b> and <b>Spam</b>, and how many were <b>missing</b>. For a new address a high spam share is normal. It should shrink as warming goes on.</p></div>
+    <div class="tip"><b>How many tests can I run?</b><p>The admin test account has unlimited tests. Other plans have a monthly limit: trial and Starter one, Growth five. If a test cannot start because too few judges are healthy, you are told straight away and no test is counted.</p></div>
+    <div class="if"><b>If it says "too few seed mailboxes"</b><p>You have fewer than 3 healthy judges. Add more or fix the one that failed its check, then run the test again.</p></div></div></div>
+</section>
+
+<section class="part" id="p9">
+  <header><span class="n">PART 9</span><h2>Score, graduation, diagnostics</h2></header>
+
+  <div class="card step"><input type="checkbox" id="s29" aria-labelledby="t-s29"><div><h3 id="t-s29">Read the score</h3>
+    <p>The score (0 to 100) is recalculated daily from three things: your DNS health, your blocklist status and your placement results. The arrow beside it shows whether it is going up, down or staying level. A score only counts on days when real measurements were available, so do not worry if the first couple of days look low.</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s30" aria-labelledby="t-s30"><div><h3 id="t-s30">Understand graduation</h3>
+    <p>A mailbox graduates when <b>all</b> of these are true: it has been warming long enough (Fast 21 days, Medium 35 days, Slow 56 days); it has <b>7 days of measured scores</b> averaging 80 or more; and a placement test from the last 14 days shows spam at 5% or less. If everything else is ready and there is no recent test, the tool starts one free test by itself.</p>
+    <p>On graduation the mailbox's status becomes <b>graduated</b>, it leaves the pool, you get an email and a readiness report with the recommended daily sending volume. You cannot skip the waiting days. That is the whole point.</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s31" aria-labelledby="t-s31"><div><h3 id="t-s31">Ask for an AI explanation <span class="tag opt">needs a key</span></h3>
+    <p>Open the diagnostics page for the mailbox (the diagnostics link on its page) and press the request button. The tool collects the evidence and asks Claude to explain the likely causes and the fixes in order.</p>
+    <p>This needs a real <code>ANTHROPIC_API_KEY</code> in <code>backend/.env</code> (it is a placeholder now) and the Growth plan or above. The admin test account qualifies. Without a key you still get the plain list of detected problems with fix steps, just not the AI summary.</p></div></div>
+</section>
+
+<section class="part" id="p10">
+  <header><span class="n">PART 10</span><h2>Pause, resume, disconnect, join the shared pool</h2></header>
+
+  <div class="card step"><input type="checkbox" id="s32" aria-labelledby="t-s32"><div><h3 id="t-s32">Try Pause and Resume</h3>
+    <p>On the mailbox page, <b>Pause</b> stops all new sends and clears the waiting ones. <b>Resume</b> starts again. Pausing is always safe, and warm-up progress is kept.</p>
+    <p>Some pauses are done by the tool itself, and the page tells you why:</p>
+    <div class="tw"><table><thead><tr><th>Reason shown</th><th>What it means</th><th>What to do</th></tr></thead><tbody>
+      <tr><td>Bounce rate</td><td>Too many emails to this mailbox's partners were rejected.</td><td>Check the helper addresses are real, then resume once the hold is lifted.</td></tr>
+      <tr><td>Blocklist</td><td>The address appeared on a "bad sender" list.</td><td>Follow the diagnostics steps to get delisted. It resumes after a clean check.</td></tr>
+      <tr><td>Access revoked or expired</td><td>The app password was cancelled or changed.</td><td>Make a new app password and use the reconnect button.</td></tr>
+      <tr><td>Plan change</td><td>The plan no longer includes warm-up.</td><td>Change plan on the Plan &amp; credits page.</td></tr>
+    </tbody></table></div></div></div>
+
+  <div class="card step"><input type="checkbox" id="s33" aria-labelledby="t-s33"><div><h3 id="t-s33">Try joining and leaving the shared pool</h3>
+    <p>On the mailbox page find <b>Pool participation</b>. Joining means this mailbox trades emails with other customers' mailboxes too. Leaving takes it out of pairing straight away, but emails already delivered cannot be taken back. On your own computer there are no other customers, so you will only see the status change and the pool membership record, not extra traffic.</p></div></div>
+
+  <div class="card step"><input type="checkbox" id="s34" aria-labelledby="t-s34"><div><h3 id="t-s34">Check the other pages</h3>
+    <ul><li><b>Plan &amp; credits</b>: your plan and the demo credits. Billing is in test mode, so no real money moves.</li><li><b>Account</b>: download all your data, or delete your account. Deleting disconnects every mailbox and erases the saved passwords. Only do this when you are finished testing.</li></ul></div></div>
+
+  <div class="card step"><input type="checkbox" id="s35" aria-labelledby="t-s35"><div><h3 id="t-s35">Know which screens are previews</h3>
+    <p>Some pages show <b>sample data</b> and a dashed "Preview" banner: Analytics, Deliverability, Placement tests, Sending domains, Templates, API keys, Audit log, Onboarding, and most Settings pages. They are design drafts and are not connected yet, so do not judge the real product by them. Everything on the Accounts, Warming pool, Plan &amp; credits and Account pages, and everything on a mailbox's own page, is real. The page called <b>Feature review</b> lists them all.</p></div></div>
+</section>
+
+<section class="part" id="p11">
+  <header><span class="n">PART 11</span><h2>Is it working? The final checklist</h2><p>If every row is true, the whole chain works: login, sending, receiving, filing, replying, scoring and testing.</p></header>
+  <div class="tw"><table><thead><tr><th>Check</th><th>Where to look</th><th>Good looks like</th></tr></thead><tbody>
+    <tr><td><input type="checkbox" id="f1" aria-label="done"> The tool can log in</td><td>Real mailbox</td><td>A WarmupHub folder appeared</td></tr>
+    <tr><td><input type="checkbox" id="f2" aria-label="done"> It sends</td><td>Activity Feed and Sent Emails</td><td>"Sent" events with real subjects</td></tr>
+    <tr><td><input type="checkbox" id="f3" aria-label="done"> Mail arrives</td><td>Helper mailbox (inbox or spam)</td><td>A short friendly email from your warmed address</td></tr>
+    <tr><td><input type="checkbox" id="f4" aria-label="done"> It is filed away</td><td>Helper's WarmupHub folder</td><td>The email moved there by itself</td></tr>
+    <tr><td><input type="checkbox" id="f5" aria-label="done"> It engages</td><td>Activity Feed</td><td>Opened and replied events</td></tr>
+    <tr><td><input type="checkbox" id="f6" aria-label="done"> A reply comes back</td><td>Your mailbox's WarmupHub folder</td><td>A reply that matches a sent email</td></tr>
+    <tr><td><input type="checkbox" id="f7" aria-label="done"> Same-domain pairs never happen</td><td>Pairings tab of a helper</td><td>No partner shares the warmed mailbox's domain</td></tr>
+    <tr><td><input type="checkbox" id="f8" aria-label="done"> Health checks run</td><td>DNS &amp; Blacklist tab</td><td>A fresh timestamp after pressing the buttons</td></tr>
+    <tr><td><input type="checkbox" id="f9" aria-label="done"> A score appears</td><td>Top of the mailbox page</td><td>A number and a trend arrow after the first daily run</td></tr>
+    <tr><td><input type="checkbox" id="f10" aria-label="done"> Placement test completes</td><td>Placement tab</td><td>Percentages for Primary, Promotions and Spam</td></tr>
+    <tr><td><input type="checkbox" id="f11" aria-label="done"> Pause really stops it</td><td>Activity Feed after pressing Pause</td><td>No new sends; waiting ones cancelled</td></tr>
+  </tbody></table></div>
+  <div class="tip"><b>Daily routine once it works (2 minutes)</b><p>Open Accounts, look for any status other than active, open the mailbox, glance at the score arrow and the newest events. That is all. If something needs you, the tool pauses the mailbox and says why.</p></div>
+</section>
+
+<section class="part" id="p12">
+  <header><span class="n">PART 12</span><h2>When something goes wrong</h2></header>
+  <div class="tw"><table><thead><tr><th>What you see</th><th>Likely reason</th><th>Fix</th></tr></thead><tbody>
+    <tr><td>"Wrong username or password"</td><td>You used the normal password, or a typo.</td><td>Use an app password (Part 3). The username is the full email address.</td></tr>
+    <tr><td>Sending works but receiving fails</td><td>IMAP is switched off in the mailbox, or the IMAP details are wrong.</td><td>In Gmail settings turn on IMAP access. Re-check the IMAP server, port 993 and password.</td></tr>
+    <tr><td>Connection timed out</td><td>Wrong port, or the network blocks mail ports.</td><td>Try port 587 for sending and 993 for receiving; try another network.</td></tr>
+    <tr><td>Stuck on <b>pending</b></td><td>The connection test did not finish or failed.</td><td>Reconnect the mailbox. A failed test saves nothing.</td></tr>
+    <tr><td>Active, but nothing sent</td><td>No helper on a different domain, or past 18:00 UTC, or the day's plan was already made.</td><td>Add a helper on another domain, then Pause and Resume before 18:00 UTC; otherwise wait for tomorrow.</td></tr>
+    <tr><td>Sends marked failed</td><td>The server refused the login or the recipient.</td><td>Open the Logs tab for the exact server reply, and check the app password.</td></tr>
+    <tr><td>Mailbox paused by "bounce rate"</td><td>Messages to some helper bounced.</td><td>Make sure each helper address is real and active, remove any pretend ones, then resume.</td></tr>
+    <tr><td>Everything lands in spam</td><td>Normal for a brand-new address.</td><td>Keep warming. Check the DNS tab. Run a placement test after a week and compare.</td></tr>
+    <tr><td>Placement test will not start</td><td>Fewer than 3 healthy judges, or the monthly limit is used.</td><td>Add or fix judges (Part 8), or use the admin account.</td></tr>
+    <tr><td>No alert emails arrive</td><td>The sender settings for the tool's own emails are placeholders on your computer.</td><td>This is expected locally. The alerts are still recorded; watch the backend terminal and the mailbox page instead.</td></tr>
+    <tr><td>The website shows a plain 404</td><td>You opened a page that was removed.</td><td>Use the left menu or press <b>Overview</b>.</td></tr>
+  </tbody></table></div>
+  <div class="tip"><b>When all else fails</b><p>The backend terminal (Terminal 2) prints what the engine is doing. Copy the last 20 lines when you ask for help. Never paste app passwords or your internal secret.</p></div>
+</section>
+
+<section class="part" id="p13">
+  <header><span class="n">PART 13</span><h2>Words you will meet</h2></header>
+  <div class="tw"><table><tbody>
+    <tr><th>Warm-up</th><td>Slowly raising how much a new address sends, with friendly engagement, so mail companies learn to trust it.</td></tr>
+    <tr><th>Ramp</th><td>The daily plan for how many emails to send. It grows day by day. Slow, Medium and Fast are different growth speeds.</td></tr>
+    <tr><th>Jitter</th><td>A random delay added to each send so the traffic does not look robotic.</td></tr>
+    <tr><th>Inbox, pool inbox, seed</th><td>Mailbox to warm, helper mailbox, judge mailbox (Part 0).</td></tr>
+    <tr><th>WarmupHub</th><td>The folder or label the tool makes so warm-up mail never mixes with your real mail.</td></tr>
+    <tr><th>Rescue</th><td>Moving an email from spam back to the inbox. It teaches the mail company that the sender is wanted.</td></tr>
+    <tr><th>SPF, DKIM, DMARC</th><td>Three DNS records that prove an email is really yours (Part 6).</td></tr>
+    <tr><th>Blocklist</th><td>A public list of bad senders. Being on one gets mail blocked.</td></tr>
+    <tr><th>Bounce</th><td>An email that could not be delivered. A hard bounce means the address does not exist.</td></tr>
+    <tr><th>Placement</th><td>Where an email lands: Primary, Promotions, Spam, or missing.</td></tr>
+    <tr><th>Graduation</th><td>The point at which a mailbox is warm enough to send real campaigns (Part 9).</td></tr>
+    <tr><th>App password</th><td>A special single-use password for a program (Part 3).</td></tr>
+  </tbody></table></div>
+  <p style="color:var(--muted);font-size:14px;margin-top:22px">This guide was written from the product's code and screens. Where a screen label may differ slightly on your machine, trust the screen and keep the intent of the step.</p>
+</section>
+</div>
+
+<script>
+(function(){
+  var KEY='ew.runbook.v1';
+  var boxes=[].slice.call(document.querySelectorAll('input[type=checkbox]'));
+  var state={};
+  try{state=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){state={}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  function paint(){
+    var done=0;
+    boxes.forEach(function(b){
+      var on=!!state[b.id];b.checked=on;if(on)done++;
+      var c=b.closest('.step');if(c)c.classList.toggle('done',on);
+    });
+    document.getElementById('fill').style.width=(boxes.length?done/boxes.length*100:0)+'%';
+    document.getElementById('count').textContent=done+' of '+boxes.length+' ticked';
+  }
+  boxes.forEach(function(b){b.addEventListener('change',function(){state[b.id]=b.checked;save();paint()})});
+  document.getElementById('reset').addEventListener('click',function(){state={};save();paint()});
+  [].forEach.call(document.querySelectorAll('.cmd button'),function(btn){
+    btn.addEventListener('click',function(){
+      var pre=btn.parentNode.querySelector('pre'),text=pre.textContent;
+      function ok(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy'},1400)}
+      function fallback(){var r=document.createRange();r.selectNodeContents(pre);var s=window.getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected';setTimeout(function(){btn.textContent='Copy'},1400)}
+      try{navigator.clipboard.writeText(text).then(ok,fallback)}catch(e){fallback()}
+    });
+  });
+  paint();
+})();
+</script>

@@ -21,20 +21,20 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Diagnostics</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">Diagnostics</h1>
           <RequestAnalysisButton inboxId={id} canRun={true} />
         </header>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-sm font-semibold text-slate-700">Detected issues</h2>
+        <div className="rounded-2xl border border-stone-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-stone-700">Detected issues</h2>
           {diagnostics.issueCodes?.length ? (
-            <ul className="mt-3 space-y-1 text-sm text-slate-700">
+            <ul className="mt-3 space-y-1 text-sm text-stone-700">
               {diagnostics.issueCodes.map((c: string) => (
                 <li key={c} className="font-mono">{c}</li>
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-slate-500">No issues detected.</p>
+            <p className="mt-3 text-sm text-stone-500">No issues detected.</p>
           )}
         </div>
     </div>

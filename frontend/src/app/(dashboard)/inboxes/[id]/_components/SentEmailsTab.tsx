@@ -74,11 +74,11 @@ export function SentEmailsTab({ inboxId }: Props) {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">Sent Emails</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-stone-700">Sent Emails</h2>
+          <p className="text-xs text-stone-500">
             {data ? `${data.total.toLocaleString()} email${data.total === 1 ? '' : 's'} sent from this inbox` : 'Loading…'}
           </p>
         </div>
@@ -115,8 +115,8 @@ export function SentEmailsTab({ inboxId }: Props) {
       ) : null}
 
       <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <table className="min-w-full divide-y divide-stone-200 text-left text-sm">
+          <thead className="bg-stone-50 text-xs uppercase tracking-wider text-stone-500">
             <tr>
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">To</th>
@@ -130,10 +130,10 @@ export function SentEmailsTab({ inboxId }: Props) {
               <th className="px-3 py-2">Tab</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-stone-100">
             {loading && !data ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-stone-500">
                   <span className="inline-flex items-center gap-2">
                     <PulseDot state="busy" size="xs" />
                     Loading sent emails…
@@ -142,7 +142,7 @@ export function SentEmailsTab({ inboxId }: Props) {
               </tr>
             ) : data && data.rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-stone-500">
                   No emails sent yet from this inbox.
                 </td>
               </tr>
@@ -163,7 +163,7 @@ export function SentEmailsTab({ inboxId }: Props) {
       {/* Pagination */}
       {data && data.total > 0 ? (
         <div className="mt-4 flex items-center justify-between text-sm">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-stone-500">
             Page {page} of {totalPages}
           </p>
           <div className="flex items-center gap-2">
@@ -171,7 +171,7 @@ export function SentEmailsTab({ inboxId }: Props) {
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
-              className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-stone-300 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous
             </button>
@@ -179,7 +179,7 @@ export function SentEmailsTab({ inboxId }: Props) {
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || loading}
-              className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-stone-300 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next
             </button>
@@ -205,8 +205,8 @@ interface FilterPillsProps<T extends string> {
 
 function FilterPills<T extends string>({ label, value, onChange, options }: FilterPillsProps<T>) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 text-xs">
-      <span className="px-2 text-slate-500">{label}:</span>
+    <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 p-1 text-xs">
+      <span className="px-2 text-stone-500">{label}:</span>
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -215,7 +215,7 @@ function FilterPills<T extends string>({ label, value, onChange, options }: Filt
             type="button"
             onClick={() => onChange(opt.value)}
             className={`rounded-full px-3 py-1 font-medium transition-colors ${
-              active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              active ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
             {opt.label}
@@ -246,16 +246,16 @@ function SentRow({ row, expanded, onToggle }: SentRowProps) {
 
   return (
     <>
-      <tr className="cursor-pointer hover:bg-slate-50" onClick={onToggle}>
-        <td className="whitespace-nowrap px-3 py-2 text-slate-700">{row.sentAt ? formatDateTime(row.sentAt) : '—'}</td>
-        <td className="max-w-[14rem] truncate px-3 py-2 text-slate-700" title={row.receiverEmail ?? ''}>
+      <tr className="cursor-pointer hover:bg-stone-50" onClick={onToggle}>
+        <td className="whitespace-nowrap px-3 py-2 text-stone-700">{row.sentAt ? formatDateTime(row.sentAt) : '—'}</td>
+        <td className="max-w-[14rem] truncate px-3 py-2 text-stone-700" title={row.receiverEmail ?? ''}>
           {row.receiverEmail ?? '—'}
         </td>
-        <td className="max-w-[18rem] truncate px-3 py-2 text-slate-700" title={row.subject ?? ''}>
+        <td className="max-w-[18rem] truncate px-3 py-2 text-stone-700" title={row.subject ?? ''}>
           {subjectTruncated}
         </td>
-        <td className="whitespace-nowrap px-3 py-2 text-slate-700">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">Day {row.warmupDay}</span>
+        <td className="whitespace-nowrap px-3 py-2 text-stone-700">
+          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs">Day {row.warmupDay}</span>
         </td>
         <td className="px-3 py-2">
           <StatusCell timestamp={row.openedAt} />
@@ -275,17 +275,17 @@ function SentRow({ row, expanded, onToggle }: SentRowProps) {
               Spam
             </span>
           ) : (
-            <span className="text-slate-400">—</span>
+            <span className="text-stone-400">—</span>
           )}
         </td>
         <td className="px-3 py-2">
-          {row.landedInTab ? <TabChip tab={row.landedInTab} /> : <span className="text-slate-400">—</span>}
+          {row.landedInTab ? <TabChip tab={row.landedInTab} /> : <span className="text-stone-400">—</span>}
         </td>
       </tr>
       {expanded ? (
-        <tr className="bg-slate-50/60">
+        <tr className="bg-stone-50/60">
           <td colSpan={10} className="px-3 py-3">
-            <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+            <div className="grid gap-2 text-xs text-stone-700 sm:grid-cols-2">
               <DetailField label="Full subject" value={row.subject ?? '—'} />
               <DetailField label="Message ID" value={row.messageId ?? '—'} mono />
               <DetailField label="Scheduled at" value={formatDateTime(row.scheduledAt)} />
@@ -301,11 +301,11 @@ function SentRow({ row, expanded, onToggle }: SentRowProps) {
 }
 
 function StatusCell({ timestamp }: { timestamp: string | null }) {
-  if (!timestamp) return <span className="text-slate-400">—</span>;
+  if (!timestamp) return <span className="text-stone-400">—</span>;
   return (
     <span className="inline-flex items-center gap-1 text-emerald-600" title={new Date(timestamp).toISOString()}>
       <span aria-hidden>✓</span>
-      <span className="text-xs text-slate-500">{formatRelativeShort(timestamp)}</span>
+      <span className="text-xs text-stone-500">{formatRelativeShort(timestamp)}</span>
     </span>
   );
 }
@@ -338,7 +338,7 @@ function TabChip({ tab }: { tab: string }) {
       ? 'bg-amber-100 text-amber-700'
       : lower === 'spam' || lower === 'junk'
       ? 'bg-rose-100 text-rose-700'
-      : 'bg-slate-100 text-slate-700';
+      : 'bg-stone-100 text-stone-700';
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{tab}</span>
   );
@@ -347,8 +347,8 @@ function TabChip({ tab }: { tab: string }) {
 function DetailField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`mt-0.5 text-sm text-slate-700 ${mono ? 'font-mono' : ''}`}>{value}</p>
+      <p className="text-[10px] uppercase tracking-wider text-stone-400">{label}</p>
+      <p className={`mt-0.5 text-sm text-stone-700 ${mono ? 'font-mono' : ''}`}>{value}</p>
     </div>
   );
 }
