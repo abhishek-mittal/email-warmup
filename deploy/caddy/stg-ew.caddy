@@ -1,0 +1,9 @@
+# EmailWarm staging — additive Caddy site block. Fronted by the same
+# system Caddy that serves probe.emailtechno.com; this file is installed
+# at /etc/caddy/sites/stg-ew.caddy and pulled in by an `import sites/*`
+# line in /etc/caddy/Caddyfile (added once during bootstrap). Public app,
+# no basic auth. TLS auto-provisioned by Caddy once the A record resolves.
+stg-ew.webnco.xyz {
+	encode gzip
+	reverse_proxy 127.0.0.1:3100
+}
