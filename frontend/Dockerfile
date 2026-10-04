@@ -1,41 +1,24 @@
-# syntax=docker/dockerfile:1
-
-FROM node:22-bookworm-slim AS base
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# --- deps ---
-FROM base AS deps
-COPY package.json pnpm-lock.yaml ./
-# See backend/Dockerfile: pnpm 10+ blocks dependency build scripts by default;
-# allow them, bounded by --frozen-lockfile + supply-chain verification.
-RUN pnpm install --frozen-lockfile --config.dangerously-allow-all-builds=true
-
-# --- build (NEXT_PUBLIC_* must be present at build time) ---
-FROM base AS build
+RUN corepack enable && corepack prepare pnpm@11.8.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+# NEXT_PUBLIC_* are compiled into the client bundle at build time. The VPS
+# staging deploy passes these as --build-arg; the GCP path leaves them unset
+# (its deploy.yml sets no NEXT_PUBLIC_* — unchanged behavior).
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL
-ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm build
+RUN pnpm run build
 
-# --- runtime (standalone) ---
-FROM node:22-bookworm-slim AS runtime
-WORKDIR /app
+FROM node:22-alpine
 ENV NODE_ENV=production
-ENV PORT=3100
-ENV HOSTNAME=0.0.0.0
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-  && rm -rf /var/lib/apt/lists/* \
-  && useradd --system --uid 1001 --create-home appuser
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
-USER appuser
-EXPOSE 3100
+WORKDIR /app
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
+USER node
+EXPOSE 3000
 CMD ["node", "server.js"]
