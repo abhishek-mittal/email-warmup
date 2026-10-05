@@ -103,7 +103,11 @@ jobs:
       - name: Render staging.env
         run: |
           umask 077
-          cat > staging.env <<EOF
+          # Quoted delimiter: GitHub substitutes ${{ }} into the script text
+          # first, then bash writes the heredoc body VERBATIM. Without quotes,
+          # bash would expand a $ / backtick inside a secret value and corrupt
+          # or truncate it.
+          cat > staging.env <<'EOF'
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           DATABASE_URL=postgresql://emailwarm:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/emailwarm
           REDIS_URL=redis://redis:6379/1
