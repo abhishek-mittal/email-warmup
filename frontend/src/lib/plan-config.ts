@@ -115,6 +115,8 @@ export function inboxStatusColor(status: string): {
   switch (status) {
     case 'active':
       return { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Warming Up' };
+    case 'ready':
+      return { bg: 'bg-sky-100', text: 'text-sky-700', label: 'Ready' };
     case 'paused':
       return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Paused' };
     case 'pending':

@@ -2,7 +2,8 @@
 
 export type Plan = 'free' | 'demo' | 'trial' | 'starter' | 'growth' | 'agency' | 'enterprise';
 
-export type InboxStatus = 'pending' | 'active' | 'paused' | 'error' | 'disconnected';
+// 'ready' = connected + verified but warmup NOT started (user must press Start).
+export type InboxStatus = 'pending' | 'ready' | 'active' | 'paused' | 'error' | 'disconnected';
 export type Provider = 'gmail' | 'outlook' | 'custom';
 
 export interface Inbox {
@@ -18,6 +19,8 @@ export interface Inbox {
   statusReason?: string | null;
   /** Set when the owner opted this inbox into the shared warmup pool. */
   poolConsentAt?: string | null;
+  /** Present on GET /inboxes/:id: whether Start can proceed (has a partner). */
+  warmupEligibility?: { canStart: boolean };
   createdAt: string;
 }
 

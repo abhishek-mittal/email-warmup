@@ -15,6 +15,8 @@ export function InboxStatusBadge({ status }: Props) {
         className={`h-1.5 w-1.5 rounded-full ${
           status === 'active'
             ? 'bg-emerald-500'
+            : status === 'ready'
+            ? 'bg-sky-500'
             : status === 'paused'
             ? 'bg-amber-500'
             : status === 'error'
