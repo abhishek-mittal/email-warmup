@@ -157,6 +157,13 @@ export class WarmupService {
       if (await this.stops.activeStopFor({ userId: inbox.userId, provider: inbox.provider })) {
         return [];
       }
+      // No one to warm with → do not create a schedule or advance the ramp day.
+      // (Checked before the schedule row is created, which is what increments
+      // warmup_day.)
+      if (!(await this.pairingService.hasEligiblePartners(inbox, dayStart, tx))) {
+        this.logger.log({ inboxId }, 'warmup skipped: no eligible partners');
+        return [];
+      }
 
       const scheduleKey = and(
         eq(warmupSchedules.inboxId, inboxId),

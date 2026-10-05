@@ -93,6 +93,38 @@ describe('warmup scheduling (MR-03)', () => {
     expect((await inboxRow(sender.id)).warmupDay).toBe(14);
   });
 
+  it('does not schedule or advance the ramp day when there are no eligible partners', async () => {
+    const user = await createUser();
+    // Active + consented, but no private pool and not an enrolled pool member →
+    // no one to warm with.
+    const sender = await createInbox(user, { warmupDay: 13 });
+
+    const reserved = await engine.warmup.scheduleInbox(sender.id, cronTime());
+
+    expect(reserved).toBe(0);
+    expect(
+      await db.select().from(warmupSchedules).where(eq(warmupSchedules.inboxId, sender.id)),
+    ).toHaveLength(0);
+    expect(await sendsFor(sender.id)).toHaveLength(0);
+    // The ramp day must NOT advance when nothing was scheduled.
+    expect((await inboxRow(sender.id)).warmupDay).toBe(13);
+  });
+
+  it('warms against a consented, enrolled partner that is still in "ready" status', async () => {
+    const u1 = await createUser();
+    const u2 = await createUser();
+    const sender = await createInbox(u1, { warmupDay: 13 }); // active + consented
+    await enroll(sender); // sender is an active shared-pool member
+    const partner = await createInbox(u2, { status: 'ready' }); // consented, not yet started
+    await enroll(partner); // active pool member, different domain
+
+    const reserved = await engine.warmup.scheduleInbox(sender.id, cronTime());
+
+    expect(reserved).toBeGreaterThan(0);
+    const rows = await sendsFor(sender.id);
+    expect(rows.some((r) => r.receiverInboxId === partner.id)).toBe(true);
+  });
+
   it('a second run the same day changes nothing (second cron, second replica)', async () => {
     const { sender } = await senderWithPrivatePool();
     await engine.warmup.scheduleInbox(sender.id, cronTime());

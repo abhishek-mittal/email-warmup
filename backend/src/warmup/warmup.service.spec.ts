@@ -20,7 +20,7 @@ jest.mock('../db', () => ({
 describe('WarmupService', () => {
   let service: WarmupService;
   let rampService: { getDailyVolume: jest.Mock };
-  let pairingService: { selectPartners: jest.Mock };
+  let pairingService: { selectPartners: jest.Mock; hasEligiblePartners: jest.Mock };
   const placementService = { runGraduationTest: jest.fn() };
   let queueService: {
     add: jest.Mock;
@@ -56,7 +56,10 @@ describe('WarmupService', () => {
     jest.resetAllMocks();
 
     rampService = { getDailyVolume: jest.fn().mockReturnValue(10) };
-    pairingService = { selectPartners: jest.fn().mockResolvedValue([]) };
+    pairingService = {
+      selectPartners: jest.fn().mockResolvedValue([]),
+      hasEligiblePartners: jest.fn().mockResolvedValue(true),
+    };
     queueService = {
       add: jest.fn().mockResolvedValue(undefined),
       removeJobsForSender: jest.fn().mockResolvedValue(undefined),
