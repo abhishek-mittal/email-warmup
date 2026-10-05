@@ -127,7 +127,11 @@ function makeAuth() {
             return { data: { ...user, role } };
           },
           after: async (user: { id: string; email: string }) => {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+            // Server-side call: must use the INTERNAL API URL (http://backend:4611),
+            // not NEXT_PUBLIC_API_URL (the public https origin, which routes to
+            // the Next app via Caddy and has no /internal/user-sync route → the
+            // sync silently 404s and the backend users row is never created).
+            const apiUrl = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
             const secret = process.env.INTERNAL_SECRET ?? '';
             // Intentionally not awaited — better-auth's hook contract
             // allows returning a promise but we don't want to block the
