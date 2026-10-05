@@ -36,6 +36,48 @@
       "when": 1782131540217,
       "tag": "0004_eminent_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791009857427,
+      "tag": "0005_warmup_delivery_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791010893946,
+      "tag": "0006_oauth_link_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791018279198,
+      "tag": "0007_bounce_and_safety_stops",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791019439067,
+      "tag": "0008_placement_observations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791019797081,
+      "tag": "0009_score_completeness",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791021422732,
+      "tag": "0010_placement_purpose",
+      "breakpoints": true
     }
   ]
 }

@@ -17,7 +17,7 @@ jest.mock('../db', () => ({
 
 describe('BlacklistCheckProcessor', () => {
   let processor: BlacklistCheckProcessor;
-  let blacklistService: { checkDomain: jest.Mock };
+  let blacklistService: { check: jest.Mock };
   let queueService: { add: jest.Mock };
   let warmupService: { pauseInbox: jest.Mock };
 
@@ -25,6 +25,7 @@ describe('BlacklistCheckProcessor', () => {
     id: 'inbox-1',
     userId: 'user-1',
     email: 'sender@sendco.com',
+    sendingIp: '203.0.113.7',
     status: 'active',
   };
 
@@ -73,7 +74,7 @@ describe('BlacklistCheckProcessor', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    blacklistService = { checkDomain: jest.fn().mockResolvedValue(cleanResult) };
+    blacklistService = { check: jest.fn().mockResolvedValue(cleanResult) };
     queueService = { add: jest.fn().mockResolvedValue(undefined) };
     warmupService = { pauseInbox: jest.fn().mockResolvedValue(undefined) };
 
@@ -104,7 +105,7 @@ describe('BlacklistCheckProcessor', () => {
       mockSelectSequence([[]]);
 
       await expect(processor.process(makeJob())).rejects.toThrow(UnrecoverableError);
-      expect(blacklistService.checkDomain).not.toHaveBeenCalled();
+      expect(blacklistService.check).not.toHaveBeenCalled();
     });
 
     it('extracts the domain from inbox.email and checks it against the RBL list', async () => {
@@ -113,7 +114,7 @@ describe('BlacklistCheckProcessor', () => {
 
       await processor.process(makeJob());
 
-      expect(blacklistService.checkDomain).toHaveBeenCalledWith('sendco.com');
+      expect(blacklistService.check).toHaveBeenCalledWith('sendco.com', '203.0.113.7');
     });
 
     it('writes a blacklist_checks row with isClean, listedCount, and rblResults when clean', async () => {
@@ -153,7 +154,7 @@ describe('BlacklistCheckProcessor', () => {
     });
 
     it('writes a blacklist_checks row reflecting the listing when a hit occurs', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       const valuesMock = mockInsert();
 
@@ -170,17 +171,17 @@ describe('BlacklistCheckProcessor', () => {
     });
 
     it('pauses the inbox via warmupService.pauseInbox when a listing is found', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       mockInsert();
 
       await processor.process(makeJob());
 
-      expect(warmupService.pauseInbox).toHaveBeenCalledWith('inbox-1');
+      expect(warmupService.pauseInbox).toHaveBeenCalledWith('inbox-1', 'blacklist');
     });
 
     it('pauses the inbox BEFORE enqueueing the blacklist_hit notify job', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       mockInsert();
 
@@ -196,7 +197,7 @@ describe('BlacklistCheckProcessor', () => {
     });
 
     it('enqueues a notify job with type blacklist_hit and the listed RBL array when a listing is found', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       mockInsert();
 
@@ -212,7 +213,7 @@ describe('BlacklistCheckProcessor', () => {
     });
 
     it('enqueues a diagnostics job with triggerType auto_blacklist when a listing is found', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       mockInsert();
 
@@ -225,7 +226,7 @@ describe('BlacklistCheckProcessor', () => {
     });
 
     it('enqueues score-compute after a listing too', async () => {
-      blacklistService.checkDomain.mockResolvedValue(listedResult);
+      blacklistService.check.mockResolvedValue(listedResult);
       mockSelectSequence([[inbox]]);
       mockInsert();
 
@@ -252,6 +253,27 @@ describe('BlacklistCheckProcessor', () => {
       await processor.scheduleAllInboxes();
 
       expect(queueService.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when nothing could be checked', () => {
+    it('does not pause or alert when every lookup was refused or failed (isClean null)', async () => {
+      mockSelectSequence([[inbox]]);
+      mockInsert();
+      blacklistService.check.mockResolvedValue({
+        isClean: null,
+        listed: [],
+        listedCount: 0,
+        rblResults: Object.fromEntries(RBL_LIST.map((zone) => [zone, 'unknown'])),
+        checkedCount: 0,
+        unknownCount: RBL_LIST.length,
+      });
+
+      await processor.process({ id: 'job-1', data: { inboxId: 'inbox-1' } } as any);
+
+      expect(warmupService.pauseInbox).not.toHaveBeenCalled();
+      expect(queueService.add).not.toHaveBeenCalledWith('notify', expect.anything());
+      expect(queueService.add).not.toHaveBeenCalledWith('diagnostics', expect.anything());
     });
   });
 });

@@ -58,9 +58,9 @@ export function InboxListTable({ inboxes }: Props) {
         onCleared={() => setSelected(new Set())}
       />
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <table className="min-w-full divide-y divide-stone-200 text-sm">
+          <thead className="bg-stone-50 text-left text-xs font-medium uppercase tracking-wide text-stone-500">
             <tr>
               <th className="w-10 px-4 py-3">
                 <input
@@ -71,7 +71,7 @@ export function InboxListTable({ inboxes }: Props) {
                     if (el) el.indeterminate = someSelected;
                   }}
                   onChange={toggleAll}
-                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 cursor-pointer rounded border-stone-300 text-brand-600 focus:ring-brand-500"
                 />
               </th>
               <th className="px-4 py-3">Email</th>
@@ -85,18 +85,22 @@ export function InboxListTable({ inboxes }: Props) {
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-stone-100">
             {inboxes.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">
-                  No inboxes connected yet. Use the buttons above to connect one.
+                <td colSpan={10} className="px-4 py-12 text-center text-sm text-stone-500">
+                  No inboxes yet.{' '}
+                  <Link href="/inboxes/connect" className="font-medium text-brand-700 hover:underline">
+                    Connect one
+                  </Link>{' '}
+                  to start warming.
                 </td>
               </tr>
             ) : (
               inboxes.map((i) => (
                 <tr
                   key={i.id}
-                  className={`hover:bg-slate-50 ${selected.has(i.id) ? 'bg-indigo-50/50' : ''}`}
+                  className={`hover:bg-stone-50 ${selected.has(i.id) ? 'bg-brand-50/50' : ''}`}
                 >
                   <td className="px-4 py-3">
                     <input
@@ -104,17 +108,17 @@ export function InboxListTable({ inboxes }: Props) {
                       aria-label={`Select ${i.email}`}
                       checked={selected.has(i.id)}
                       onChange={() => toggle(i.id)}
-                      className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      className="h-4 w-4 cursor-pointer rounded border-stone-300 text-brand-600 focus:ring-brand-500"
                     />
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">{i.email}</td>
+                  <td className="px-4 py-3 font-medium text-stone-900">{i.email}</td>
                   <td className="px-4 py-3">
                     <InboxStatusBadge status={i.status} />
                   </td>
                   <td className="px-4 py-3 text-right font-mono">{i.score != null ? i.score : '—'}</td>
-                  <td className="px-4 py-3 text-slate-600 capitalize">{i.warmupSpeed ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{i.warmupDay ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{i.lastPlacementAt ?? '—'}</td>
+                  <td className="px-4 py-3 text-stone-600 capitalize">{i.warmupSpeed ?? '—'}</td>
+                  <td className="px-4 py-3 text-stone-600">{i.warmupDay ?? '—'}</td>
+                  <td className="px-4 py-3 text-stone-600">{i.lastPlacementAt ?? '—'}</td>
                   <td className="px-4 py-3">
                     <HealthChip analysis={i.analysis as never} />
                   </td>
@@ -126,7 +130,7 @@ export function InboxListTable({ inboxes }: Props) {
                       <InboxControlButtons inboxId={i.id} status={i.status} />
                       <Link
                         href={`/inboxes/${i.id}`}
-                        className="rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+                        className="rounded-full bg-brand-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-brand-700"
                       >
                         View
                       </Link>

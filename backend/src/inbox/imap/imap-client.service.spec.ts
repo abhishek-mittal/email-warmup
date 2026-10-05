@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ImapClientService, ImapNotConfiguredError } from './imap-client.service';
-import { GoogleOAuthService } from '../oauth/google-oauth.service';
-import { MicrosoftOAuthService } from '../oauth/microsoft-oauth.service';
+import { MailCredentialService } from '../oauth/mail-credential.service';
 import { db } from '../../db';
 
 import { pinoLoggerStubsFor } from '../../common/test-module';
@@ -14,6 +13,17 @@ jest.mock('../../db', () => ({
 // Encrypted credentials are decrypted via common/crypto before use. Mocked
 // here (like other specs mock `db`) rather than depending on a real
 // ENCRYPTION_KEY at module-eval time.
+// DNS resolution and the address policy are covered in common/egress-policy.spec.ts
+// and test/integration/safety.int-spec.ts; here hosts resolve to a fixed public address.
+jest.mock('../../common/egress-policy', () => ({
+  ...jest.requireActual('../../common/egress-policy'),
+  resolvePublicHost: jest.fn(async (host: string) => ({
+    address: '203.0.113.10',
+    family: 4,
+    servername: host,
+  })),
+}));
+
 jest.mock('../../common/crypto', () => ({
   decrypt: jest.fn((ciphertext: string) => `decrypted:${ciphertext}`),
   encrypt: jest.fn((plaintext: string) => `encrypted:${plaintext}`),
@@ -38,8 +48,7 @@ jest.mock('imapflow', () => ({
 
 describe('ImapClientService', () => {
   let service: ImapClientService;
-  let googleOAuthService: { refreshToken: jest.Mock };
-  let microsoftOAuthService: { refreshToken: jest.Mock };
+  let credentials: { getInboxAccessToken: jest.Mock; getPoolInboxAccessToken: jest.Mock };
 
   function mockSelectInbox(row: any) {
     (db.select as jest.Mock).mockReturnValue({
@@ -53,22 +62,17 @@ describe('ImapClientService', () => {
     jest.clearAllMocks();
     connectMock.mockResolvedValue(undefined);
 
-    googleOAuthService = { refreshToken: jest.fn() };
-    microsoftOAuthService = { refreshToken: jest.fn() };
+    credentials = {
+      getInboxAccessToken: jest.fn().mockResolvedValue('inbox-access-token'),
+      getPoolInboxAccessToken: jest.fn().mockResolvedValue('pool-access-token'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ...pinoLoggerStubsFor(
-          ImapClientService,
-          ImapNotConfiguredError,
-          GoogleOAuthService,
-          MicrosoftOAuthService,
-          db,
-        ),
+        ...pinoLoggerStubsFor(ImapClientService, ImapNotConfiguredError, MailCredentialService, db),
 
         ImapClientService,
-        { provide: GoogleOAuthService, useValue: googleOAuthService },
-        { provide: MicrosoftOAuthService, useValue: microsoftOAuthService },
+        { provide: MailCredentialService, useValue: credentials },
       ],
     }).compile();
 
@@ -143,7 +147,8 @@ describe('ImapClientService', () => {
       const client: any = await service.getPoolInboxConnection('pi-1');
 
       expect(connectMock).toHaveBeenCalled();
-      expect(client.__opts.host).toBe('imap.custom.com');
+      expect(client.__opts.host).toBe('203.0.113.10');
+      expect(client.__opts.servername).toBe('imap.custom.com');
       expect(client.__opts.auth.user).toBe('user@custom.com');
       expect(client.__opts.auth.pass).toBe('decrypted:enc-imap-pass');
     });
@@ -158,56 +163,68 @@ describe('ImapClientService', () => {
       await expect(service.getPoolInboxConnection('pi-1')).rejects.toThrow(ImapNotConfiguredError);
     });
 
-    it('mints a fresh access token via GoogleOAuthService.refreshToken for a gmail pool inbox', async () => {
-      mockSelectInbox({
-        id: 'pi-1',
-        email: 'partner@gmail.com',
-        provider: 'gmail',
-        encryptedCredentials: {
-          clientId: 'pool-client-id',
-          clientSecret: 'enc-client-secret',
-          refreshToken: 'enc-refresh-token',
-        },
-      });
-      googleOAuthService.refreshToken.mockResolvedValue({
-        access_token: 'fresh-access-token',
-        expires_in: 3600,
-      });
+    it.each([
+      ['gmail', 'imap.gmail.com'],
+      ['outlook', 'outlook.office365.com'],
+    ])(
+      'gets the access token from the credential service for a %s pool inbox',
+      async (provider, host) => {
+        mockSelectInbox({
+          id: 'pi-1',
+          email: `partner@${provider}.com`,
+          provider,
+          encryptedCredentials: {
+            clientId: 'client-id',
+            clientSecret: 'enc-client-secret',
+            refreshToken: 'enc-refresh-token',
+          },
+        });
 
-      const client: any = await service.getPoolInboxConnection('pi-1');
+        const client: any = await service.getPoolInboxConnection('pi-1');
 
-      expect(googleOAuthService.refreshToken).toHaveBeenCalledWith('decrypted:enc-refresh-token', {
-        clientId: 'pool-client-id',
-        clientSecret: 'decrypted:enc-client-secret',
-      });
-      expect(client.__opts.auth.accessToken).toBe('fresh-access-token');
-      expect(client.__opts.auth.user).toBe('partner@gmail.com');
+        expect(credentials.getPoolInboxAccessToken).toHaveBeenCalledWith('pi-1');
+        expect(client.__opts.auth.accessToken).toBe('pool-access-token');
+        expect(client.__opts.host).toBe(host);
+        expect(client.__opts.port).toBe(993);
+        expect(client.__opts.secure).toBe(true);
+      },
+    );
+
+    it('connects an interactive gmail inbox that has no stored IMAP host (provider default)', async () => {
+      mockSelectInbox({ id: 'inbox-g', email: 'user@gmail.com', provider: 'gmail' });
+
+      const client: any = await service.getConnection('inbox-g');
+
+      expect(credentials.getInboxAccessToken).toHaveBeenCalledWith('inbox-g');
+      expect(client.__opts.host).toBe('imap.gmail.com');
+      expect(client.__opts.port).toBe(993);
+      expect(client.__opts.auth.accessToken).toBe('inbox-access-token');
     });
 
-    it('mints a fresh access token via MicrosoftOAuthService.refreshToken for an outlook pool inbox', async () => {
-      mockSelectInbox({
-        id: 'pi-1',
-        email: 'partner@outlook.com',
-        provider: 'outlook',
-        encryptedCredentials: {
-          clientId: 'pool-client-id',
-          clientSecret: 'enc-client-secret',
-          refreshToken: 'enc-refresh-token',
-        },
+    it('runs work for one mailbox one caller at a time', async () => {
+      mockSelectInbox({ id: 'inbox-s', email: 'user@gmail.com', provider: 'gmail' });
+      const order: string[] = [];
+      const slow = service.withInbox('inbox-s', async () => {
+        order.push('a-start');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        order.push('a-end');
       });
-      microsoftOAuthService.refreshToken.mockResolvedValue({
-        access_token: 'fresh-access-token-ms',
-        expires_in: 3600,
+      const fast = service.withInbox('inbox-s', async () => {
+        order.push('b-start');
       });
+      await Promise.all([slow, fast]);
 
-      const client: any = await service.getPoolInboxConnection('pi-1');
+      expect(order).toEqual(['a-start', 'a-end', 'b-start']);
+    });
 
-      expect(microsoftOAuthService.refreshToken).toHaveBeenCalledWith(
-        'decrypted:enc-refresh-token',
-        { clientId: 'pool-client-id', clientSecret: 'decrypted:enc-client-secret' },
-      );
-      expect(googleOAuthService.refreshToken).not.toHaveBeenCalled();
-      expect(client.__opts.auth.accessToken).toBe('fresh-access-token-ms');
+    it('a failed task does not block the next one for that mailbox', async () => {
+      mockSelectInbox({ id: 'inbox-f', email: 'user@gmail.com', provider: 'gmail' });
+      await expect(
+        service.withInbox('inbox-f', async () => {
+          throw new Error('boom');
+        }),
+      ).rejects.toThrow('boom');
+      await expect(service.withInbox('inbox-f', async () => 'ok')).resolves.toBe('ok');
     });
 
     it('throws ImapNotConfiguredError when OAuth credentials are incomplete', async () => {

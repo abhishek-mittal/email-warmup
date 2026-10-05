@@ -1,9 +1,12 @@
 # EmailWarm — Master Documentation Index
 
+> **Current release assessment (2026-10-03):** Start with [Market readiness audit](07-market-readiness/README.md) for implemented capabilities, gaps, 24 actionable work packages and the agent status board. Historical task completion does not imply launch readiness.
+
+
 **Project:** EmailWarm (name TBD)  
-**Version:** 0.1 — Pre-development  
-**Last updated:** June 2026  
-**Status:** Documentation phase — stack locked, build not started
+**Version:** 0.1 — Implemented MVP under readiness review
+**Last updated:** 3 October 2026
+**Status:** Substantial implementation; not ready for public market release. See the current audit above.
 
 ---
 
@@ -20,7 +23,7 @@
 
 ---
 
-## Stack (locked)
+## Stack (historical design; verify against current audit)
 
 | Layer | Choice | Key reason |
 |---|---|---|

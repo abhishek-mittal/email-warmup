@@ -31,7 +31,7 @@ export function CheckoutButton({ plan }: { plan: Plan }) {
         type="button"
         onClick={go}
         disabled={busy}
-        className="inline-flex w-full items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         {busy ? 'Redirecting…' : `Upgrade to ${plan}`}
       </button>
@@ -63,7 +63,7 @@ export function PortalButton() {
         type="button"
         onClick={go}
         disabled={busy}
-        className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+        className="inline-flex items-center justify-center rounded-full border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-50"
       >
         {busy ? 'Opening…' : 'Manage subscription'}
       </button>

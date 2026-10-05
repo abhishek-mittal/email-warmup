@@ -13,6 +13,7 @@ export type EmailTemplateType =
   | 'blacklist_hit'
   | 'score_drop'
   | 'token_revoked'
+  | 'bounce_paused'
   | 'warmup_complete'
   | 'trial_expired'
   | 'plan_activated'
@@ -42,6 +43,12 @@ export interface ScoreDropData {
 
 export interface TokenRevokedData {
   inboxEmail: string;
+}
+
+export interface BouncePausedData {
+  inboxEmail: string;
+  attempted: number;
+  bounced: number;
 }
 
 export interface WarmupCompleteData {
@@ -229,6 +236,16 @@ export function renderScoreDropEmail(data: ScoreDropData): RenderedEmail {
   return renderScoreDrop(data);
 }
 
+export function renderBouncePausedEmail(data: BouncePausedData): RenderedEmail {
+  const inbox = escapeHtml(data.inboxEmail);
+  return {
+    subject: `Warmup paused for ${data.inboxEmail}: too many bounces`,
+    html: `<p>We paused warmup for <strong>${inbox}</strong>.</p>
+<p>${Number(data.bounced) || 0} of its last ${Number(data.attempted) || 0} warmup emails in 24 hours bounced, which is over our 3% safety limit. Continuing to send while mail is bouncing damages sender reputation.</p>
+<p>Our team will review the inbox before it can be resumed. You do not need to do anything right now; we will let you know if we need something from you.</p>`,
+  };
+}
+
 export function renderTokenRevokedEmail(data: TokenRevokedData): RenderedEmail {
   return renderTokenRevoked(data);
 }
@@ -247,4 +264,12 @@ export function renderPlanActivatedEmail(data: PlanActivatedData): RenderedEmail
 
 export function renderPaymentFailedEmail(data: PaymentFailedData): RenderedEmail {
   return renderPaymentFailed(data);
+}
+
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

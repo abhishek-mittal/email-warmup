@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmailWarm OAuth &amp; Credentials Setup</title>
+<style>
+/* Print-first white developer reference. One accent (ember). */
+:root{
+  --ink:#1b2130; --soft:#55607a; --faint:#8893a8; --line:#d7dce6; --line2:#e7eaf1;
+  --accent:#c6490c; --accent-soft:#fcecdf; --accent-ink:#8a3204;
+  --ok:#0e7a52; --ok-soft:#e4f4ec; --warn:#9a5a00; --warn-soft:#fcefd4; --bad:#a81f36; --bad-soft:#fbe2e6;
+  --info:#1f5fbf; --info-soft:#eaf1fb; --panel:#f6f8fb;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --mono:'SFMono-Regular',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);font-size:11pt;line-height:1.55}
+.page{max-width:780px;margin:0 auto;padding:28px 26px 60px}
+h1{font-family:var(--serif);font-size:28pt;line-height:1.1;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-size:18pt;margin:0 0 4px;letter-spacing:-.01em}
+h3{font-size:12pt;margin:0 0 3px}
+h4{font-size:10.6pt;margin:13px 0 4px;color:var(--accent-ink);font-family:var(--mono);letter-spacing:.02em;text-transform:uppercase}
+p{margin:0 0 8px} ul,ol{margin:0 0 8px;padding-left:20px} li{margin-bottom:4px}
+a{color:var(--accent-ink);text-decoration:none}
+code{font-family:var(--mono);font-size:9.4pt;background:var(--panel);border:1px solid var(--line2);border-radius:4px;padding:0 4px;word-break:break-all}
+.sub{color:var(--soft)}
+.cover{padding:30px 0 18px;border-bottom:3px solid var(--accent)}
+.kicker{font-family:var(--mono);font-size:9pt;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:12px}
+.lede{font-size:12.5pt;color:var(--soft);max-width:62ch}
+.meta{margin-top:16px;font-size:9.3pt;color:var(--faint);font-family:var(--mono)}
+.toc{margin:20px 0 0;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:13px 19px}
+.toc h3{font-family:var(--sans);margin-bottom:7px}
+.toc ol{columns:2;column-gap:26px;margin:0;font-size:10pt} .toc li{break-inside:avoid;margin-bottom:3px}
+.part{break-before:page;padding-top:6px}
+.part-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--line);padding-bottom:7px;margin-bottom:13px}
+.part-head .pn{font-family:var(--mono);font-size:9.5pt;font-weight:700;letter-spacing:.06em;color:var(--accent);white-space:nowrap}
+.step{break-inside:avoid;border:1px solid var(--line2);border-radius:8px;padding:11px 14px;margin-bottom:10px}
+.step-n{display:inline-block;min-width:22px;height:22px;line-height:22px;text-align:center;background:var(--accent);color:#fff;font-weight:700;border-radius:50%;font-size:10pt;margin-right:8px}
+.step h3{display:inline}
+.expect{break-inside:avoid;margin-top:8px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 6px 6px 0;padding:6px 11px}
+.ifnot{break-inside:avoid;margin-top:8px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0;padding:6px 11px}
+.note{break-inside:avoid;border-left:3px solid var(--info);background:var(--info-soft);border-radius:0 6px 6px 0;padding:7px 12px;margin:9px 0}
+.warnbox{break-inside:avoid;border:2px solid var(--bad);background:var(--bad-soft);border-radius:8px;padding:10px 14px;margin:11px 0}
+.tip{break-inside:avoid;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0;padding:7px 12px;margin:9px 0}
+.lbl{font-family:var(--mono);font-size:8.3pt;font-weight:700;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:2px}
+.expect .lbl{color:var(--ok)} .ifnot .lbl{color:var(--warn)} .note .lbl{color:var(--info)} .warnbox .lbl{color:var(--bad)} .tip .lbl{color:var(--accent-ink)}
+.tag{font-family:var(--mono);font-size:7.8pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--panel);border:1px solid var(--line);color:var(--soft);border-radius:20px;padding:1px 7px;margin-left:5px;vertical-align:middle}
+.tag.oauth{background:#eae6fb;border-color:#d4ccf3;color:#5b3fc0} .tag.app{background:#e4f4ec;border-color:#c2e6d3;color:#0e7a52}
+.cmd{break-inside:avoid;background:#0f1522;color:#dde3f0;border-radius:7px;padding:10px 13px;font-family:var(--mono);font-size:9.1pt;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin:7px 0}
+.cmd .c{color:#8893a8}
+.where{font-family:var(--mono);font-size:8.4pt;color:var(--faint);margin:2px 0}
+.tw{break-inside:avoid;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:9.6pt;margin:6px 0 10px}
+th,td{text-align:left;padding:6px 9px;border:1px solid var(--line2);vertical-align:top}
+th{background:var(--panel);font-size:8.3pt;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--soft)}
+tr{break-inside:avoid}
+.foot{margin-top:36px;border-top:1px solid var(--line2);padding-top:10px;font-size:8.8pt;color:var(--faint)}
+@page{size:A4;margin:15mm 14mm}
+@media print{.page{max-width:none;margin:0;padding:0}a{color:var(--ink)}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<section class="cover">
+  <div class="kicker">EmailWarm · Developer / Admin Setup</div>
+  <h1>OAuth &amp; mailbox credentials — setup guide</h1>
+  <p class="lede">How to create the sign-in and mailbox-connect credentials EmailWarm needs for Google, Microsoft, Zoho and Yahoo — set up once at your webnco.xyz org and reused across your development apps. Every redirect URL, scope and environment variable here was taken straight from the app's code.</p>
+  <div class="meta">Audience: whoever configures the OAuth apps (you, as developer/admin) &nbsp;·&nbsp; Verified against the EmailWarm codebase</div>
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li>Which platform needs what</li>
+      <li>Before you start</li>
+      <li>Google — one org-level OAuth app</li>
+      <li>Microsoft — Azure app registration</li>
+      <li>Zoho — app password</li>
+      <li>Yahoo — app password</li>
+      <li>Where every value goes (env)</li>
+      <li>Test it works &amp; fix errors</li>
+      <li>Reusing one app across many projects</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 1 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 1</span><h2>Which platform needs what</h2></div>
+  <p>EmailWarm uses two different kinds of credential, and it matters which one each platform needs. Read this table first — it decides the rest of the guide.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Platform</th><th>How EmailWarm connects it</th><th>What you create</th><th>Covered in</th></tr></thead>
+    <tbody>
+      <tr><td><b>Google</b> (Gmail, Workspace)</td><td>OAuth — "Connect with Google" button and "Sign in with Google"</td><td>One Google Cloud OAuth client (ID + secret)</td><td>Part 3</td></tr>
+      <tr><td><b>Microsoft</b> (Outlook, 365)</td><td>OAuth — "Connect with Microsoft" and "Sign in with Microsoft"</td><td>One Azure (Entra ID) app registration (ID + secret)</td><td>Part 4</td></tr>
+      <tr><td><b>Zoho</b></td><td>Custom SMTP / IMAP form — no OAuth</td><td>A Zoho app-specific password</td><td>Part 5</td></tr>
+      <tr><td><b>Yahoo</b></td><td>Custom SMTP / IMAP form — no OAuth</td><td>A Yahoo app password</td><td>Part 6</td></tr>
+      <tr><td>Any other host</td><td>Custom SMTP / IMAP form — no OAuth</td><td>Mailbox password or the host's app password</td><td>Part 6</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="lbl">The short version</span>You only build <b>OAuth apps for Google and Microsoft</b>. Zoho, Yahoo and everything else connect through the app's Custom SMTP / IMAP form with an app password, so they need no console setup at all — you can skip straight to Part 5 for those. The OAuth apps are the only reusable, org-level thing, which is exactly what you're planning for webnco.xyz.</div>
+  <h4>What each OAuth app powers in EmailWarm</h4>
+  <ul>
+    <li><b>Sign in with Google / Microsoft</b> — logging into EmailWarm itself (handled by the auth library at <code>/api/auth/callback/&lt;provider&gt;</code>).</li>
+    <li><b>Connect a mailbox</b> — one-click connect on the Accounts page (handled at <code>/api/mailbox-oauth/callback/&lt;provider&gt;</code>).</li>
+  </ul>
+  <p>Both live under the same OAuth app, so each provider needs <b>two redirect URLs</b> registered. That is the single most common thing people get wrong, so the exact URLs are called out in each part.</p>
+</section>
+
+<!-- 2 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 2</span><h2>Before you start</h2></div>
+  <div class="step"><h3><span class="step-n">1</span>Decide your base URL</h3>
+    <p>Every redirect URL is built from the address EmailWarm runs on. For local development that is <code>http://localhost:3000</code>. If you later run it somewhere else (a staging domain), you'll register the same paths under that address too. This guide uses <code>http://localhost:3000</code> throughout; swap in your real address where needed.</p></div>
+  <div class="step"><h3><span class="step-n">2</span>Know where the values will go</h3>
+    <p>Each client ID and secret is pasted into <b>two files</b> — the backend's <code>backend/.env</code> and the frontend's <code>frontend/.env.local</code> — with the <b>same values in both</b>. The full list is in Part 7. Keep a scratch note open to collect the four values (Google ID, Google secret, Microsoft ID, Microsoft secret) as you create them.</p></div>
+  <div class="warnbox"><span class="lbl">Treat secrets like passwords</span>Client secrets and app passwords grant access to accounts. Keep them only in <code>.env</code> files (which are git-ignored), never in code, screenshots, chat or this document. If one leaks, rotate it in the provider's console.</div>
+</section>
+
+<!-- 3 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 3</span><h2>Google — one org-level OAuth app <span class="tag oauth">OAuth</span></h2></div>
+  <p>You'll create a single OAuth client under your webnco.xyz Google account and reuse it for EmailWarm and future dev apps. Do this at <a href="https://console.cloud.google.com">console.cloud.google.com</a>, signed in as a webnco.xyz user.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Create (or pick) a project</h3>
+    <p>Top bar → project picker → <b>New Project</b>. Name it something reusable like "WebNCO Dev" and, if webnco.xyz is a Google Workspace org, set its <b>Organization / Location</b> to webnco.xyz. One project can hold the OAuth client for many apps.</p></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Choose the consent-screen audience <span class="tag">important decision</span></h3>
+    <p>Go to <b>APIs &amp; Services → OAuth consent screen</b>. You pick one of two user types, and the choice has real consequences because EmailWarm asks for Gmail's <b>restricted</b> full-mail scope:</p>
+    <div class="tw"><table>
+      <thead><tr><th>Choice</th><th>Who can connect</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td><b>Internal</b> (Workspace only)</td><td>Only webnco.xyz mailboxes</td><td>No Google verification needed, no test-user cap, and refresh tokens don't expire. Best if you mainly warm webnco.xyz addresses.</td></tr>
+        <tr><td><b>External</b> + "Testing"</td><td>Any Google account you add as a test user (up to 100)</td><td>Works for personal Gmail too, but shows an "unverified app" warning, and <b>refresh tokens expire after 7 days</b>, so test mailboxes need reconnecting weekly.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><span class="lbl">Recommendation for webnco.xyz</span>If webnco.xyz is a Workspace org and you'll warm webnco.xyz mailboxes, choose <b>Internal</b> — it's simpler and avoids the 7-day token expiry. To also connect personal Gmail addresses for testing, either add a second <b>External</b> client later, or just connect those through the Custom SMTP form with an app password (Part 5). Going fully public (External + "In production") requires Google's restricted-scope security assessment, which is slow and costly — not needed for development.</div></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Fill the consent screen &amp; add the scope</h3>
+    <p>Enter an app name ("EmailWarm Dev"), your support email and a developer contact. On the Scopes step, add this exact scope (plus the basic <code>openid</code> and <code>email</code>, usually added for you):</p>
+    <div class="cmd">https://mail.google.com/      <span class="c"># full Gmail access (send + IMAP)</span>
+openid
+email</div>
+    <p>If you chose <b>External + Testing</b>, add every Gmail address you'll connect as a <b>Test user</b> on the next step.</p></div>
+
+  <div class="step"><h3><span class="step-n">4</span>Create the OAuth client and register both redirect URLs</h3>
+    <p>Go to <b>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</b>. Application type: <b>Web application</b>. Name it "EmailWarm local". Under <b>Authorized redirect URIs</b>, add <b>both</b> of these exactly:</p>
+    <div class="cmd">http://localhost:3000/api/auth/callback/google          <span class="c"># sign in</span>
+http://localhost:3000/api/mailbox-oauth/callback/google <span class="c"># connect mailbox</span></div>
+    <p>You can leave Authorized JavaScript origins empty. Click Create.</p>
+    <div class="expect"><span class="lbl">What you get</span>A dialog with a <b>Client ID</b> (ends in <code>.apps.googleusercontent.com</code>) and a <b>Client secret</b>. Copy both into your scratch note. You can reopen them any time from the Credentials list.</div></div>
+
+  <div class="step"><h3><span class="step-n">5</span>Enable the Gmail API</h3>
+    <p><b>APIs &amp; Services → Library</b> → search "Gmail API" → <b>Enable</b>. (The scope grants access; the API must also be switched on for the project.)</p></div>
+
+  <div class="step"><h3><span class="step-n">6</span>Put the values in the env files</h3>
+    <div class="where">backend/.env &nbsp;and&nbsp; frontend/.env.local (same values in both)</div>
+    <div class="cmd">GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx</div>
+    <p>Restart both the backend and frontend after editing. See Part 7 for the complete file layout.</p></div>
+</section>
+
+<!-- 4 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 4</span><h2>Microsoft — Azure app registration <span class="tag oauth">OAuth</span></h2></div>
+  <p>The Microsoft equivalent is an "app registration" in the Microsoft Entra admin centre (formerly Azure AD). Go to <a href="https://entra.microsoft.com">entra.microsoft.com</a> → <b>Applications → App registrations → New registration</b>.</p>
+
+  <div class="step"><h3><span class="step-n">1</span>Register the app</h3>
+    <ul>
+      <li><b>Name:</b> "EmailWarm Dev".</li>
+      <li><b>Supported account types:</b> choose <b>"Accounts in any organizational directory and personal Microsoft accounts"</b>. This lets both company 365 mailboxes and personal Outlook/Hotmail accounts connect. (The app uses the <code>common</code> tenant, which matches this choice.)</li>
+      <li><b>Redirect URI:</b> platform <b>Web</b>, and add the first URL below now. You'll add the second in step 2.</li>
+    </ul>
+    <div class="cmd">http://localhost:3000/api/auth/callback/microsoft          <span class="c"># sign in</span>
+http://localhost:3000/api/mailbox-oauth/callback/microsoft <span class="c"># connect mailbox</span></div></div>
+
+  <div class="step"><h3><span class="step-n">2</span>Add the second redirect URL</h3>
+    <p>Open the new app → <b>Authentication</b> → under the Web platform, <b>Add URI</b>, and add the mailbox-connect URL from above so both are listed. Save.</p></div>
+
+  <div class="step"><h3><span class="step-n">3</span>Add the API permissions (scopes)</h3>
+    <p><b>API permissions → Add a permission</b>. EmailWarm uses Outlook's own mail endpoints, not Microsoft Graph, so add these <b>delegated</b> permissions:</p>
+    <div class="cmd">openid
+email
+offline_access
+https://outlook.office.com/IMAP.AccessAsUser.All   <span class="c"># read the mailbox</span>
+https://outlook.office.com/SMTP.Send               <span class="c"># send mail</span></div>
+    <p>In the console, the two Office permissions are listed under the <b>"Office 365 Exchange Online"</b> API (search it under "APIs my organization uses" if it's not on the first list). The first three are standard delegated permissions. No admin consent is needed for personal accounts; a company tenant may require an admin to approve.</p></div>
+
+  <div class="step"><h3><span class="step-n">4</span>Create a client secret</h3>
+    <p><b>Certificates &amp; secrets → New client secret</b>. Give it a description and an expiry (24 months is fine for dev). Copy the secret's <b>Value</b> immediately — it's shown only once. The app's <b>Application (client) ID</b> is on the Overview page.</p>
+    <div class="expect"><span class="lbl">What you get</span>An <b>Application (client) ID</b> (a GUID) and a <b>client secret value</b>. Copy both to your scratch note.</div></div>
+
+  <div class="step"><h3><span class="step-n">5</span>Put the values in the env files</h3>
+    <div class="where">backend/.env &nbsp;and&nbsp; frontend/.env.local (same values in both)</div>
+    <div class="cmd">MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+MICROSOFT_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxx</div></div>
+
+  <div class="warnbox"><span class="lbl">Common Microsoft blocker</span>Many company 365 tenants disable "SMTP AUTH" and third-party IMAP by policy. If a company Outlook mailbox refuses to send even with correct OAuth, an admin must allow authenticated SMTP for that mailbox. Personal Outlook/Hotmail accounts don't have this restriction.</div>
+</section>
+
+<!-- 5 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 5</span><h2>Zoho — app password <span class="tag app">app password</span></h2></div>
+  <p>EmailWarm has no Zoho OAuth; Zoho connects through the <b>Custom SMTP / IMAP</b> form. You only need an app-specific password.</p>
+  <div class="step"><h3><span class="step-n">1</span>Create the app password</h3>
+    <ol>
+      <li>Sign in to Zoho Mail, go to <a href="https://accounts.zoho.com">accounts.zoho.com</a> → <b>Security → App Passwords</b>.</li>
+      <li>Turn on two-factor authentication first if prompted.</li>
+      <li>Click <b>Generate New Password</b>, name it "EmailWarm", and copy the code.</li>
+    </ol></div>
+  <div class="step"><h3><span class="step-n">2</span>Use it in EmailWarm</h3>
+    <p>On the Accounts page, choose <b>Custom SMTP / IMAP</b> (or the pool wizard's <b>Custom</b> type), press the <b>Zoho</b> quick-fill, and enter the app password as both the SMTP and IMAP password. Servers: <code>smtp.zoho.com:587</code> and <code>imap.zoho.com:993</code>.</p></div>
+  <div class="note"><span class="lbl">Custom domains on Zoho</span>If your webnco.xyz mail is hosted on Zoho, this is also how you connect a <code>@webnco.xyz</code> mailbox — Custom form, Zoho servers, Zoho app password. No OAuth app involved.</div>
+</section>
+
+<!-- 6 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 6</span><h2>Yahoo &amp; everything else — app password <span class="tag app">app password</span></h2></div>
+  <div class="step"><h3><span class="step-n">1</span>Yahoo</h3>
+    <ol>
+      <li>Yahoo → <b>Account Info → Account Security</b>; turn on two-step verification.</li>
+      <li>Click <b>Generate app password</b>, choose "Other app", name it "EmailWarm", copy the code.</li>
+      <li>In EmailWarm's Custom form, use the <b>Yahoo</b> quick-fill: <code>smtp.mail.yahoo.com:587</code> and <code>imap.mail.yahoo.com:993</code>, with the app password in both password fields.</li>
+    </ol></div>
+  <div class="step"><h3><span class="step-n">2</span>Gmail / Outlook without OAuth <span class="tag app">alternative</span></h3>
+    <p>You don't have to use OAuth for Google or Microsoft. If you'd rather skip the console setup for a quick test, both also work through the Custom form with an app password (Gmail: <code>myaccount.google.com/apppasswords</code>; Outlook: app password under Microsoft account security). This is the path the end-user Getting Started guide uses. OAuth is the nicer one-click experience; app passwords are faster to set up for a developer.</p></div>
+  <div class="step"><h3><span class="step-n">3</span>Any other host (GoDaddy, cPanel, custom)</h3>
+    <p>Get the SMTP and IMAP server, port, username and password from the host (usually under "email client setup" / "IMAP settings"). Enter them in the Custom form. Outgoing is normally port 587, incoming 993.</p></div>
+</section>
+
+<!-- 7 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 7</span><h2>Where every value goes</h2></div>
+  <p>The four OAuth values go into both env files, identically. Restart the backend and frontend after any change.</p>
+  <h4>backend/.env</h4>
+  <div class="cmd">GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx
+MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+MICROSOFT_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxx
+
+<span class="c"># Already set for local dev — leave as is:</span>
+APP_URL=http://localhost:3000</div>
+  <h4>frontend/.env.local</h4>
+  <div class="cmd">GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx
+MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+MICROSOFT_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxx
+
+<span class="c"># Already set for local dev — leave as is:</span>
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000</div>
+  <div class="note"><span class="lbl">If you run on a different address</span>The mailbox-connect redirect is built from <code>APP_URL</code>. If EmailWarm ever runs somewhere other than <code>http://localhost:3000</code>, either set <code>APP_URL</code> to the real address (and register the matching redirect URLs in both consoles), or override just the callback with <code>GOOGLE_MAILBOX_REDIRECT_URI</code> / <code>MICROSOFT_MAILBOX_REDIRECT_URI</code>. For plain local dev you don't need these.</div>
+  <div class="tw"><table>
+    <thead><tr><th>Variable</th><th>Both files?</th><th>What it's for</th></tr></thead>
+    <tbody>
+      <tr><td><code>GOOGLE_CLIENT_ID</code> / <code>_SECRET</code></td><td>Yes</td><td>Google sign-in and Gmail connect</td></tr>
+      <tr><td><code>MICROSOFT_CLIENT_ID</code> / <code>_SECRET</code></td><td>Yes</td><td>Microsoft sign-in and Outlook connect</td></tr>
+      <tr><td><code>APP_URL</code></td><td>backend only</td><td>Base for the mailbox-connect redirect</td></tr>
+      <tr><td><code>BETTER_AUTH_URL</code></td><td>frontend only</td><td>Base for the sign-in redirect</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 8 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 8</span><h2>Test it works &amp; fix errors</h2></div>
+  <div class="step"><h3><span class="step-n">1</span>Restart and try sign-in</h3>
+    <p>Restart both services. Open <code>http://localhost:3000/sign-in</code> — the "Sign in with Google" and "Sign in with Microsoft" buttons should now complete a real login instead of erroring.</p></div>
+  <div class="step"><h3><span class="step-n">2</span>Try a mailbox connect</h3>
+    <p>Accounts → connect → <b>Connect with Google</b> (or Microsoft). You should reach the provider's consent screen, approve, and land back on the Accounts page with the mailbox added and a WarmupHub folder created.</p></div>
+  <h4>Common OAuth errors</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Error</th><th>Means</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>redirect_uri_mismatch</code> (Google)</td><td>The URL the app sent isn't registered, to the character.</td><td>Copy the two Google redirect URLs from Part 3 exactly — http vs https, trailing slash, port all matter.</td></tr>
+      <tr><td>"Access blocked: unverified app"</td><td>External app in Testing, and this account isn't a test user.</td><td>Add the account under OAuth consent screen → Test users, or use Internal, or click "Advanced → continue" for your own test accounts.</td></tr>
+      <tr><td><code>invalid_client</code></td><td>Wrong client ID/secret, or not in both env files.</td><td>Re-copy both values into backend/.env and frontend/.env.local; restart.</td></tr>
+      <tr><td><code>AADSTS50011</code> (Microsoft)</td><td>Reply URL mismatch.</td><td>Add both Microsoft redirect URLs under Authentication → Web.</td></tr>
+      <tr><td><code>AADSTS65001</code> / consent required</td><td>Permissions not granted for a company tenant.</td><td>An Entra admin grants consent, or use a personal account.</td></tr>
+      <tr><td>Connects, but can't send/receive later</td><td>Token works; the mailbox's SMTP/IMAP is blocked by policy.</td><td>Enable authenticated SMTP + IMAP for that mailbox (common on 365).</td></tr>
+      <tr><td>Google mailbox stops after ~a week</td><td>External "Testing" refresh tokens expire in 7 days.</td><td>Use Internal for webnco.xyz mailboxes, or reconnect, or publish the app.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 9 -->
+<section class="part">
+  <div class="part-head"><span class="pn">PART 9</span><h2>Reusing one app across many projects</h2></div>
+  <p>This is the webnco.xyz plan: set up each provider once, reuse everywhere. Here's how to do it cleanly.</p>
+  <div class="step"><h3><span class="step-n">1</span>One client, many redirect URLs</h3>
+    <p>A single Google OAuth client (and a single Azure app) can serve any number of apps — you just add each app's redirect URLs to the same client. For a second project at, say, <code>http://localhost:4000</code>, add its <code>/api/auth/callback/google</code> and <code>/api/mailbox-oauth/callback/google</code> to the existing Google client, and reuse the same client ID and secret. No new project needed.</p></div>
+  <div class="step"><h3><span class="step-n">2</span>Or one project, many clients</h3>
+    <p>Alternatively keep one Google Cloud project ("WebNCO Dev") and create a separate OAuth client per app inside it. This gives each app its own ID/secret (easier to rotate or revoke one app without affecting others) while sharing one consent screen and one verification status. Pick this if you want isolation between apps; pick step 1 if you want the fewest moving parts.</p></div>
+  <div class="step"><h3><span class="step-n">3</span>Keep a central credentials note</h3>
+    <p>Record, somewhere private (a password manager or secrets vault — never git), which client ID belongs to which app, its redirect URLs, and where the secret is stored. Future-you setting up the fourth app will thank you.</p></div>
+  <div class="tip"><span class="lbl">Rule of thumb</span>For a handful of personal dev apps, <b>one project + one client + many redirect URLs</b> is the least work. Move to one-client-per-app only when you want to revoke or rotate apps independently, or when you take one to production and need its own verified consent screen.</div>
+  <div class="foot">EmailWarm — OAuth &amp; Credentials Setup Guide. Redirect paths, scopes and env names were read from the app's source; console screens and menu names reflect the providers' current layouts and may shift over time. Trust the console wording and keep the intent of each step.</div>
+</section>
+
+</div>
+</body>
+</html>

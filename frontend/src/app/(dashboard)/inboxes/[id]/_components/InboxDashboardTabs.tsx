@@ -34,7 +34,7 @@ export function InboxDashboardTabs({ inboxId }: Props) {
       <nav
         role="tablist"
         aria-label="Inbox activity tabs"
-        className="mb-4 flex flex-wrap gap-1 rounded-full border border-slate-200 bg-white p-1 text-sm shadow-sm"
+        className="mb-4 flex flex-wrap gap-1 rounded-full border border-stone-200 bg-white p-1 text-sm shadow-sm"
       >
         {TABS.map((tab) => {
           const isActive = tab.id === active;
@@ -49,7 +49,7 @@ export function InboxDashboardTabs({ inboxId }: Props) {
               onClick={() => setActive(tab.id)}
               title={tab.hint}
               className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                isActive ? 'bg-brand-600 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100'
               }`}
             >
               {tab.label}

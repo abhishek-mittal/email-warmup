@@ -36,7 +36,7 @@ PID_FRONTEND="$RUNTIME/frontend.pid"
 LOG_BACKEND="$RUNTIME/backend.log"
 LOG_FRONTEND="$RUNTIME/frontend.log"
 
-PORT_BACKEND=3001
+PORT_BACKEND=4611
 PORT_FRONTEND=3000
 
 # ----- helpers ---------------------------------------------------------------
@@ -252,7 +252,7 @@ cmd_open_log_tui() {
     # Each -l runs the given command in its own column.
     # `--label` gives each column a colored header strip.
     command_str="multitail -j -s 2 \
-      -l 'tail -n 80 -F $LOG_BACKEND'  --label 'backend (3001)' \
+      -l 'tail -n 80 -F $LOG_BACKEND'  --label 'backend (4611)' \
       -l 'tail -n 80 -F $LOG_FRONTEND' --label 'frontend (3000)'"
   else
     # tail -F (capital) follows the file by name, so a `.bin/dev restart`

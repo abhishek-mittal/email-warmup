@@ -69,15 +69,15 @@ export function BulkInboxActions({ selectedIds, onCleared }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm shadow-sm">
-      <span className="font-medium text-indigo-900">
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm shadow-sm">
+      <span className="font-medium text-brand-900">
         {selectedIds.length} inbox{selectedIds.length === 1 ? '' : 'es'} selected
       </span>
 
       {/* Pause — single click when selection is small, two-click confirm when large */}
       {confirmPause && selectedIds.length > 10 ? (
         <>
-          <span className="text-xs text-indigo-700">
+          <span className="text-xs text-brand-700">
             Pause {selectedIds.length} inboxes? Pending send jobs will be drained.
           </span>
           <button
@@ -93,7 +93,7 @@ export function BulkInboxActions({ selectedIds, onCleared }: Props) {
             type="button"
             onClick={() => setConfirmPause(false)}
             disabled={busy !== null}
-            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -130,7 +130,7 @@ export function BulkInboxActions({ selectedIds, onCleared }: Props) {
         type="button"
         onClick={onCleared}
         disabled={busy !== null}
-        className="ml-auto rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        className="ml-auto rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
       >
         Clear selection
       </button>

@@ -71,8 +71,8 @@ export function PoolPageClient({ initial }: Props) {
     <div className="space-y-6">
       <header className="flex items-start justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-slate-900">Warming Pool</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-stone-900">Warming Pool</h1>
+          <p className="text-sm text-stone-600">
             Inboxes dedicated to peer-to-peer warmup traffic for your account.
             Click a row to see DNS health and how to fix issues.
           </p>
@@ -90,11 +90,11 @@ export function PoolPageClient({ initial }: Props) {
       </header>
 
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-          <p className="text-sm text-slate-600">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-stone-300 bg-white p-12 text-center">
+          <p className="text-sm text-stone-600">
             No pool inboxes yet. Add pool inboxes to enable warming.
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-stone-500">
             Use the “Add via CSV” or “Add via wizard” buttons (top right).
           </p>
         </div>

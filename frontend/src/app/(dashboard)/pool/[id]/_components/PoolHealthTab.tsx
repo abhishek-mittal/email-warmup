@@ -92,8 +92,8 @@ export function PoolHealthTab({ poolInbox }: Props) {
       </div>
 
       <section className="mt-6">
-        <h3 className="text-sm font-semibold text-slate-900">DNS records</h3>
-        <p className="mt-1 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-stone-900">DNS records</h3>
+        <p className="mt-1 text-xs text-stone-500">
           These are the records Gmail / Outlook / Yahoo check when deciding whether to deliver
           an email or file it as Spam.
         </p>
@@ -125,23 +125,23 @@ export function PoolHealthTab({ poolInbox }: Props) {
       ) : null}
 
       <section className="mt-6 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
             Active pairs
           </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">{poolInbox.activePairs}</p>
-          <p className="mt-1 text-[10px] leading-snug text-slate-500">
+          <p className="mt-1 text-xl font-semibold text-stone-900">{poolInbox.activePairs}</p>
+          <p className="mt-1 text-[10px] leading-snug text-stone-500">
             How many other inboxes this one is currently paired with for warmup traffic.
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
             Date added
           </p>
-          <p className="mt-1 text-xl font-semibold text-slate-900">
+          <p className="mt-1 text-xl font-semibold text-stone-900">
             {formatDate(poolInbox.createdAt)}
           </p>
-          <p className="mt-1 text-[10px] leading-snug text-slate-500">
+          <p className="mt-1 text-[10px] leading-snug text-stone-500">
             {poolInbox.lastUsedAt
               ? `Last used ${formatDate(poolInbox.lastUsedAt)}`
               : 'Never used yet.'}
@@ -150,7 +150,7 @@ export function PoolHealthTab({ poolInbox }: Props) {
       </section>
 
       {!analysis ? (
-        <p className="mt-6 text-sm text-slate-500">
+        <p className="mt-6 text-sm text-stone-500">
           {poolInbox.status === 'pending'
             ? 'Analysing… DNS health will appear here once the analysis job finishes.'
             : 'No analysis available yet. Click "Re-analyze" on the row to retry.'}

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { users } from '../db/schema';
+import { isDemoMode } from '../billing/billing.service';
 
 export interface UpsertUserResult {
   /** True when a new row was inserted, false when an existing row was updated. */
@@ -34,11 +35,14 @@ export class UserSyncService {
         .where(eq(users.id, input.id));
       return { created: false };
     }
+    // In demo mode every new account gets the demo plan's test credits and
+    // no trial clock; otherwise the normal 7-day trial.
+    const demo = isDemoMode() && !input.plan;
     await db.insert(users).values({
       id: input.id,
       email: input.email,
-      plan: input.plan ?? 'trial',
-      trialEndsAt: input.trialEndsAt ?? this.defaultTrialEnd(),
+      plan: demo ? 'demo' : (input.plan ?? 'trial'),
+      trialEndsAt: demo ? null : (input.trialEndsAt ?? this.defaultTrialEnd()),
     });
     return { created: true };
   }

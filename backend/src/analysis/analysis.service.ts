@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UnrecoverableError } from 'bullmq';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { inboxAnalysis, inboxes, poolInboxes } from '../db/schema';
-import { DnsService, DnsCheckOutcome, IssueCode } from '../monitor/dns.service';
+import { DnsService, DnsCheckOutcome, IssueCode, outcomeToBoolean } from '../monitor/dns.service';
+import { SmtpClientService } from '../inbox/smtp/smtp-client.service';
+import { ImapClientService, ImapNotConfiguredError } from '../inbox/imap/imap-client.service';
 
 export interface AnalysisJobData {
   inboxId?: string;
@@ -47,6 +49,8 @@ export class AnalysisService {
     @InjectPinoLogger(AnalysisService.name)
     private readonly logger: PinoLogger,
     private readonly dnsService: DnsService,
+    private readonly smtpClientService: SmtpClientService,
+    private readonly imapClientService: ImapClientService,
   ) {}
 
   /**
@@ -68,9 +72,13 @@ export class AnalysisService {
     );
 
     const domain = source.email.split('@')[1];
-    const selector = source.dkimSelector ?? 'default';
 
-    const outcomes = await this.runChecks(domain, selector, source.sendingIp);
+    const outcomes = await this.runChecks(
+      domain,
+      source.dkimSelector,
+      source.provider,
+      source.sendingIp,
+    );
 
     const healthScore = this.computeHealthScore(outcomes);
     const issues = this.computeIssues(outcomes);
@@ -92,23 +100,55 @@ export class AnalysisService {
       })
       .returning();
 
-    // Status is updated to 'active' unconditionally once analysis completes,
-    // regardless of DNS result — see T021 spec step 7 / acceptance criterion.
+    // DNS health alone says nothing about whether the stored credentials
+    // work. A batch-imported mailbox is only activated once it has actually
+    // authenticated for SMTP (and IMAP, where it must receive); otherwise the
+    // scheduler would queue mail for it every day and every send would fail.
+    // The update is conditional on 'pending' so a slow analysis can never
+    // re-activate a mailbox that was paused or removed in the meantime.
+    const transport = await this.verifyTransport(data);
     if (data.inboxId) {
-      await db.update(inboxes).set({ status: 'active' }).where(eq(inboxes.id, data.inboxId));
-      this.logger.info(
-        { inboxId: data.inboxId, fromStatus: 'pending', toStatus: 'active' },
-        'inbox status changed',
-      );
+      const changed = await db
+        .update(inboxes)
+        .set(
+          transport.ok
+            ? { status: 'active', statusReason: null }
+            : { status: 'error', statusReason: 'transport_failed' },
+        )
+        .where(and(eq(inboxes.id, data.inboxId), eq(inboxes.status, 'pending')))
+        .returning({ id: inboxes.id });
+      if (changed.length > 0) {
+        this.logger.info(
+          {
+            inboxId: data.inboxId,
+            fromStatus: 'pending',
+            toStatus: transport.ok ? 'active' : 'error',
+            reason: transport.reason,
+          },
+          'inbox status changed',
+        );
+      }
     } else if (data.poolInboxId) {
-      await db
+      const changed = await db
         .update(poolInboxes)
-        .set({ status: 'active' })
-        .where(eq(poolInboxes.id, data.poolInboxId));
-      this.logger.info(
-        { poolInboxId: data.poolInboxId, fromStatus: 'pending', toStatus: 'active' },
-        'pool inbox status changed',
-      );
+        .set(
+          transport.ok
+            ? { status: 'active', errorMessage: null, updatedAt: new Date() }
+            : { status: 'error', errorMessage: transport.reason, updatedAt: new Date() },
+        )
+        .where(and(eq(poolInboxes.id, data.poolInboxId), eq(poolInboxes.status, 'pending')))
+        .returning({ id: poolInboxes.id });
+      if (changed.length > 0) {
+        this.logger.info(
+          {
+            poolInboxId: data.poolInboxId,
+            fromStatus: 'pending',
+            toStatus: transport.ok ? 'active' : 'error',
+            reason: transport.reason,
+          },
+          'pool inbox status changed',
+        );
+      }
     }
 
     this.logger.info(
@@ -123,6 +163,32 @@ export class AnalysisService {
     );
 
     return inserted;
+  }
+
+  /**
+   * Proves the mailbox can do what warmup needs of it. A warmed inbox must
+   * be able to send; IMAP is required unless it is a custom inbox the owner
+   * connected as send-only. A pool inbox must do both — receiving and
+   * replying is its whole job.
+   */
+  private async verifyTransport(data: AnalysisJobData): Promise<{ ok: boolean; reason?: string }> {
+    try {
+      if (data.inboxId) {
+        await this.smtpClientService.verify(data.inboxId);
+        try {
+          await this.imapClientService.withInbox(data.inboxId, (client) => client.list());
+        } catch (err) {
+          if (!(err instanceof ImapNotConfiguredError)) throw err;
+        }
+      } else if (data.poolInboxId) {
+        await this.smtpClientService.verifyPoolInbox(data.poolInboxId);
+        await this.imapClientService.withPoolInbox(data.poolInboxId, (client) => client.list());
+      }
+      return { ok: true };
+    } catch (err) {
+      const reason = `Could not connect to the mailbox: ${(err as Error)?.message ?? 'unknown error'}`;
+      return { ok: false, reason: reason.slice(0, 300) };
+    }
   }
 
   async getLatestForInbox(inboxId: string): Promise<AnalysisRow | null> {
@@ -142,9 +208,12 @@ export class AnalysisService {
     return getLatestAnalysisForPoolInboxes(poolInboxIds);
   }
 
-  private async loadSource(
-    data: AnalysisJobData,
-  ): Promise<{ email: string; dkimSelector: string | null; sendingIp: string | null }> {
+  private async loadSource(data: AnalysisJobData): Promise<{
+    email: string;
+    provider: string;
+    dkimSelector: string | null;
+    sendingIp: string | null;
+  }> {
     if (data.inboxId) {
       const rows = await db.select().from(inboxes).where(eq(inboxes.id, data.inboxId)).limit(1);
       const inbox = rows[0];
@@ -153,6 +222,7 @@ export class AnalysisService {
       }
       return {
         email: inbox.email,
+        provider: inbox.provider,
         dkimSelector: inbox.dkimSelector,
         sendingIp: inbox.sendingIp,
       };
@@ -170,7 +240,12 @@ export class AnalysisService {
       }
       // pool_inboxes has no dkimSelector/sendingIp columns — default selector,
       // and rDNS is always skipped (no sending IP to reverse-resolve).
-      return { email: poolInbox.email, dkimSelector: null, sendingIp: null };
+      return {
+        email: poolInbox.email,
+        provider: poolInbox.provider,
+        dkimSelector: null,
+        sendingIp: null,
+      };
     }
 
     throw new UnrecoverableError('Neither inboxId nor poolInboxId was set on the analysis job');
@@ -178,12 +253,13 @@ export class AnalysisService {
 
   private async runChecks(
     domain: string,
-    selector: string,
+    selector: string | null,
+    provider: string,
     sendingIp: string | null,
   ): Promise<DnsFieldOutcomes> {
     const [spf, dkim, dmarc, mx] = await Promise.all([
       this.safeCheck(() => this.dnsService.checkSpf(domain)),
-      this.safeCheck(() => this.dnsService.checkDkim(domain, selector)),
+      this.safeCheck(() => this.dnsService.checkDkimForInbox(domain, selector, provider)),
       this.safeCheck(() => this.dnsService.checkDmarc(domain)),
       this.safeCheck(() => this.dnsService.checkMx(domain)),
     ]);
@@ -209,10 +285,7 @@ export class AnalysisService {
   }
 
   private toBoolean(outcome: DnsCheckOutcome | null): boolean | null {
-    if (!outcome) {
-      return null;
-    }
-    return outcome.status === 'pass';
+    return outcomeToBoolean(outcome);
   }
 
   private computeHealthScore(outcomes: DnsFieldOutcomes): number {
@@ -225,12 +298,18 @@ export class AnalysisService {
     return Math.min(score, 100);
   }
 
+  /**
+   * Issue codes for the dashboard: the specific code a check reported (a
+   * failure, or advice attached to a pass such as DMARC_NONE), falling back
+   * to the field's generic code. Unknown results produce no issue.
+   */
   private computeIssues(outcomes: DnsFieldOutcomes): IssueCode[] {
     const issues: IssueCode[] = [];
     for (const field of Object.keys(FIELD_POINTS) as (keyof DnsFieldOutcomes)[]) {
-      if (this.toBoolean(outcomes[field]) === false) {
-        issues.push(ISSUE_CODE_BY_FIELD[field]);
-      }
+      const outcome = outcomes[field];
+      if (!outcome) continue;
+      if (outcome.status === 'fail') issues.push(outcome.code ?? ISSUE_CODE_BY_FIELD[field]);
+      else if (outcome.status === 'pass' && outcome.code) issues.push(outcome.code);
     }
     return issues;
   }

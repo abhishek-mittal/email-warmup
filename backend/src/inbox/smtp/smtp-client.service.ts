@@ -5,16 +5,27 @@ import { decrypt } from '../../common/crypto';
 import { db } from '../../db';
 import { inboxes, poolInboxes } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { GoogleOAuthService } from '../oauth/google-oauth.service';
-import { MicrosoftOAuthService } from '../oauth/microsoft-oauth.service';
+import { MailCredentialService } from '../oauth/mail-credential.service';
+import { assertPort, resolvePublicHost } from '../../common/egress-policy';
+import {
+  MAIL_TIMEOUTS,
+  isOAuthProvider,
+  providerEndpoints,
+  smtpTlsOptions,
+} from '../provider-config';
+
+const SMTP_TIMEOUTS = {
+  connectionTimeout: MAIL_TIMEOUTS.connection,
+  greetingTimeout: MAIL_TIMEOUTS.greeting,
+  socketTimeout: MAIL_TIMEOUTS.socket,
+};
 
 @Injectable()
 export class SmtpClientService {
   constructor(
     @InjectPinoLogger(SmtpClientService.name)
     private readonly logger: PinoLogger,
-    private readonly googleOAuthService: GoogleOAuthService,
-    private readonly microsoftOAuthService: MicrosoftOAuthService,
+    private readonly credentials: MailCredentialService,
   ) {}
 
   async verify(inboxId: string): Promise<void> {
@@ -55,41 +66,43 @@ export class SmtpClientService {
     const inbox = rows[0];
     if (!inbox) throw new Error('Inbox not found');
 
-    if (inbox.provider === 'gmail' || inbox.provider === 'outlook') {
+    if (isOAuthProvider(inbox.provider)) {
+      const endpoint = providerEndpoints(inbox.provider).smtp;
+      const host = inbox.smtpHost || endpoint.host;
+      const port = inbox.smtpPort || endpoint.port;
       this.logger.debug(
-        {
-          inboxId,
-          provider: inbox.provider,
-          smtpHost: inbox.smtpHost ?? 'smtp.gmail.com',
-          smtpPort: inbox.smtpPort ?? 465,
-        },
+        { inboxId, provider: inbox.provider, smtpHost: host, smtpPort: port },
         'building OAuth2 SMTP transporter',
       );
+      // Refreshed on demand; never the raw stored token, which expires hourly.
+      const accessToken = await this.credentials.getInboxAccessToken(inboxId);
       return nodemailer.createTransport({
-        host: inbox.smtpHost || 'smtp.gmail.com',
-        port: inbox.smtpPort || 465,
-        secure: true,
+        host,
+        port,
+        ...smtpTlsOptions(port),
+        ...SMTP_TIMEOUTS,
         auth: {
           type: 'OAuth2',
           user: inbox.email,
-          accessToken: decrypt(inbox.oauthAccessToken!),
+          accessToken,
         },
       });
     }
 
+    const port = assertPort(inbox.smtpPort || 587);
     this.logger.debug(
-      {
-        inboxId,
-        provider: inbox.provider,
-        smtpHost: inbox.smtpHost,
-        smtpPort: inbox.smtpPort ?? 587,
-      },
+      { inboxId, provider: inbox.provider, smtpHost: inbox.smtpHost, smtpPort: port },
       'building custom SMTP transporter',
     );
+    // Customer-supplied host: connect to the address that passed the egress
+    // policy, keeping the name only for TLS.
+    const target = await resolvePublicHost(inbox.smtpHost!);
     return nodemailer.createTransport({
-      host: inbox.smtpHost!,
-      port: inbox.smtpPort || 587,
-      secure: (inbox.smtpPort || 587) === 465,
+      host: target.address,
+      port,
+      ...smtpTlsOptions(port),
+      ...(target.servername ? { tls: { servername: target.servername } } : {}),
+      ...SMTP_TIMEOUTS,
       auth: {
         user: inbox.smtpUser!,
         pass: decrypt(inbox.smtpPass!),
@@ -115,41 +128,14 @@ export class SmtpClientService {
 
     const creds = (poolInbox.encryptedCredentials ?? {}) as Record<string, unknown>;
 
-    if (poolInbox.provider === 'gmail' || poolInbox.provider === 'outlook') {
-      const clientId = creds.clientId as string | undefined;
-      const clientSecretEncrypted = creds.clientSecret as string | undefined;
-      const refreshTokenEncrypted = creds.refreshToken as string | undefined;
-      if (!clientId || !clientSecretEncrypted || !refreshTokenEncrypted) {
-        throw new Error(`OAuth credentials missing for pool inbox ${poolInboxId}`);
-      }
-
-      const clientSecret = decrypt(clientSecretEncrypted);
-      const refreshToken = decrypt(refreshTokenEncrypted);
-      const oauthService =
-        poolInbox.provider === 'gmail' ? this.googleOAuthService : this.microsoftOAuthService;
-      this.logger.debug(
-        { poolInboxId, provider: poolInbox.provider },
-        'OAuth token refresh triggered (pool inbox)',
-      );
-      let accessToken: string;
-      try {
-        const refreshed = await oauthService.refreshToken(refreshToken, {
-          clientId,
-          clientSecret,
-        });
-        accessToken = refreshed.access_token;
-      } catch (err: any) {
-        this.logger.error(
-          { poolInboxId, provider: poolInbox.provider, err: err?.message },
-          'OAuth token refresh failed (pool inbox)',
-        );
-        throw err;
-      }
-
+    if (isOAuthProvider(poolInbox.provider)) {
+      const endpoint = providerEndpoints(poolInbox.provider).smtp;
+      const accessToken = await this.credentials.getPoolInboxAccessToken(poolInboxId);
       return nodemailer.createTransport({
-        host: poolInbox.provider === 'gmail' ? 'smtp.gmail.com' : 'smtp.office365.com',
-        port: 465,
-        secure: true,
+        host: endpoint.host,
+        port: endpoint.port,
+        ...smtpTlsOptions(endpoint.port),
+        ...SMTP_TIMEOUTS,
         auth: {
           type: 'OAuth2',
           user: poolInbox.email,
@@ -159,7 +145,7 @@ export class SmtpClientService {
     }
 
     const smtpHost = creds.smtpHost as string | undefined;
-    const smtpPort = creds.smtpPort as number | undefined;
+    const smtpPort = Number(creds.smtpPort) || 587;
     const smtpUser = creds.smtpUser as string | undefined;
     const smtpPasswordEncrypted = creds.smtpPassword as string | undefined;
     if (!smtpHost || !smtpUser || !smtpPasswordEncrypted) {
@@ -167,18 +153,28 @@ export class SmtpClientService {
     }
 
     this.logger.debug(
-      { poolInboxId, provider: poolInbox.provider, smtpHost, smtpPort: smtpPort ?? 587 },
+      { poolInboxId, provider: poolInbox.provider, smtpHost, smtpPort },
       'building custom SMTP transporter (pool inbox)',
     );
+    const target = await resolvePublicHost(smtpHost);
+    assertPort(smtpPort);
     return nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort || 587,
-      secure: (smtpPort || 587) === 465,
+      host: target.address,
+      port: smtpPort,
+      ...smtpTlsOptions(smtpPort),
+      ...(target.servername ? { tls: { servername: target.servername } } : {}),
+      ...SMTP_TIMEOUTS,
       auth: {
         user: smtpUser,
         pass: decrypt(smtpPasswordEncrypted),
       },
     });
+  }
+
+  /** Verifies a pool inbox can authenticate for SMTP submission. */
+  async verifyPoolInbox(poolInboxId: string): Promise<void> {
+    const transporter = await this.getPoolInboxTransporter(poolInboxId);
+    await transporter.verify();
   }
 
   /**

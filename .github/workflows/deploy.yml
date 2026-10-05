@@ -1,19 +1,40 @@
 name: Deploy
 
+# NOT YET RUN. This workflow was rewritten against the repository (paths,
+# secrets, image layout) but has never executed against the cloud project.
+# The service account, workload identity pool, Secret Manager entries, the
+# `emailwarm-migrate` Cloud Run job, and network path from web to API named
+# below must be confirmed to exist before the first run. See
+# docs/07-market-readiness/verification/MR-06.md.
+#
+# Deploys only the commit that CI passed on main.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT: sunny-ship-236913
+  REGION: asia-south1
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
         with:
+          ref: ${{ env.SHA }}
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
           workload_identity_provider: projects/sunny-ship-236913/locations/global/workloadIdentityPools/github/providers/github
           service_account: github-deploy@sunny-ship-236913.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v2
@@ -22,32 +43,57 @@ jobs:
           registry: gcr.io
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
+
+      # The repository root is this project: images build from ./backend and ./frontend.
       - name: Build and push API
         run: |
-          docker build -t gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }} ./projects/email-warmup/backend
-          docker push gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }}
+          docker build -t "gcr.io/$PROJECT/emailwarm-api:$SHA" ./backend
+          docker push "gcr.io/$PROJECT/emailwarm-api:$SHA"
       - name: Build and push Web
         run: |
-          docker build -t gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }} ./projects/email-warmup/frontend
-          docker push gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }}
-      - name: Deploy API to Cloud Run
+          docker build -t "gcr.io/$PROJECT/emailwarm-web:$SHA" ./frontend
+          docker push "gcr.io/$PROJECT/emailwarm-web:$SHA"
+
+      # Schema first. A failed migration stops the deployment before any new
+      # code is serving. The job runs `node dist/src/db/migrate.js` from the
+      # API image with MIGRATION_DATABASE_URL.
+      - name: Apply database migrations
+        run: |
+          gcloud run jobs update emailwarm-migrate \
+            --image "gcr.io/$PROJECT/emailwarm-api:$SHA" \
+            --region "$REGION" \
+            --command node --args dist/src/db/migrate.js \
+            --set-secrets "MIGRATION_DATABASE_URL=emailwarm-migration-database-url:latest"
+          gcloud run jobs execute emailwarm-migrate --region "$REGION" --wait
+
+      # The API also runs the cron jobs and queue workers, so its CPU must stay
+      # allocated between requests and at least one instance must always run.
+      - name: Deploy API
         run: |
           gcloud run deploy emailwarm-api \
-            --image gcr.io/sunny-ship-236913/emailwarm-api:${{ github.sha }} \
-            --region asia-south1 \
+            --image "gcr.io/$PROJECT/emailwarm-api:$SHA" \
+            --region "$REGION" \
             --platform managed \
+            --port 4611 \
             --min-instances 1 \
+            --no-cpu-throttling \
             --no-allow-unauthenticated \
-            --set-secrets \"DATABASE_URL=emailwarm/database-url:latest,REDIS_URL=emailwarm/redis-url:latest,ENCRYPTION_KEY=emailwarm/encryption-key:latest,CLERK_SECRET_KEY=emailwarm/clerk-secret-key:latest,CLERK_WEBHOOK_SECRET=emailwarm/clerk-webhook-secret:latest,STRIPE_SECRET_KEY=emailwarm/stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=emailwarm/stripe-webhook-secret:latest,ANTHROPIC_API_KEY=emailwarm/anthropic-api-key:latest,GOOGLE_CLIENT_ID=emailwarm/google-client-id:latest,GOOGLE_CLIENT_SECRET=emailwarm/google-client-secret:latest,MICROSOFT_CLIENT_ID=emailwarm/microsoft-client-id:latest,MICROSOFT_CLIENT_SECRET=emailwarm/microsoft-client-secret:latest\"
-      - name: Deploy Web to Cloud Run
+            --set-env-vars "APP_URL=${{ vars.APP_URL }},PLATFORM_SMTP_HOST=${{ vars.PLATFORM_SMTP_HOST }},PLATFORM_SMTP_PORT=${{ vars.PLATFORM_SMTP_PORT }},PLATFORM_FROM_EMAIL=${{ vars.PLATFORM_FROM_EMAIL }},DEMO_MODE=${{ vars.DEMO_MODE }}" \
+            --set-secrets "DATABASE_URL=emailwarm-database-url:latest,REDIS_URL=emailwarm-redis-url:latest,ENCRYPTION_KEY=emailwarm-encryption-key:latest,BETTER_AUTH_SECRET=emailwarm-better-auth-secret:latest,INTERNAL_SECRET=emailwarm-internal-secret:latest,ANTHROPIC_API_KEY=emailwarm-anthropic-api-key:latest,GOOGLE_CLIENT_ID=emailwarm-google-client-id:latest,GOOGLE_CLIENT_SECRET=emailwarm-google-client-secret:latest,MICROSOFT_CLIENT_ID=emailwarm-microsoft-client-id:latest,MICROSOFT_CLIENT_SECRET=emailwarm-microsoft-client-secret:latest,PLATFORM_SMTP_USER=emailwarm-platform-smtp-user:latest,PLATFORM_SMTP_PASS=emailwarm-platform-smtp-pass:latest"
+
+      # The web app is the only public entry point. No NEXT_PUBLIC_* secret exists.
+      - name: Deploy Web
         run: |
           gcloud run deploy emailwarm-web \
-            --image gcr.io/sunny-ship-236913/emailwarm-web:${{ github.sha }} \
-            --region asia-south1 \
+            --image "gcr.io/$PROJECT/emailwarm-web:$SHA" \
+            --region "$REGION" \
             --platform managed \
+            --port 3000 \
             --min-instances 1 \
-            --no-allow-unauthenticated \
-            --set-secrets \"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=emailwarm/clerk-publishable-key:latest,CLERK_SECRET_KEY=emailwarm/clerk-secret-key:latest\"
-      - name: Run DB migration
+            --allow-unauthenticated \
+            --set-env-vars "BETTER_AUTH_URL=${{ vars.APP_URL }},APP_URL=${{ vars.APP_URL }},API_URL=${{ vars.API_URL }}" \
+            --set-secrets "DATABASE_URL=emailwarm-database-url:latest,BETTER_AUTH_SECRET=emailwarm-better-auth-secret:latest,INTERNAL_SECRET=emailwarm-internal-secret:latest,GOOGLE_CLIENT_ID=emailwarm-google-client-id:latest,GOOGLE_CLIENT_SECRET=emailwarm-google-client-secret:latest,MICROSOFT_CLIENT_ID=emailwarm-microsoft-client-id:latest,MICROSOFT_CLIENT_SECRET=emailwarm-microsoft-client-secret:latest"
+
+      - name: Smoke check
         run: |
-          gcloud run jobs execute emailwarm-migrate --region asia-south1
+          curl --fail --silent --show-error --max-time 20 "${{ vars.APP_URL }}/sign-in" > /dev/null

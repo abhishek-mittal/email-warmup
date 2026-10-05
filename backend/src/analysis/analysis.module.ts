@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { QueueModule } from '../queue/queue.module';
 import { MonitorModule } from '../monitor/monitor.module';
+import { InboxModule } from '../inbox/inbox.module';
 import { AnalysisService } from './analysis.service';
 import { InboxAnalysisProcessor } from './inbox-analysis.processor';
 
@@ -10,7 +11,7 @@ import { InboxAnalysisProcessor } from './inbox-analysis.processor';
 // ScoringModule, PlacementModule — so the 'inbox-analysis' queue registered in
 // QUEUE_NAMES is resolvable for InboxAnalysisProcessor's worker registration.
 @Module({
-  imports: [QueueModule, MonitorModule],
+  imports: [QueueModule, MonitorModule, InboxModule],
   providers: [AnalysisService, InboxAnalysisProcessor],
   exports: [AnalysisService],
 })

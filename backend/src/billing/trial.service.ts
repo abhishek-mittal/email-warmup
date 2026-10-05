@@ -68,7 +68,10 @@ export class TrialService {
   private async pauseAllInboxes(userId: string): Promise<void> {
     const userInboxes = await db.select().from(inboxes).where(eq(inboxes.userId, userId));
     for (const inbox of userInboxes) {
-      await db.update(inboxes).set({ status: 'paused' }).where(eq(inboxes.id, inbox.id));
+      await db
+        .update(inboxes)
+        .set({ status: 'paused', statusReason: 'plan' })
+        .where(eq(inboxes.id, inbox.id));
       await this.queueService.removeJobsForSender('warmup-send', inbox.id);
       await this.queueService.removeJobsForReceiver('warmup-receive', inbox.id);
     }

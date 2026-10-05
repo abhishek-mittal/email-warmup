@@ -5,9 +5,9 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { poolInboxes } from '@/db/schema';
+import { inboxes, poolInboxes, warmupSends } from '@/db/schema';
 import { encrypt } from '@/common/crypto';
 import { QueueService } from '@/queue/queue.service';
 import { BatchInboxEntry, validateBatchEntry } from '@/inbox/inbox.service';
@@ -192,6 +192,86 @@ export class PoolInboxService {
       .select(SAFE_POOL_INBOX_COLUMNS)
       .from(poolInboxes)
       .where(eq(poolInboxes.userId, userId));
+  }
+
+  /**
+   * The user's OWN inboxes that have consented to the shared pool, mapped
+   * into the same row shape as dedicated `pool_inboxes` so the Warming Pool
+   * page can list both side by side (`source: 'owned'` vs `'dedicated'`).
+   *
+   * Consent is the sole filter: `poolConsentAt IS NOT NULL`. Disconnecting
+   * an inbox nulls `poolConsentAt` (AccountService.stopAndEraseCredentials),
+   * so disconnected mailboxes drop off this list automatically.
+   *
+   * `activePairs` has no counter column on `inboxes` (unlike `pool_inboxes`),
+   * so it's computed here as the number of distinct partner inboxes with an
+   * in-flight (`status='planned'`) warmup send involving this inbox in
+   * either direction — the same "currently paired" meaning as
+   * `pool_inboxes.active_pairs`, which is itself an approximation.
+   */
+  async findConsentedOwnedForPool(userId: string) {
+    const rows = await db
+      .select({
+        id: inboxes.id,
+        userId: inboxes.userId,
+        email: inboxes.email,
+        provider: inboxes.provider,
+        status: inboxes.status,
+        statusReason: inboxes.statusReason,
+        enrolledInPoolAt: inboxes.enrolledInPoolAt,
+        createdAt: inboxes.createdAt,
+      })
+      .from(inboxes)
+      .where(and(eq(inboxes.userId, userId), isNotNull(inboxes.poolConsentAt)));
+
+    const ids = rows.map((row) => row.id);
+    const activePairsById = await this.activePairsForInboxes(ids);
+
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      email: row.email,
+      provider: row.provider,
+      status: row.status,
+      displayName: null as string | null,
+      lastUsedAt: row.enrolledInPoolAt,
+      activePairs: activePairsById.get(row.id) ?? 0,
+      errorMessage: row.statusReason,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+    }));
+  }
+
+  /**
+   * Distinct in-flight warmup partners per inbox, counted in one query
+   * across both send directions. Returns a map of inboxId → count; inboxes
+   * with no planned sends are simply absent (caller defaults to 0).
+   */
+  private async activePairsForInboxes(inboxIds: string[]): Promise<Map<string, number>> {
+    if (inboxIds.length === 0) return new Map();
+    const result = await db.execute(sql`
+      SELECT inbox_id, COUNT(DISTINCT partner_id)::int AS pairs
+      FROM (
+        SELECT ${warmupSends.senderInboxId} AS inbox_id,
+               ${warmupSends.receiverInboxId} AS partner_id
+        FROM ${warmupSends}
+        WHERE ${warmupSends.status} = 'planned'
+          AND ${warmupSends.receiverInboxId} IS NOT NULL
+          AND ${inArray(warmupSends.senderInboxId, inboxIds)}
+        UNION ALL
+        SELECT ${warmupSends.receiverInboxId} AS inbox_id,
+               ${warmupSends.senderInboxId} AS partner_id
+        FROM ${warmupSends}
+        WHERE ${warmupSends.status} = 'planned'
+          AND ${inArray(warmupSends.receiverInboxId, inboxIds)}
+      ) t
+      GROUP BY inbox_id
+    `);
+    const map = new Map<string, number>();
+    for (const row of result.rows as { inbox_id: string; pairs: number }[]) {
+      map.set(row.inbox_id, Number(row.pairs));
+    }
+    return map;
   }
 
   /**

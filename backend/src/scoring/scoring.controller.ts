@@ -9,6 +9,7 @@ const HIDDEN_BREAKDOWN_PLANS = new Set(['trial', 'starter']);
 
 export interface ScoreResponse {
   current: number | null;
+  completeness: number | null;
   trend: 'up' | 'down' | 'stable';
   breakdown: { dns: number; blacklist: number; placement: number } | null;
   history: { date: string; score: number }[];
@@ -40,7 +41,7 @@ export class ScoringController {
       .orderBy(asc(reputationScores.recordedAt));
 
     if (history.length === 0) {
-      return { current: null, trend: 'stable', breakdown: null, history: [] };
+      return { current: null, completeness: null, trend: 'stable', breakdown: null, history: [] };
     }
 
     const latest = history[history.length - 1];
@@ -54,6 +55,9 @@ export class ScoringController {
 
     return {
       current: latest.score,
+      // Share of the score that rests on real, recent measurements. Null for
+      // scores recorded before this was tracked.
+      completeness: latest.completeness,
       trend: (latest.trend as 'up' | 'down' | 'stable') ?? 'stable',
       breakdown,
       history: history.map((row) => ({

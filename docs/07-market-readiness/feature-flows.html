@@ -1,0 +1,494 @@
+<title>EmailWarm Data Flows</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: flow index on the left, one animated lane diagram on the right, step list and payload inspector under it. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --surface2:#eef0f4; --ink:#161b26; --muted:#5a6475; --line:#d9dde5;
+  --ember:#d94f0b; --ember-soft:#fde8dc;
+  --ok:#0f8a5f; --ok-soft:#dcf3e9; --warn:#b26a00; --warn-soft:#fbeccd; --bad:#c2273d; --bad-soft:#fbdde2;
+  --lane:#eceff4; --node:#ffffff; --code:#101522; --code-ink:#d6dcea; --code-key:#7fb4ff; --code-str:#9ee0b4; --code-num:#ffc27a;
+  --sans:'Schibsted Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e121a; --surface:#161b26; --surface2:#1d2330; --ink:#e8ecf4; --muted:#93a0b5; --line:#2a3242;
+  --ember:#ff7a3d; --ember-soft:#3a2216;
+  --ok:#3ccf91; --ok-soft:#10301f; --warn:#f0b04a; --warn-soft:#37290c; --bad:#ff6b80; --bad-soft:#3a1620;
+  --lane:#131824; --node:#1d2330; --code:#0a0d14; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e121a; --surface:#161b26; --surface2:#1d2330; --ink:#e8ecf4; --muted:#93a0b5; --line:#2a3242;
+  --ember:#ff7a3d; --ember-soft:#3a2216;
+  --ok:#3ccf91; --ok-soft:#10301f; --warn:#f0b04a; --warn-soft:#37290c; --bad:#ff6b80; --bad-soft:#3a1620;
+  --lane:#131824; --node:#1d2330; --code:#0a0d14; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:20px 56px}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font-size:clamp(24px,4vw,34px);line-height:1.15;margin:0 0 6px;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:20px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+p{margin:0}
+.lede{color:var(--muted);max-width:68ch}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:0;border-top:3px solid var(--ok);display:inline-block}
+.sw.ui{border-top-color:var(--warn)} .sw.todo{border-top:3px dashed var(--bad)}
+.shell{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px;align-items:start}
+nav.index{position:sticky;top:12px;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 24px);overflow:auto;padding-right:2px}
+.grp .eyebrow{display:block;margin:0 0 6px 2px}
+.flowbtn{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:6px;color:var(--ink);font:inherit;cursor:pointer}
+.flowbtn:hover{border-color:var(--muted)}
+.flowbtn[aria-current="true"]{border-color:var(--ember);box-shadow:inset 3px 0 0 var(--ember)}
+.flowbtn b{display:block;font-weight:600;font-size:14px}
+.mini{display:flex;height:4px;border-radius:2px;overflow:hidden;margin-top:7px;background:var(--line)}
+.mini i{display:block;height:100%}
+.mini .b{background:var(--ok)} .mini .u{background:var(--warn)} .mini .t{background:var(--bad)}
+main{min-width:0}
+.shell>*,.below>*,.panel{min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:500 11px/1 var(--mono);letter-spacing:.04em;padding:5px 8px;border-radius:99px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+.chip.ui{background:var(--warn-soft);color:var(--warn)} .chip.todo{background:var(--bad-soft);color:var(--bad)}
+.stage{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.stage svg{display:block}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 4px}
+button.c{font:500 13px var(--sans);background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button.c:hover{border-color:var(--muted)} button.c.primary{background:var(--ember);border-color:var(--ember);color:#fff}
+button:focus-visible,select:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+select.c{font:500 13px var(--sans);background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 8px}
+.progress{margin-left:auto;font:500 12px var(--mono);color:var(--muted)}
+.below{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;margin-top:14px}
+ol.steps{position:relative;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:430px;overflow:auto}
+ol.steps button{width:100%;text-align:left;display:grid;grid-template-columns:24px 1fr;gap:8px;background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 8px;color:var(--muted);font:inherit;font-size:13.5px;cursor:pointer}
+ol.steps button:hover{background:var(--surface2)}
+ol.steps li.done button{color:var(--ink)}
+ol.steps li.cur button{background:var(--ember-soft);border-color:var(--ember);color:var(--ink)}
+.num{font:500 11px var(--mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--surface2);color:var(--muted)}
+li.done .num{background:var(--ok);color:#fff} li.done.ui .num{background:var(--warn)} li.done.todo .num{background:var(--bad)}
+li.cur .num{background:var(--ember);color:#fff}
+.insp{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.insp .top{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.route{font:500 12px var(--mono);color:var(--muted)}
+pre.json{margin:0;background:var(--code);color:var(--code-ink);font:400 12.5px/1.6 var(--mono);padding:14px;overflow:auto;white-space:pre-wrap;word-break:break-word;min-height:120px}
+.k{color:var(--code-key)} .s{color:var(--code-str)} .n{color:var(--code-num)}
+.note{padding:11px 14px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--line)}
+.sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 18px}
+.sum div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.sum b{font:600 26px var(--sans);display:block;font-variant-numeric:tabular-nums}
+.sum small{color:var(--muted);font-size:12.5px}
+.sum .b b{color:var(--ok)} .sum .u b{color:var(--warn)} .sum .t b{color:var(--bad)}
+/* svg parts */
+.laneband{fill:var(--lane)} .lanelbl{font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;fill:var(--muted)}
+.node rect{fill:var(--node);stroke:var(--ok);stroke-width:1.5}
+.node.ui rect{stroke:var(--warn)} .node.todo rect{stroke:var(--bad);stroke-dasharray:5 3}
+.node.on rect{fill:var(--ember-soft);stroke:var(--ember);stroke-width:2.5}
+.node text{font:500 11.5px var(--sans);fill:var(--ink);text-anchor:middle}
+.node .sub{font:400 9.5px var(--mono);fill:var(--muted)}
+.edge{fill:none;stroke:var(--line);stroke-width:1.5}
+.edge.done{stroke:var(--ok);stroke-width:2} .edge.done.ui{stroke:var(--warn)} .edge.done.todo{stroke:var(--bad);stroke-dasharray:6 4}
+.edge.cur{stroke:var(--ember);stroke-width:3}
+.pk{fill:var(--ember);stroke:var(--surface);stroke-width:2.5}
+.pklbl{font:600 10.5px var(--sans);fill:#fff} .pkbox{fill:var(--ember)}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  nav.index{position:static;max-height:none;flex-direction:row;overflow-x:auto;padding-bottom:4px;max-width:100%}
+  .grp{min-width:230px}
+  .below{grid-template-columns:1fr}
+  .sum{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">EmailWarm · build review</p>
+      <h1>How data moves through every feature</h1>
+      <p class="lede">Pick a feature, press Play, and watch each request, job and row travel between the browser, the Next.js server, the NestJS API, the workers and the outside world. Payloads are realistic samples. Hop colour shows what exists today.</p>
+    </div>
+    <div class="legend" aria-label="Legend">
+      <span><i class="sw"></i>Built and tested in the backend</span>
+      <span><i class="sw ui"></i>Screen exists with sample data, backend call still to wire</span>
+      <span><i class="sw todo"></i>Nothing exists yet</span>
+    </div>
+  </header>
+  <section class="sum" id="sum" aria-label="Totals across all flows"></section>
+  <div class="shell">
+    <nav class="index" id="index" aria-label="Features"></nav>
+    <main>
+      <div class="panel">
+        <div class="head"><div><p class="eyebrow" id="fgroup"></p><h2 id="ftitle"></h2><p class="lede" id="fblurb"></p></div><div class="chips" id="fchips"></div></div>
+        <div class="stage" id="stage" role="img" aria-label="Lane diagram of the selected flow"></div>
+        <div class="controls">
+          <button class="c primary" id="play" type="button">Play</button>
+          <button class="c" id="prev" type="button" aria-label="Previous step">◀ Back</button>
+          <button class="c" id="next" type="button" aria-label="Next step">Next ▶</button>
+          <button class="c" id="restart" type="button">Restart</button>
+          <label class="eyebrow" for="speed">Speed</label>
+          <select class="c" id="speed"><option value="0.6">Slow</option><option value="1" selected>Normal</option><option value="2">Fast</option></select>
+          <span class="progress" id="progress"></span>
+        </div>
+        <div class="below">
+          <ol class="steps" id="steps" aria-label="Steps"></ol>
+          <div class="insp" aria-live="polite">
+            <div class="top"><div class="route" id="iroute"></div><b id="ilabel"></b></div>
+            <pre class="json" id="ijson"></pre>
+            <div class="note" id="inote"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+var LANES=['Browser','Next.js','NestJS API','Workers','Data stores','Outside'];
+var NW=122,NH=50,COLW=140,LANEH=96,X0=124,TOP=6;
+/* step: [from,to,label,status,data,note]; status b=built, u=screen only, t=missing */
+function N(id,lane,col,label,sub,st){return {id:id,lane:lane,col:col,label:label,sub:sub||'',st:st||'b'}}
+var FLOWS=[
+{id:'oauth',group:'Get a mailbox in',title:'Connect Gmail or Outlook',blurb:'One click to a consent screen and back. Tokens are encrypted before they touch the database, and the first health checks start on their own.',
+ nodes:[N('ui',0,0,'Connect form','/inboxes/connect'),N('px',1,1,'API proxy','/api/backend/*'),N('api',2,2,'Auth controller','NestJS'),N('st',4,3,'oauth_link_states','one-time state'),N('prov',5,4,'Google / Microsoft','consent screen'),N('cb',1,5,'Callback route','/api/mailbox-oauth'),N('inb',4,6,'inboxes','tokens encrypted'),N('q',3,7,'Check jobs','BullMQ')],
+ steps:[
+ ['ui','px','Click "Connect Gmail"','b',{request:'GET /api/backend/auth/gmail/connect',session:'better-auth cookie'},'The browser never talks to NestJS directly. The proxy only forwards an allow-listed set of paths.'],
+ ['px','api','Forward with the signed-in user','b',{userId:'u_8f3a21',header:'x-internal-secret'},'The API trusts the user id only because the shared internal secret matches.'],
+ ['api','st','Store a single-use state value','b',{state:'7c1e9b…',userId:'u_8f3a21',provider:'gmail',expiresAt:'now + 10 min'},'Protects against a forged callback.'],
+ ['api','prov','Send the browser to the consent screen','b',{url:'accounts.google.com/o/oauth2/v2/auth',scope:'mail.send imap',state:'7c1e9b…',redirect_uri:'/api/mailbox-oauth/callback/gmail'}],
+ ['prov','cb','User approves, provider redirects back','b',{code:'4/0AX4XfW…',state:'7c1e9b…'}],
+ ['cb','api','Hand the code to the API','b',{request:'POST /auth/mailbox/callback',code:'4/0AX4XfW…',state:'7c1e9b…'}],
+ ['api','st','Check and burn the state','b',{match:true,usedAt:'2026-10-03T09:41:07Z'},'A second use of the same state is rejected.'],
+ ['api','prov','Exchange the code for tokens','b',{access_token:'ya29.a0Af…',refresh_token:'1//0gQ…',expires_in:3599}],
+ ['api','inb','Encrypt and save the mailbox','b',{email:'sales@acme-outbound.io',access_token_enc:'v1:9c2f…:a41b…:77d0…',refresh_token_enc:'v1:3e8a…:c0d2…:51aa…',status:'connecting',pool_consent_at:null},'Non-negotiable 1: plaintext tokens are never stored. AES-256-GCM, key from Secret Manager.'],
+ ['api','q','Queue the first checks','b',{jobs:['dns-check','blacklist-check','inbox-analysis','token-refresh']}],
+ ['q','inb','Results land on the mailbox','b',{dns:{spf:'pass',dkim:'pass',dmarc:'none'},blacklist:'clear',analysis:'ready'}],
+ ['inb','ui','The new account appears in the list','b',{request:'GET /inboxes',row:{email:'sales@acme-outbound.io',status:'active',warmupDay:0}}]]},
+
+{id:'smtp',group:'Get a mailbox in',title:'Connect by SMTP or import a CSV',blurb:'For custom domains and bulk onboarding. Each row is checked for safety, tested against the real server, then stored encrypted.',
+ nodes:[N('ui',0,0,'Batch wizard','CSV upload'),N('px',1,1,'API proxy'),N('api',2,2,'Inbox controller','POST /inboxes/batch/csv'),N('csv',2,3,'CSV parser','row limits'),N('eg',2,4,'Egress policy','blocks private IPs'),N('srv',5,5,'Mail server','SMTP + IMAP login'),N('inb',4,6,'inboxes','encrypted'),N('q',3,7,'Check jobs')],
+ steps:[
+ ['ui','px','Upload the file','b',{file:'mailboxes.csv',rows:40}],
+ ['px','api','Forward the upload','b',{request:'POST /inboxes/batch/csv',contentType:'text/csv'}],
+ ['api','csv','Parse and validate every row','b',{valid:38,rejected:[{row:7,error:'smtp_port out of range'},{row:19,error:'duplicate email'}]},'Row and size limits stop an oversized import before any network call.'],
+ ['csv','eg','Check each host','b',{host:'smtp.acme-outbound.io',resolvesTo:'203.0.113.24',allowed:true},'Hosts resolving to private or loopback addresses are refused so the importer cannot be aimed at internal services.'],
+ ['eg','srv','Log in over SMTP and IMAP','b',{smtp:'250 AUTH ok',imap:'OK LOGIN completed'},'Wrong credentials fail here, with a plain message, instead of at the first warm-up send.'],
+ ['srv','inb','Encrypt the passwords and save','b',{email:'hello@acme-outbound.io',smtp_pass_enc:'v1:5b…',imap_pass_enc:'v1:19…',status:'connecting'}],
+ ['inb','q','Queue the first checks','b',{jobs:['dns-check','blacklist-check','inbox-analysis']}],
+ ['api','ui','Per-row result comes back','b',{created:38,failed:2,report:'downloadable list of failures'}]]},
+
+{id:'cycle',group:'Warm it',title:'One warm-up email, end to end',blurb:'A daily plan is reserved, each send is jittered and re-checked just before it fires, and the partner mailbox handles the open, reply and rescue.',
+ nodes:[N('cron',3,0,'Daily 05:00 UTC','scheduler'),N('ramp',2,1,'Ramp and slots','volume for today'),N('sch',4,2,'warmup_schedules','one row per day'),N('q',3,3,'warmup-send queue','delayed jobs'),N('w',3,4,'Send worker','re-checks rules'),N('ai',5,4,'Claude Haiku','message text'),N('led',4,5,'warmup_sends','ledger'),N('smtp',5,6,'Partner mailbox','SMTP delivery'),N('rx',3,7,'Receive worker','IMAP side'),N('sc',3,8,'score-compute')],
+ steps:[
+ ['cron','ramp','Plan today for each active inbox','b',{inbox:'sales@acme-outbound.io',warmupDay:12,speed:'medium',volume:11},'Safe on every replica: the per-day row and a row lock stop two replicas planning the same day.'],
+ ['ramp','sch','Spread the sends with jitter','b',{slots:['07:12','07:58','09:03','10:41'],jitter:'±15 to 30 min'},'Non-negotiable 4: no job fires at its exact scheduled time.'],
+ ['sch','q','Queue delayed jobs','b',{jobId:'send_5c9e…',delay:'2h 07m'}],
+ ['q','w','The job fires','b',{jobId:'send_5c9e…',attempt:1}],
+ ['w','sch','Check the rules right now','b',{status:'active',partnerSameDomain:false,sentToday:'4 / 11',safetyStop:null},'Not active, same-domain partner, over the limit or a safety stop all cancel the send.'],
+ ['w','ai','Ask for a short human message','b',{topic:'catching up after a trip',tone:'warm, 2 sentences'},'If the model is down, a built-in fallback line is used.'],
+ ['w','smtp','Send over SMTP','b',{from:'sales@acme-outbound.io',to:'maya@northwind-labs.com','Message-ID':'<8f2…@acme-outbound.io>','X-Warmup-Id':'wm_5c9e'}],
+ ['w','led','Record the send','b',{id:'wm_5c9e',state:'sent',sentAt:'09:03:41Z'}],
+ ['rx','smtp','Partner worker finds the message','b',{folder:'INBOX or Spam',header:'X-Warmup-Id: wm_5c9e'}],
+ ['rx','smtp','File it under WarmupHub, then open, reply or rescue','b',{action:'rescue_from_spam',label:'WarmupHub'},'Non-negotiable 6: warm-up mail never clutters a real inbox.'],
+ ['rx','led','Record what happened','b',{state:'delivered',opened:true,replied:false,rescued:true}],
+ ['led','sc','Feed the reputation score','b',{enqueue:'score-compute',inboxId:'inb_41'}]]},
+
+{id:'pool',group:'Warm it',title:'Join the warming pool',blurb:'Consent first, then enrolment, then pairing. Two mailboxes on the same domain are never matched.',
+ nodes:[N('ui',0,0,'Pool participation','inbox page'),N('px',1,1,'API proxy'),N('api',2,2,'Inbox controller','POST pool-consent'),N('inb',4,3,'inboxes','pool_consent_at'),N('pm',4,4,'pool_members','active'),N('pair',2,5,'Pairing service','picks partners'),N('live',2,6,'Live status','GET live-status')],
+ steps:[
+ ['ui','px','Tick the consent box and join','b',{request:'POST /inboxes/inb_41/pool-consent',consent:true}],
+ ['px','api','Forward','b',{userId:'u_8f3a21'}],
+ ['api','inb','Record consent with a time','b',{pool_consent_at:'2026-10-03T09:55:12Z'},'Non-negotiable 9: no enrolment without a non-null consent time.'],
+ ['api','pm','Enrol in the pool','b',{inboxId:'inb_41',active:true,domain:'acme-outbound.io'}],
+ ['pair','pm','Pick partners','b',{candidates:212,blockedSameDomain:3,blockedInactive:17,chosen:['maya@northwind-labs.com','dev@kestrel.io']},'Same-domain pairs are blocked in code, not by convention.'],
+ ['pair','live','Expose current pairings','b',{pairings:[{partner:'maya@…',sent:4,received:3}]}],
+ ['live','ui','The panel polls and updates','b',{request:'GET /pool-inboxes/inb_41/live-status',every:'10s',onError:'keeps polling'},'Polling resumes after a transient error.']]},
+
+{id:'score',group:'Warm it',title:'Reputation score and graduation',blurb:'A score only counts days that were actually measured. Graduation needs a measured week, a score of 80 and a clean placement test.',
+ nodes:[N('led',4,0,'warmup_sends','day totals'),N('sc',3,1,'score-compute','daily'),N('rep',4,2,'reputation_scores','score + completeness'),N('ws',2,3,'Graduation check','warmup.service'),N('pt',3,4,'Free placement test'),N('inb',4,5,'inboxes','graduated'),N('rr',3,6,'readiness-report'),N('nt',3,7,'notify'),N('ui',0,8,'Inbox page','score card')],
+ steps:[
+ ['led','sc','Gather the day','b',{sent:11,delivered:11,opened:7,replied:3,bounced:0,dnsKnown:true,blacklistKnown:true}],
+ ['sc','rep','Write score and completeness','b',{score:84,completeness:100},'A score resting on only DNS data gets low completeness and does not count as a measured day.'],
+ ['rep','ws','Check graduation rules','b',{measuredDays:7,averageScore:84,warmupDay:35,minDay:'ok'}],
+ ['ws','pt','No recent placement result? Start the free test','b',{reason:'no result in last 14 days'},'Graduation never starts a paid test or throws if seeds are unhealthy.'],
+ ['pt','ws','Result arrives','b',{spamPct:2,completedAt:'today'},'Spam must be 5% or less, and the result no older than 14 days.'],
+ ['ws','inb','Graduate','b',{status:'graduated',graduated_at:'2026-10-03T10:02:00Z',pool_members:'deactivated'}],
+ ['ws','rr','Build the readiness report','b',{enqueue:'readiness-report',inboxId:'inb_41'}],
+ ['ws','nt','Tell the owner','b',{type:'warmup_complete',channel:'email',payload:{warmupDay:35}}],
+ ['inb','ui','Score and status show on the inbox page','b',{request:'GET /inboxes/inb_41/score',score:84,status:'graduated'}]]},
+
+{id:'dns',group:'Watch it',title:'DNS and blocklist monitoring',blurb:'Checks tell "failed" apart from "could not check", and a blocklist that refuses a query is never read as proof the sender is listed.',
+ nodes:[N('ui',0,0,'Domains / Deliverability','sample data now','u'),N('api',2,1,'Activity controller','POST checks/dns'),N('q',3,2,'dns-check · blacklist-check'),N('dns',5,3,'DNS resolvers','SPF DKIM DMARC rDNS'),N('rbl',5,4,'Blocklist zones','verified zones only'),N('d1',4,5,'dns_checks'),N('d2',4,6,'blacklist_checks'),N('sc',3,7,'score-compute')],
+ steps:[
+ ['ui','api','Run checks now, or wait for the schedule','b',{request:'POST /inboxes/inb_41/checks/dns'}],
+ ['api','q','Queue the jobs','b',{jobs:['dns-check','blacklist-check']}],
+ ['q','dns','Resolve the records','b',{domain:'acme-outbound.io',spf:'v=spf1 include:_spf.google.com ~all',dkim:'selector google found',dmarc:'none',rdns:'unknown'}],
+ ['q','rbl','Ask each blocklist','b',{zone:'dbl.spamhaus.org',kind:'domain',answer:'NXDOMAIN',meaning:'not listed'},'Only currently operated zones with documented answer codes are enabled. The "100+ lists" claim is not met by this set.'],
+ ['q','d1','Save DNS result','b',{spf:'pass',dkim:'pass',dmarc:'missing',checkedAt:'today'}],
+ ['q','d2','Save blocklist result','b',{listed:[],refused:['zone x answered 127.255.255.254'],status:'clear'}],
+ ['d1','sc','Score reads the latest checks','b',{dnsSignal:'known',blacklistSignal:'known'}],
+ ['d1','ui','History feeds the screen','u',{request:'GET /inboxes/inb_41/dns-history',note:'domain-level roll-up page still uses sample data'},'The backend gives per-inbox history. The Sending domains table needs a roll-up endpoint across all of a user\'s domains.']]},
+
+{id:'safety',group:'Watch it',title:'Bounce spike pauses a mailbox',blurb:'The product stops itself when something looks wrong, tells the owner, and waits for a person to resume.',
+ nodes:[N('imap',5,0,'Bounce messages','DSN mail'),N('bm',3,1,'Bounce monitor'),N('dsn',3,2,'DSN parser','hard or soft'),N('ss',4,3,'safety_stops'),N('ic',2,4,'Inbox control','pause / resume'),N('q',3,5,'Remove queued sends'),N('nt',3,6,'notify'),N('ui',0,7,'Inbox page','banner + resume')],
+ steps:[
+ ['imap','bm','A bounce notice arrives','b',{from:'mailer-daemon@…',subject:'Delivery Status Notification (Failure)'}],
+ ['bm','dsn','Classify it','b',{status:'5.1.1',kind:'hard',recipient:'maya@northwind-labs.com'}],
+ ['dsn','ss','Bounce rate crosses the line','b',{window:'24h',bounceRate:'7.4%',reason:'bounce_spike'}],
+ ['ss','ic','Pause the inbox','b',{inbox:'inb_41',status:'paused',pausedBy:'safety'}],
+ ['ic','q','Cancel its queued jobs','b',{removed:['send_5c9e','send_61aa','send_7d03']},'Non-negotiable 3: nothing sends from a non-active inbox.'],
+ ['ic','nt','Alert the owner','b',{type:'inbox_paused',channel:'email'}],
+ ['ss','ui','Banner shows why','b',{request:'GET /inboxes/inb_41',status:'paused',stop:'bounce_spike'}],
+ ['ui','ic','Owner fixes the cause and resumes','b',{request:'POST /inboxes/inb_41/resume'}]]},
+
+{id:'place',group:'Watch it',title:'Inbox placement test',blurb:'Send a message to seed mailboxes at several providers and read back whether each landed in the inbox, spam or nowhere.',
+ nodes:[N('ui',0,0,'Placement page','sample data now','u'),N('px',1,1,'API proxy'),N('api',2,2,'Placement controller','quota + seeds'),N('q',3,3,'placement-test'),N('seed',4,4,'seed_inboxes','healthy only'),N('smtp',5,5,'Your SMTP','sends to seeds'),N('imap',5,6,'Seed IMAP','folder check'),N('res',4,7,'placement_results'),N('an',2,8,'Analyzer','spam %')],
+ steps:[
+ ['ui','px','Start a test','u',{request:'POST /inboxes/inb_41/placement-test'}],
+ ['px','api','Forward','b',{userId:'u_8f3a21'}],
+ ['api','seed','Check there are enough healthy seeds first','b',{healthy:24,needed:10,quotaThisMonth:'3 / 10'},'Refusing up front means a failed start never uses up the monthly allowance.'],
+ ['api','q','Create the test and queue it','b',{testId:'pt_903',status:'queued'}],
+ ['q','smtp','Send from the mailbox under test','b',{recipients:24,subject:'Quick note about Thursday'}],
+ ['q','imap','Look in each seed mailbox','b',{provider:'gmail',folder:'Spam',found:true}],
+ ['imap','res','Save where each copy landed','b',{gmail:{inbox:7,spam:1},outlook:{inbox:8,spam:0},missing:1}],
+ ['res','an','Summarise','b',{inboxPct:92,spamPct:4,missing:1}],
+ ['an','ui','Results page reads it','u',{request:'GET /inboxes/inb_41/placement-test/pt_903',note:'detail and batch screens use sample data'},'Detail and batch views need wiring to the test and history endpoints.']]},
+
+{id:'diag',group:'Watch it',title:'AI diagnostics',blurb:'Gather the evidence, ask the model to explain it, and store a plain-language report with fixes.',
+ nodes:[N('ui',0,0,'Diagnostics page','/inboxes/[id]/diagnostics'),N('px',1,1,'API proxy'),N('api',2,2,'Diagnostics controller'),N('q',3,3,'diagnostics job'),N('ev',4,4,'dns, blocklist, score, placement'),N('ai',5,5,'Claude analysis'),N('dg',4,6,'diagnostics')],
+ steps:[
+ ['ui','px','Request an analysis','b',{request:'POST /inboxes/inb_41/diagnostics/run'}],
+ ['px','api','Forward','b',{userId:'u_8f3a21'}],
+ ['api','q','Queue the job','b',{job:'diagnostics',inboxId:'inb_41'}],
+ ['q','ev','Collect the latest evidence','b',{dns:'dmarc missing',blacklist:'clear',score:61,placement:{spamPct:14}}],
+ ['q','ai','Ask for causes and fixes','b',{prompt:'evidence summary, no credentials, no message bodies'}],
+ ['ai','dg','Store the report','b',{severity:'warn',causes:['No DMARC record','Spam rate 14% at Outlook'],fixes:['Publish a p=none DMARC record','Slow the ramp for 5 days']}],
+ ['dg','ui','Report appears','b',{request:'GET /inboxes/inb_41/diagnostics'}]]},
+
+{id:'notify',group:'Watch it',title:'Alerts by email and Slack',blurb:'Other flows publish events. The notify worker renders and delivers them. Choosing which events go where is not stored yet.',
+ nodes:[N('ev',2,0,'Any flow','pause, graduate, blocklist'),N('q',3,1,'notify queue'),N('pr',4,2,'Preferences','not built','t'),N('wk',3,3,'Notify worker'),N('tpl',3,4,'Email + Slack templates'),N('out',5,5,'Email / Slack'),N('db',4,6,'notifications'),N('ui',0,7,'Settings: Notifications','sample toggles','u')],
+ steps:[
+ ['ev','q','Publish an event','b',{type:'blacklist_hit',userId:'u_8f3a21',inboxId:'inb_41',payload:{zone:'dbl.spamhaus.org'}}],
+ ['q','wk','Worker picks it up','b',{attempt:1}],
+ ['wk','pr','Which channels does this user want?','t',{lookup:'notification_preferences WHERE user_id',result:'table does not exist'},'Today every event goes to email. The Settings toggles only change the screen.'],
+ ['wk','tpl','Render the message','b',{email:'subject + html',slack:'blocks payload'}],
+ ['tpl','out','Deliver','b',{email:'queued to SMTP',slack:'POST webhook url'}],
+ ['wk','db','Keep a record','b',{notifications:{type:'blacklist_hit',sentAt:'now',channel:'email'}}],
+ ['ui','pr','Toggle saves a preference','u',{request:'PUT /notification-preferences',body:{event:'blacklist_hit',slack:true}},'Needs a table, two endpoints and a check inside the worker.']]},
+
+{id:'bill',group:'Run the business',title:'Demo credits and plan',blurb:'Billing is demo-level for now: fixed test credits, a trial clock, and Stripe test mode kept honest by verified webhooks.',
+ nodes:[N('ui',0,0,'Plan and credits','/billing'),N('px',1,1,'API proxy'),N('api',2,2,'Billing controller','status, checkout, portal'),N('us',4,3,'users','plan, trial end'),N('st',5,4,'Stripe test mode'),N('wh',2,5,'Webhook','signature checked'),N('ev',4,6,'stripe_events','idempotent'),N('cr',3,7,'Trial expiry cron','hourly')],
+ steps:[
+ ['ui','px','Open the page','b',{request:'GET /billing/status'}],
+ ['px','api','Forward','b',{userId:'u_8f3a21'}],
+ ['api','us','Read plan and trial','b',{plan:'trial',trialEndsAt:'2026-10-14',demoCredits:'fixed test credits'}],
+ ['api','st','Start checkout','b',{request:'POST /billing/checkout',plan:'growth',mode:'test'}],
+ ['st','wh','Stripe calls us back','b',{type:'checkout.session.completed',signature:'t=…,v1=…'}],
+ ['wh','ev','Verify the signature, then record the event id','b',{verified:true,eventId:'evt_1Q…',seenBefore:false},'Non-negotiable 2: an unsigned or replayed event is never processed twice.'],
+ ['wh','us','Apply the plan','b',{plan:'growth'}],
+ ['cr','us','Expire old trials','b',{expired:2,notify:'trial_expired'}]]},
+
+{id:'acct',group:'Run the business',title:'Export or delete my account',blurb:'Export everything, or disconnect and erase. Stripe is not yet told when an account is deleted.',
+ nodes:[N('ui',0,0,'Account page'),N('px',1,1,'API proxy'),N('api',2,2,'Account controller'),N('db',4,3,'All user tables'),N('q',3,4,'Remove jobs'),N('oa',5,5,'Provider tokens','revoke'),N('sp',5,6,'Stripe','not informed','t')],
+ steps:[
+ ['ui','px','Download my data','b',{request:'GET /account/export'}],
+ ['api','db','Collect inboxes, history and scores','b',{files:['inboxes.json','sends.csv','scores.csv'],credentials:'never included'}],
+ ['db','ui','File downloads','b',{bytes:'1.2 MB'}],
+ ['ui','px','Delete my account','b',{request:'POST /account/delete',confirm:'typed email'}],
+ ['api','q','Stop all jobs for my inboxes','b',{removed:48}],
+ ['api','oa','Revoke mailbox access','b',{revoked:3}],
+ ['api','db','Anonymise and remove','b',{decision:'anonymise on delete'}],
+ ['api','sp','Cancel the subscription','t',{call:'subscriptions.cancel',status:'not called today'},'A deleted user could keep being billed. This is a known gap.']]},
+
+{id:'team',group:'Not built yet',title:'Team members and roles',blurb:'The screens exist with sample people. Nothing stores a second person yet, and every request still assumes one user per account.',
+ nodes:[N('ui',0,0,'Members page','sample data','u'),N('px',1,1,'API proxy'),N('api',2,2,'Members controller','missing','t'),N('iv',4,3,'invites','missing','t'),N('nt',3,4,'notify','built'),N('acc',0,5,'Invite page','sample data','u'),N('mb',4,6,'members + roles','missing','t'),N('gd',2,7,'Role guard','missing','t')],
+ steps:[
+ ['ui','px','Invite riley@acme-outbound.io as Member','u',{request:'POST /workspaces/w_1/invites',body:{email:'riley@acme-outbound.io',role:'member'}}],
+ ['px','api','Forward','t',{needs:'workspace id on every request'}],
+ ['api','iv','Create a signed, expiring invite','t',{token:'inv_9d2…',expiresAt:'+7 days',role:'member'}],
+ ['api','nt','Email the link','b',{template:'invite'},'The email machinery already exists.'],
+ ['nt','acc','Riley opens the link','u',{url:'/invite?token=inv_9d2…'}],
+ ['acc','mb','Accept creates a membership','t',{userId:'u_77c1',workspaceId:'w_1',role:'member'}],
+ ['mb','gd','Every request is checked against the role','t',{rule:'viewer cannot connect or remove mailboxes'}],
+ ['gd','ui','Pages hide what the role cannot do','t',{matrix:'owner, admin, member, viewer'},'This is the largest missing piece. It changes the data model, not just a screen.']]},
+
+{id:'keys',group:'Not built yet',title:'API keys',blurb:'For agencies and automation tools. The secret is shown once and only its hash is stored.',
+ nodes:[N('ui',0,0,'API keys page','sample data','u'),N('api',2,1,'Keys controller','missing','t'),N('db',4,2,'api_keys','hash only','t'),N('cli',5,3,'Customer script'),N('gd',2,4,'Key guard','missing','t'),N('rl',4,5,'Redis rate limit','missing','t'),N('dom',2,6,'Existing endpoints')],
+ steps:[
+ ['ui','api','Create a key','u',{request:'POST /api-keys',body:{name:'Zapier production',scopes:['inboxes:read']}}],
+ ['api','db','Store only the hash and a prefix','t',{prefix:'ew_live_8f3a',sha256:'e3b0c4…',scopes:['inboxes:read']},'The full secret is returned once and never stored.'],
+ ['api','ui','Show the secret one time','t',{secret:'ew_live_8f3a…(shown once)'}],
+ ['cli','gd','Call the API with the key','t',{header:'Authorization: Bearer ew_live_8f3a…'}],
+ ['gd','db','Look up the hash, check scope','t',{match:true,scope:'inboxes:read',lastUsed:'updated'}],
+ ['gd','rl','Count the request','t',{limit:'600/min',remaining:597}],
+ ['gd','dom','Pass the request through','t',{userId:'u_8f3a21'}]]},
+
+{id:'hooks',group:'Not built yet',title:'Webhooks',blurb:'Push events such as "mailbox paused" to a customer endpoint, signed, retried, and switched off when it keeps failing.',
+ nodes:[N('ev',2,0,'Any flow','emits events'),N('ob',4,1,'webhook_outbox','missing','t'),N('wk',3,2,'Delivery worker','missing','t'),N('ep',5,3,'Customer endpoint'),N('rt',3,4,'Retry with backoff','missing','t'),N('st',4,5,'endpoint state','missing','t'),N('ui',0,6,'Webhooks page','sample data','u')],
+ steps:[
+ ['ev','ob','Write the event in the same transaction','t',{type:'mailbox.paused',inboxId:'inb_41',id:'evt_77'},'Writing to an outbox in the same transaction means an event is never lost if the app crashes.'],
+ ['ob','wk','Worker takes the oldest pending event','t',{attempt:1}],
+ ['wk','ep','Send, signed with the endpoint secret','t',{header:'X-EmailWarm-Signature: t=…,v1=hmac_sha256'}],
+ ['ep','rt','Endpoint answers 500','t',{status:500}],
+ ['rt','wk','Retry after 1m, 5m, 30m, 2h','t',{attempt:2}],
+ ['wk','st','After repeated failures, switch it off','t',{state:'auto-disabled',failures:12}],
+ ['st','ui','Page shows the state and last success','u',{state:'Auto-disabled',lastOk:'3 days ago'}]]},
+
+{id:'audit',group:'Not built yet',title:'Audit log',blurb:'A record of who changed what. It only works once there is more than one user.',
+ nodes:[N('ui',0,0,'Any action','pause, connect, delete'),N('api',2,1,'Controllers'),N('ix',2,2,'Audit interceptor','missing','t'),N('db',4,3,'audit_events','missing','t'),N('pg',2,4,'Audit endpoint','missing','t'),N('au',0,5,'Audit page','sample data','u')],
+ steps:[
+ ['ui','api','A user pauses a mailbox','b',{request:'POST /inboxes/inb_41/pause'}],
+ ['api','ix','After success, report the change','t',{actor:'u_8f3a21',action:'warmup.paused',entity:'inb_41'}],
+ ['ix','db','Append a row, never edited','t',{id:'au_220',when:'2026-10-03T09:41:00Z',detail:'status: warming → paused'}],
+ ['au','pg','Open the log, search or export','u',{request:'GET /audit?q=paused&limit=50'}],
+ ['pg','db','Read newest first','t',{rows:50}],
+ ['db','au','Rows appear','u',{csv:'POST /audit/export'}]]}
+];
+
+var $=function(i){return document.getElementById(i)};
+var cur=null, idx=-1, playing=false, timer=null, raf=null, nodeEls={}, edgeEls=[], pk=null;
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function cls(s){return s==='b'?'':(s==='u'?'ui':'todo')}
+function count(f){var c={b:0,u:0,t:0};f.steps.forEach(function(s){c[s[3]]++});return c}
+
+function buildSummary(){
+  var tot={b:0,u:0,t:0};FLOWS.forEach(function(f){var c=count(f);tot.b+=c.b;tot.u+=c.u;tot.t+=c.t});
+  $('sum').innerHTML='<div class="b"><b>'+tot.b+'</b><small>hops built and tested in the backend</small></div><div class="u"><b>'+tot.u+'</b><small>hops with a screen but sample data</small></div><div class="t"><b>'+tot.t+'</b><small>hops with nothing behind them yet</small></div>';
+}
+function buildIndex(){
+  var groups=[];FLOWS.forEach(function(f){if(groups.indexOf(f.group)<0)groups.push(f.group)});
+  var h='';groups.forEach(function(g){
+    h+='<div class="grp"><span class="eyebrow">'+g+'</span>';
+    FLOWS.filter(function(f){return f.group===g}).forEach(function(f){
+      var c=count(f),n=f.steps.length;
+      h+='<button class="flowbtn" type="button" data-id="'+f.id+'"><b>'+f.title+'</b><span class="mini"><i class="b" style="width:'+c.b/n*100+'%"></i><i class="u" style="width:'+c.u/n*100+'%"></i><i class="t" style="width:'+c.t/n*100+'%"></i></span></button>';
+    });h+='</div>';
+  });
+  $('index').innerHTML=h;
+  $('index').addEventListener('click',function(e){var b=e.target.closest('.flowbtn');if(b)select(b.getAttribute('data-id'),true)});
+}
+function pos(n){return {x:X0+n.col*COLW+NW/2,y:TOP+n.lane*LANEH+LANEH/2}}
+function clip(c,o){var dx=o.x-c.x,dy=o.y-c.y;if(!dx&&!dy)return c;var t=Math.min(dx?(NW/2+3)/Math.abs(dx):1e9,dy?(NH/2+3)/Math.abs(dy):1e9);return {x:c.x+dx*t,y:c.y+dy*t}}
+function pathFor(a,b,flip){
+  var pa=pos(a),pb=pos(b),off=flip?7:-7;
+  var horiz=Math.abs(pb.x-pa.x)>=Math.abs(pb.y-pa.y);
+  var s=clip(pa,pb),e=clip(pb,pa);
+  if(horiz){s.y+=off;e.y+=off;var mx=(s.x+e.x)/2;return 'M'+s.x+' '+s.y+' C'+mx+' '+s.y+' '+mx+' '+e.y+' '+e.x+' '+e.y}
+  s.x+=off;e.x+=off;var my=(s.y+e.y)/2;return 'M'+s.x+' '+s.y+' C'+s.x+' '+my+' '+e.x+' '+my+' '+e.x+' '+e.y;
+}
+function svgEl(t,a){var e=document.createElementNS('http://www.w3.org/2000/svg',t);for(var k in a)e.setAttribute(k,a[k]);return e}
+function drawStage(){
+  var maxc=0;cur.nodes.forEach(function(n){if(n.col>maxc)maxc=n.col});
+  var W=X0+(maxc+1)*COLW+24,H=TOP*2+LANES.length*LANEH;
+  var s=svgEl('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H});
+  var defs=svgEl('defs',{});
+  [['ok','--ok'],['warn','--warn'],['bad','--bad'],['ember','--ember'],['line','--line']].forEach(function(m){
+    var mk=svgEl('marker',{id:'ar-'+m[0],viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'});
+    var p=svgEl('path',{d:'M0 0 L10 5 L0 10 z'});p.style.fill='var('+m[1]+')';mk.appendChild(p);defs.appendChild(mk)});
+  s.appendChild(defs);
+  LANES.forEach(function(l,i){
+    s.appendChild(svgEl('rect',{x:0,y:TOP+i*LANEH+4,width:W,height:LANEH-8,rx:6,'class':'laneband'}));
+    var t=svgEl('text',{x:12,y:TOP+i*LANEH+LANEH/2+3,'class':'lanelbl'});t.textContent=l;s.appendChild(t);
+  });
+  var byId={};cur.nodes.forEach(function(n){byId[n.id]=n});
+  edgeEls=[];var gE=svgEl('g',{});
+  cur.steps.forEach(function(st,i){
+    var a=byId[st[0]],b=byId[st[1]];
+    var flip=a.col>b.col||(a.col===b.col&&a.lane>b.lane);
+    var p=svgEl('path',{d:pathFor(a,b,flip),'class':'edge','marker-end':'url(#ar-line)'});
+    gE.appendChild(p);edgeEls.push(p);
+  });
+  s.appendChild(gE);
+  nodeEls={};var gN=svgEl('g',{});
+  cur.nodes.forEach(function(n){
+    var p=pos(n),g=svgEl('g',{'class':'node '+cls(n.st),transform:'translate('+(p.x-NW/2)+' '+(p.y-NH/2)+')'});
+    g.appendChild(svgEl('rect',{width:NW,height:NH,rx:8}));
+    var t=svgEl('text',{x:NW/2,y:n.sub?20:29});t.textContent=n.label.length>19?n.label.slice(0,18)+'…':n.label;g.appendChild(t);
+    if(n.sub){var u=svgEl('text',{x:NW/2,y:35,'class':'sub'});u.textContent=n.sub.length>22?n.sub.slice(0,21)+'…':n.sub;g.appendChild(u)}
+    var ti=svgEl('title',{});ti.textContent=n.label+(n.sub?' — '+n.sub:'');g.appendChild(ti);
+    gN.appendChild(g);nodeEls[n.id]=g;
+  });
+  s.appendChild(gN);
+  pk=svgEl('g',{visibility:'hidden'});
+  pk.appendChild(svgEl('circle',{r:7,'class':'pk'}));
+  s.appendChild(pk);
+  $('stage').innerHTML='';$('stage').appendChild(s);
+}
+function syntax(o){
+  var j=JSON.stringify(o,null,2).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return j.replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+(?:\.\d+)?|true|false|null)\b/g,function(m,str,colon,lit){
+    if(str)return colon?'<span class="k">'+str+'</span>'+colon:'<span class="s">'+str+'</span>';
+    return '<span class="n">'+lit+'</span>'});
+}
+function renderSteps(){
+  var h='';cur.steps.forEach(function(s,i){
+    h+='<li data-i="'+i+'" class="'+cls(s[3])+'"><button type="button"><span class="num">'+(i+1)+'</span><span>'+s[2]+'</span></button></li>'});
+  $('steps').innerHTML=h;
+}
+function paint(){
+  var lis=$('steps').children;
+  for(var i=0;i<lis.length;i++){lis[i].classList.toggle('done',i<=idx);lis[i].classList.toggle('cur',i===idx)}
+  edgeEls.forEach(function(p,i){
+    var s=cur.steps[i],c=cls(s[3]);
+    p.setAttribute('class','edge'+(i<idx?' done '+c:'')+(i===idx?' cur':''));
+    p.setAttribute('marker-end','url(#ar-'+(i===idx?'ember':(i<idx?(s[3]==='b'?'ok':s[3]==='u'?'warn':'bad'):'line'))+')');
+  });
+  Object.keys(nodeEls).forEach(function(k){nodeEls[k].classList.remove('on')});
+  if(idx>=0){var s=cur.steps[idx];nodeEls[s[0]].classList.add('on');nodeEls[s[1]].classList.add('on')}
+  var n=cur.steps.length;
+  $('progress').textContent=idx<0?'Ready · '+n+' steps':'Step '+(idx+1)+' of '+n;
+  if(idx<0){$('iroute').textContent='';$('ilabel').textContent='Press Play to follow the data';$('ijson').innerHTML='';$('inote').textContent='Sample values only. Hop colour: green is built, amber has a screen with sample data, red is missing.';return}
+  var st=cur.steps[idx],byId={};cur.nodes.forEach(function(x){byId[x.id]=x});
+  $('iroute').textContent=byId[st[0]].label+'  →  '+byId[st[1]].label;
+  $('ilabel').innerHTML=st[2]+' <span class="chip '+cls(st[3])+'">'+(st[3]==='b'?'BUILT':st[3]==='u'?'SCREEN ONLY':'MISSING')+'</span>';
+  $('ijson').innerHTML=syntax(st[4]);
+  $('inote').textContent=st[5]||'';
+  var li=$('steps').children[idx],box=$('steps');if(li){var top=li.offsetTop-box.offsetTop,bot=top+li.offsetHeight;if(top<box.scrollTop)box.scrollTop=top-4;else if(bot>box.scrollTop+box.clientHeight)box.scrollTop=bot-box.clientHeight+4}
+}
+function stopAnim(){if(raf){cancelAnimationFrame(raf);raf=null}if(timer){clearTimeout(timer);timer=null}if(pk)pk.setAttribute('visibility','hidden')}
+function goTo(i,animate){
+  stopAnim();idx=i;paint();
+  if(i<0||!animate)return;
+  if(reduce)return afterStep();
+  var p=edgeEls[i],len=p.getTotalLength(),dur=900/speed(),t0=null;
+  pk.setAttribute('visibility','visible');
+  function tick(ts){
+    if(t0===null)t0=ts;var k=Math.min(1,(ts-t0)/dur),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    var pt=p.getPointAtLength(len*e);pk.setAttribute('transform','translate('+pt.x+' '+pt.y+')');
+    if(k<1){raf=requestAnimationFrame(tick)}else{raf=null;pk.setAttribute('visibility','hidden');afterStep()}
+  }
+  raf=requestAnimationFrame(tick);
+}
+function afterStep(){
+  if(playing){
+    if(idx>=cur.steps.length-1){setPlay(false);return}
+    timer=setTimeout(function(){goTo(idx+1,true)},700/speed());
+  }
+}
+function speed(){return parseFloat($('speed').value)||1}
+function setPlay(on){playing=on;$('play').textContent=on?'Pause':(idx>=cur.steps.length-1?'Replay':'Play')}
+function select(id,scroll){
+  cur=FLOWS.filter(function(f){return f.id===id})[0];stopAnim();playing=false;idx=-1;
+  Array.prototype.forEach.call(document.querySelectorAll('.flowbtn'),function(b){b.setAttribute('aria-current',b.getAttribute('data-id')===id?'true':'false')});
+  $('fgroup').textContent=cur.group;$('ftitle').textContent=cur.title;$('fblurb').textContent=cur.blurb;
+  var c=count(cur);$('fchips').innerHTML=(c.b?'<span class="chip">'+c.b+' built</span>':'')+(c.u?'<span class="chip ui">'+c.u+' screen only</span>':'')+(c.t?'<span class="chip todo">'+c.t+' missing</span>':'');
+  drawStage();renderSteps();setPlay(false);paint();
+  try{history.replaceState(null,'','#'+id)}catch(e){}
+}
+$('play').addEventListener('click',function(){
+  if(playing){setPlay(false);stopAnim();return}
+  if(idx>=cur.steps.length-1)idx=-1;
+  setPlay(true);goTo(idx+1,true);
+});
+$('next').addEventListener('click',function(){setPlay(false);if(idx<cur.steps.length-1)goTo(idx+1,true)});
+$('prev').addEventListener('click',function(){setPlay(false);if(idx>=0)goTo(idx-1,false)});
+$('restart').addEventListener('click',function(){setPlay(false);goTo(-1,false)});
+$('steps').addEventListener('click',function(e){var li=e.target.closest('li');if(li){setPlay(false);goTo(parseInt(li.getAttribute('data-i'),10),true)}});
+document.addEventListener('keydown',function(e){
+  if(e.target.closest&&e.target.closest('select,input,textarea'))return;
+  if(e.key==='ArrowRight'){$('next').click()}else if(e.key==='ArrowLeft'){$('prev').click()}
+});
+buildSummary();buildIndex();
+var start=(location.hash||'').slice(1);
+select(FLOWS.some(function(f){return f.id===start})?start:'cycle');
+})();
+</script>

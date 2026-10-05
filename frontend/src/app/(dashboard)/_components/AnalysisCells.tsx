@@ -30,12 +30,12 @@ export function IssuesCell({
 }) {
   if (!analysis) {
     if (status === 'pending') {
-      return <span className="text-slate-400">Analysing…</span>;
+      return <span className="text-stone-400">Analysing…</span>;
     }
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-stone-400">—</span>;
   }
   if (analysis.issues.length === 0) {
     return <span className="text-emerald-600">All clear</span>;
   }
-  return <span className="text-slate-600">{analysis.issues.join(', ')}</span>;
+  return <span className="text-stone-600">{analysis.issues.join(', ')}</span>;
 }

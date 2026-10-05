@@ -3,6 +3,9 @@ import { WarmupService } from './warmup.service';
 import { RampService } from './ramp.service';
 import { PairingService } from './pairing.service';
 import { QueueService } from '../queue/queue.service';
+import { WarmupLedgerService } from './warmup-ledger.service';
+import { SafetyStopService } from '../safety/safety-stop.service';
+import { PlacementService } from '../placement/placement.service';
 import { db } from '../db';
 
 jest.mock('../db', () => ({
@@ -12,24 +15,17 @@ jest.mock('../db', () => ({
   },
 }));
 
+// Scheduling, pause and resume are covered against a real database in
+// test/integration/scheduler.int-spec.ts; this file covers graduation rules.
 describe('WarmupService', () => {
   let service: WarmupService;
   let rampService: { getDailyVolume: jest.Mock };
-  let pairingService: { selectPartner: jest.Mock };
+  let pairingService: { selectPartners: jest.Mock };
+  const placementService = { runGraduationTest: jest.fn() };
   let queueService: {
     add: jest.Mock;
     removeJobsForSender: jest.Mock;
     removeJobsForReceiver: jest.Mock;
-  };
-
-  const activeInbox = {
-    id: 'inbox-1',
-    userId: 'user-1',
-    email: 'sender@sendco.com',
-    provider: 'gmail',
-    warmupSpeed: 'medium',
-    warmupDay: 6,
-    status: 'active',
   };
 
   function mockSelectChain(returnValue: any[]) {
@@ -60,12 +56,7 @@ describe('WarmupService', () => {
     jest.resetAllMocks();
 
     rampService = { getDailyVolume: jest.fn().mockReturnValue(10) };
-    pairingService = {
-      selectPartner: jest.fn().mockResolvedValue({
-        source: 'shared',
-        poolMember: { id: 'pool-partner-1', inboxId: 'inbox-2' },
-      }),
-    };
+    pairingService = { selectPartners: jest.fn().mockResolvedValue([]) };
     queueService = {
       add: jest.fn().mockResolvedValue(undefined),
       removeJobsForSender: jest.fn().mockResolvedValue(undefined),
@@ -78,207 +69,16 @@ describe('WarmupService', () => {
         { provide: RampService, useValue: rampService },
         { provide: PairingService, useValue: pairingService },
         { provide: QueueService, useValue: queueService },
+        { provide: WarmupLedgerService, useValue: { recover: jest.fn() } },
+        { provide: PlacementService, useValue: placementService },
+        {
+          provide: SafetyStopService,
+          useValue: { activeStopFor: jest.fn().mockResolvedValue(null) },
+        },
       ],
     }).compile();
 
     service = module.get<WarmupService>(WarmupService);
-  });
-
-  describe('scheduleAllInboxes', () => {
-    it('queries only active inboxes', async () => {
-      mockSelectChain([]);
-
-      await service.scheduleAllInboxes();
-
-      expect(db.select).toHaveBeenCalled();
-    });
-
-    it('enqueues exactly `volume` warmup-send jobs for an active inbox on day 7 medium speed (10 jobs)', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(10);
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      expect(sendJobs).toHaveLength(10);
-    });
-
-    it('calls selectPartner once per send slot with the sender userId, and passes the winner as partnerId', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(3);
-
-      await service.scheduleAllInboxes();
-
-      expect(pairingService.selectPartner).toHaveBeenCalledTimes(3);
-      expect(pairingService.selectPartner).toHaveBeenCalledWith('inbox-1', 'user-1');
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      for (const [, payload] of sendJobs) {
-        expect(payload.partnerSource).toBe('shared');
-        expect(payload.partnerId).toBe('pool-partner-1');
-        expect(payload.senderInboxId).toBe('inbox-1');
-      }
-    });
-
-    it('skips a send slot (no orphaned job) when selectPartner returns null for that slot', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(3);
-      pairingService.selectPartner
-        .mockResolvedValueOnce({
-          source: 'shared',
-          poolMember: { id: 'pool-1', inboxId: 'inbox-2' },
-        })
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          source: 'shared',
-          poolMember: { id: 'pool-3', inboxId: 'inbox-4' },
-        });
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      expect(sendJobs).toHaveLength(2);
-    });
-
-    it('increments pool_inboxes.active_pairs when the winning partner is from the private pool', async () => {
-      mockSelectChain([activeInbox]);
-      const setMock = jest.fn().mockReturnThis();
-      (db.update as jest.Mock).mockReturnValue({
-        set: setMock,
-        where: jest.fn().mockResolvedValue(undefined),
-      });
-      rampService.getDailyVolume.mockReturnValue(1);
-      pairingService.selectPartner.mockResolvedValueOnce({
-        source: 'private',
-        poolInbox: { id: 'pi-1', activePairs: 2 },
-      });
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      expect(sendJobs).toHaveLength(1);
-      expect(sendJobs[0][1].partnerSource).toBe('private');
-      expect(sendJobs[0][1].partnerId).toBe('pi-1');
-
-      // active_pairs increment uses the sql`... + 1` pattern, asserted via the
-      // update().set() call shape rather than the raw SQL fragment.
-      expect(setMock).toHaveBeenCalledWith(
-        expect.objectContaining({ activePairs: expect.anything() }),
-      );
-    });
-
-    it('does not touch pool_inboxes.active_pairs when the winning partner is from the shared pool', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(1);
-      pairingService.selectPartner.mockResolvedValueOnce({
-        source: 'shared',
-        poolMember: { id: 'pool-1', inboxId: 'inbox-2' },
-      });
-
-      await service.scheduleAllInboxes();
-
-      // Only the inboxes.warmup_day update should have happened — no extra
-      // db.update call for pool_inboxes.
-      expect((db.update as jest.Mock).mock.calls.length).toBe(1);
-    });
-
-    it('applies non-zero jitter to every job (no job fires at the exact base slot time)', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(10);
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      const windowStart = new Date();
-      windowStart.setUTCHours(8, 0, 0, 0);
-      const spacingMs = (600 / 10) * 60_000; // 60 min spacing at volume=10
-
-      sendJobs.forEach(([, payload], i) => {
-        const baseSlotMs = windowStart.getTime() + i * spacingMs;
-        const scheduledMs = new Date(payload.scheduledAt).getTime();
-        expect(scheduledMs).not.toBe(baseSlotMs);
-        expect(Math.abs(scheduledMs - baseSlotMs)).toBeLessThanOrEqual(15 * 60_000 + 1000);
-      });
-    });
-
-    it('never schedules two jobs from the same sender within 8 minutes of each other', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(10);
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls
-        .filter(([name]) => name === 'warmup-send')
-        .map(([, payload]) => new Date(payload.scheduledAt).getTime())
-        .sort((a, b) => a - b);
-
-      for (let i = 1; i < sendJobs.length; i++) {
-        const gapMinutes = (sendJobs[i] - sendJobs[i - 1]) / 60_000;
-        expect(gapMinutes).toBeGreaterThanOrEqual(8);
-      }
-    });
-
-    it('increments warmup_day by 1 after scheduling', async () => {
-      mockSelectChain([activeInbox]);
-      const setMock = jest.fn().mockReturnThis();
-      (db.update as jest.Mock).mockReturnValue({
-        set: setMock,
-        where: jest.fn().mockResolvedValue(undefined),
-      });
-      rampService.getDailyVolume.mockReturnValue(2);
-
-      await service.scheduleAllInboxes();
-
-      expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ warmupDay: 7 }));
-    });
-
-    it('handles a high-volume day by extending past the 18:00 window rather than dropping sends', async () => {
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(100); // medium day 35 — spacing forced to 8 min, window extends past 18:00
-
-      await service.scheduleAllInboxes();
-
-      const sendJobs = queueService.add.mock.calls.filter(([name]) => name === 'warmup-send');
-      // Ramp volume is never reduced to fit the clock window.
-      expect(sendJobs).toHaveLength(100);
-    });
-
-    it('does not query graduation criteria for an inbox far below its minimum graduation day (perf optimization)', async () => {
-      // warmupDay 6 -> nextWarmupDay 7, medium minimum is 35 — nowhere close.
-      mockSelectChain([activeInbox]);
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(1);
-
-      await service.scheduleAllInboxes();
-
-      // Only the initial active-inboxes query should have happened — no extra
-      // db.select calls for reputation_scores/placement_tests/graduation re-fetch.
-      expect((db.select as jest.Mock).mock.calls.length).toBe(1);
-    });
-
-    it('calls checkGraduation for an inbox whose incremented warmup_day reaches its minimum graduation day', async () => {
-      const almostGraduatedInbox = { ...activeInbox, warmupDay: 34 }; // medium min=35, nextWarmupDay=35
-      mockSelectChain([almostGraduatedInbox]); // active inboxes query
-      mockUpdate();
-      rampService.getDailyVolume.mockReturnValue(1);
-      // checkGraduation's internal queries: inbox lookup, reputation_scores, placement_tests
-      mockSelectChain([{ ...almostGraduatedInbox, warmupDay: 35 }]);
-      mockSelectChain([]); // no reputation_scores rows -> fails closed, returns false
-
-      await service.scheduleAllInboxes();
-
-      // 1 (active inboxes) + 1 (graduation's inbox lookup) + 1 (reputation_scores) = 3.
-      // placement_tests is only queried if the reputation criterion passes, so it's
-      // short-circuited here.
-      expect((db.select as jest.Mock).mock.calls.length).toBe(3);
-    });
   });
 
   describe('checkGraduation', () => {
@@ -290,62 +90,142 @@ describe('WarmupService', () => {
       status: 'active',
     };
 
-    it('returns false (does not graduate) when there are zero reputation_scores rows (missing data fails the criterion)', async () => {
-      mockSelectChain([inboxRow]); // load inbox
-      mockSelectChain([]); // reputation_scores rows (empty -> avg undefined)
-      mockSelectChain([]); // placement_tests rows (empty -> skip criterion)
+    /** `days` score rows, one per day going back from today, each well measured. */
+    const measuredDays = (days: number, score = 80, completeness = 100) =>
+      Array.from({ length: days }, (_, i) => ({
+        score,
+        completeness,
+        recordedAt: new Date(Date.now() - i * 24 * 60 * 60 * 1000),
+      }));
+    const goodPlacement = { spamPct: 2, completedAt: new Date(), status: 'complete' };
 
-      const result = await service.checkGraduation('inbox-1');
+    it('does not graduate with no scores at all', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain([]);
 
-      expect(result).toBe(false);
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
       expect(queueService.add).not.toHaveBeenCalled();
     });
 
-    it('returns true when warmupDay meets minimum, avg score >= 70, and no placement test exists yet (skipped)', async () => {
+    it('one good score — or many on one day — is not an observation window', async () => {
       mockSelectChain([inboxRow]);
-      mockSelectChain([{ score: 75 }, { score: 80 }]); // avg 77.5
-      mockSelectChain([]); // no placement test -> skip criterion
-      mockUpdate();
+      mockSelectChain([
+        { score: 95, completeness: 100, recordedAt: new Date() },
+        { score: 96, completeness: 100, recordedAt: new Date() },
+        { score: 97, completeness: 100, recordedAt: new Date() },
+      ]);
+      mockSelectChain([goodPlacement]);
 
-      const result = await service.checkGraduation('inbox-1');
-
-      expect(result).toBe(true);
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
     });
 
-    it('returns false when avg reputation score is below 70 even if other criteria pass', async () => {
+    it('six measured days are not enough', async () => {
       mockSelectChain([inboxRow]);
-      mockSelectChain([{ score: 50 }, { score: 60 }]); // avg 55
-      mockSelectChain([]);
+      mockSelectChain(measuredDays(6));
 
-      const result = await service.checkGraduation('inbox-1');
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+    });
 
-      expect(result).toBe(false);
+    it('seven measured days are enough', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7));
+      mockSelectChain([goodPlacement]);
+      mockUpdate();
+
+      expect(await service.checkGraduation('inbox-1')).toBe(true);
+    });
+
+    it('a high score resting on too little measurement does not count as a measured day', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 100, 30)); // only DNS was known
+
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+    });
+
+    it('scores recorded before completeness was tracked do not count', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 100, null as any));
+
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+    });
+
+    it('does not graduate when the average is below 80', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 79));
+      mockSelectChain([goodPlacement]);
+
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+    });
+
+    it('graduates at an average of exactly 80', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 80));
+      mockSelectChain([goodPlacement]);
+      mockUpdate();
+
+      expect(await service.checkGraduation('inbox-1')).toBe(true);
     });
 
     it('returns false when warmupDay is below the minimum for the speed', async () => {
       mockSelectChain([{ ...inboxRow, warmupDay: 10 }]);
-      mockSelectChain([{ score: 90 }]);
-      mockSelectChain([]);
+      mockSelectChain(measuredDays(7));
+      mockSelectChain([goodPlacement]);
 
-      const result = await service.checkGraduation('inbox-1');
-
-      expect(result).toBe(false);
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
     });
 
-    it('returns false when the latest placement test spamPct exceeds 5%, even with good score/day', async () => {
+    it.each([
+      ['no placement test has produced a result', []],
+      [
+        'the latest test is older than 14 days',
+        [{ spamPct: 0, completedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }],
+      ],
+      ['the latest result has no spam figure', [{ spamPct: null, completedAt: new Date() }]],
+      ['spam is above 5%', [{ spamPct: 8, completedAt: new Date() }]],
+    ])('does not graduate when %s', async (_name, placementRows) => {
       mockSelectChain([inboxRow]);
-      mockSelectChain([{ score: 90 }]);
-      mockSelectChain([{ spamPct: 8, completedAt: new Date() }]);
+      mockSelectChain(measuredDays(7, 95));
+      mockSelectChain(placementRows as any[]);
 
-      const result = await service.checkGraduation('inbox-1');
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+    });
 
-      expect(result).toBe(false);
+    it('starts the free graduation test when only the placement result is missing', async () => {
+      placementService.runGraduationTest.mockResolvedValue({ testId: 't-1' });
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 95));
+      mockSelectChain([]);
+
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+      expect(placementService.runGraduationTest).toHaveBeenCalledWith('inbox-1', 'user-1');
+    });
+
+    it('does not start a graduation test while the score criterion is unmet, and survives one that cannot start', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(3, 95));
+      expect(await service.checkGraduation('inbox-1')).toBe(false);
+      expect(placementService.runGraduationTest).not.toHaveBeenCalled();
+
+      placementService.runGraduationTest.mockRejectedValue(new Error('no healthy seeds'));
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7, 95));
+      mockSelectChain([]);
+      await expect(service.checkGraduation('inbox-1')).resolves.toBe(false);
+    });
+
+    it('graduates with spam at exactly 5%', async () => {
+      mockSelectChain([inboxRow]);
+      mockSelectChain(measuredDays(7));
+      mockSelectChain([{ spamPct: 5, completedAt: new Date() }]);
+      mockUpdate();
+
+      expect(await service.checkGraduation('inbox-1')).toBe(true);
     });
 
     it('graduates: sets status=graduated + graduated_at, deactivates pool membership, enqueues score-compute, readiness-report, and notify', async () => {
       mockSelectChain([inboxRow]);
-      mockSelectChain([{ score: 75 }]);
-      mockSelectChain([{ spamPct: 2, completedAt: new Date() }]);
+      mockSelectChain(measuredDays(7, 85));
+      mockSelectChain([goodPlacement]);
       const setMock = jest.fn().mockReturnThis();
       (db.update as jest.Mock).mockReturnValue({
         set: setMock,
@@ -379,36 +259,6 @@ describe('WarmupService', () => {
           payload: { warmupDay: 35 },
         },
       ]);
-    });
-  });
-
-  describe('pauseInbox', () => {
-    it("sets the inbox status to 'paused'", async () => {
-      const setMock = jest.fn().mockReturnThis();
-      (db.update as jest.Mock).mockReturnValue({
-        set: setMock,
-        where: jest.fn().mockResolvedValue(undefined),
-      });
-
-      await service.pauseInbox('inbox-1');
-
-      expect(setMock).toHaveBeenCalledWith({ status: 'paused' });
-    });
-
-    it('drains pending warmup-send jobs where this inbox is the sender', async () => {
-      mockUpdate();
-
-      await service.pauseInbox('inbox-1');
-
-      expect(queueService.removeJobsForSender).toHaveBeenCalledWith('warmup-send', 'inbox-1');
-    });
-
-    it('drains pending warmup-receive jobs where this inbox is the receiver', async () => {
-      mockUpdate();
-
-      await service.pauseInbox('inbox-1');
-
-      expect(queueService.removeJobsForReceiver).toHaveBeenCalledWith('warmup-receive', 'inbox-1');
     });
   });
 });

@@ -48,7 +48,7 @@ over HTTP at `NEXT_PUBLIC_API_URL/internal/user-sync`.
 
 **HTTP approach (simpler, no shared Drizzle pool):**
 ```
-hook fires → POST http://localhost:3001/internal/user-sync
+hook fires → POST http://localhost:4611/internal/user-sync
   body: { id, email }
   header: X-Internal-Secret: <INTERNAL_SECRET env var>
 ```

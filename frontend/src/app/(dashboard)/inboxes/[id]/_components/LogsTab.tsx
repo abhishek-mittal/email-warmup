@@ -128,14 +128,14 @@ export function LogsTab({ inboxId }: Props) {
             { value: 'all', label: 'All' },
           ]}
         />
-        <label className="inline-flex flex-1 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs">
-          <span className="text-slate-500">Search:</span>
+        <label className="inline-flex flex-1 items-center gap-2 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs">
+          <span className="text-stone-500">Search:</span>
           <input
             type="text"
             placeholder="free-text grep across all fields"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-slate-700 placeholder:text-slate-400 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-stone-700 placeholder:text-stone-400 focus:outline-none"
           />
         </label>
         <button
@@ -143,7 +143,7 @@ export function LogsTab({ inboxId }: Props) {
           onClick={() => setFollow((f) => !f)}
           aria-pressed={follow}
           className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-            follow ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            follow ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
           }`}
         >
           <PulseDot state={follow ? 'live' : 'idle'} size="xs" label={follow ? 'Following' : 'Paused'} />
@@ -161,18 +161,18 @@ export function LogsTab({ inboxId }: Props) {
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
       ) : null}
 
-      <div className="max-h-[640px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-200 shadow-inner">
+      <div className="max-h-[640px] overflow-y-auto rounded-2xl border border-stone-800 bg-stone-950 p-4 font-mono text-xs leading-relaxed text-stone-200 shadow-inner">
         {loading && lines.length === 0 ? (
-          <p className="text-slate-500">Loading logs…</p>
+          <p className="text-stone-500">Loading logs…</p>
         ) : lines.length === 0 ? (
-          <p className="text-slate-500">No log entries found for this inbox. Logs appear here once warmup activity starts.</p>
+          <p className="text-stone-500">No log entries found for this inbox. Logs appear here once warmup activity starts.</p>
         ) : (
           lines.map((line, idx) => <LogLineRow key={`${line.time}-${idx}`} line={line} />)
         )}
         <div ref={linesEndRef} />
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-stone-500">
         Showing {lines.length} of the most recent matching lines
         {follow ? ` · updating every ${FOLLOW_INTERVAL_MS / 1000}s` : ''}.
       </p>
@@ -195,12 +195,12 @@ interface FilterSelectProps<T extends string> {
 
 function FilterSelect<T extends string>({ label, value, onChange, options }: FilterSelectProps<T>) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs">
-      <span className="text-slate-500">{label}:</span>
+    <label className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs">
+      <span className="text-stone-500">{label}:</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="bg-transparent text-slate-700 focus:outline-none"
+        className="bg-transparent text-stone-700 focus:outline-none"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -213,7 +213,7 @@ function FilterSelect<T extends string>({ label, value, onChange, options }: Fil
 }
 
 const LEVEL_COLOR: Record<string, string> = {
-  trace: 'text-slate-500',
+  trace: 'text-stone-500',
   debug: 'text-sky-400',
   info: 'text-emerald-400',
   warn: 'text-amber-400',
@@ -222,7 +222,7 @@ const LEVEL_COLOR: Record<string, string> = {
 };
 
 function LogLineRow({ line }: { line: LogLine }) {
-  const colorClass = LEVEL_COLOR[line.levelName] ?? 'text-slate-300';
+  const colorClass = LEVEL_COLOR[line.levelName] ?? 'text-stone-300';
   const fields: string[] = [];
   for (const [key, val] of Object.entries(line)) {
     if (['level', 'levelName', 'time', 'context', 'msg', 'pid', 'hostname'].includes(key)) continue;
@@ -233,10 +233,10 @@ function LogLineRow({ line }: { line: LogLine }) {
   return (
     <div className="whitespace-pre-wrap break-words">
       <span className={`mr-2 inline-block w-12 font-semibold ${colorClass}`}>[{line.levelName.toUpperCase()}]</span>
-      <span className="mr-2 text-slate-500">[{formatTimeShort(line.time)}]</span>
-      {line.context ? <span className="mr-2 text-slate-400">[{line.context}]</span> : null}
-      <span className="text-slate-200">{line.msg}</span>
-      {fields.length > 0 ? <span className="ml-2 text-slate-500">{`{${fields.join(' ')}}`}</span> : null}
+      <span className="mr-2 text-stone-500">[{formatTimeShort(line.time)}]</span>
+      {line.context ? <span className="mr-2 text-stone-400">[{line.context}]</span> : null}
+      <span className="text-stone-200">{line.msg}</span>
+      {fields.length > 0 ? <span className="ml-2 text-stone-500">{`{${fields.join(' ')}}`}</span> : null}
     </div>
   );
 }

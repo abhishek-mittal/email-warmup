@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EmailWarm — Live Data Flow</title>
+<style>
+:root {
+  /* Dark "living blueprint" theme */
+  --bg: #0a0e1a;
+  --bg-1: #0d1322;
+  --bg-2: #131a2c;
+  --surface: #161d33;
+  --border: #1f2940;
+  --border-strong: #2c3a5e;
+  --ink: #e8ecf3;
+  --ink-2: #a5b1c4;
+  --ink-3: #6b7891;
+  --ink-4: #44506b;
+  --accent: #2dd4bf;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --accent-glow: rgba(45, 212, 191, 0.55);
+  --violet: #a78bfa;
+  --violet-soft: rgba(167, 139, 250, 0.18);
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.18);
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.18);
+  --indigo: #818cf8;
+  --indigo-soft: rgba(129, 140, 248, 0.18);
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25);
+  --shadow-glow: 0 0 0 1px var(--accent), 0 0 24px var(--accent-glow);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-lg: 12px;
+  --mono: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Subtle grid backdrop */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(45, 212, 191, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 212, 191, 0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Layout ===== */
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  background: var(--bg-1);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+  padding: 18px 16px 0;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.brand-mark {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent) 0%, #14b8a6 100%);
+  color: #042f2e;
+  font-weight: 800; font-size: 14px;
+  display: grid; place-items: center;
+  font-family: var(--mono);
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-weight: 700;
+  margin: 14px 0 8px;
+}
+
+.scenarios {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.scenario {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+  transition: all 140ms;
+}
+.scenario:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+.scenario.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.scenario-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-4);
+  background: var(--bg-2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  min-width: 22px;
+  text-align: center;
+}
+.scenario.active .scenario-num {
+  background: var(--accent);
+  color: #042f2e;
+}
+
+.controls {
+  display: flex; gap: 6px;
+  margin-top: 14px;
+}
+.ctrl-btn {
+  flex: 1;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all 140ms;
+}
+.ctrl-btn:hover { border-color: var(--accent); color: var(--ink); }
+.ctrl-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+.legend {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.legend-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.legend-item .dot {
+  width: 18px; height: 2px;
+  border-radius: 2px;
+}
+.legend-item .dot.req { background: var(--accent); }
+.legend-item .dot.write { background: var(--violet); }
+.legend-item .dot.ext { background: var(--amber); }
+.legend-item .dot.err { background: var(--red); }
+.legend-item .dot.delay { background: var(--indigo); }
+
+.stats {
+  margin-top: auto;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--ink-3);
+  display: grid; gap: 6px;
+}
+.stat-row { display: flex; justify-content: space-between; }
+.stat-row b { color: var(--ink); font-weight: 600; }
+
+/* ===== Canvas ===== */
+.canvas-wrap {
+  position: relative;
+  overflow: auto;
+  background: var(--bg);
+}
+.canvas-inner {
+  position: relative;
+  width: 2300px;
+  height: 1200px;
+  min-width: 2300px;
+  min-height: 1200px;
+}
+
+/* External column backdrop */
+.ext-col-bg {
+  position: absolute;
+  left: 1730px;
+  top: 50px;
+  bottom: 70px;
+  width: 480px;
+  background: rgba(251, 191, 36, 0.03);
+  border: 1px dashed rgba(251, 191, 36, 0.18);
+  border-radius: var(--radius-lg);
+}
+
+.canvas-svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.lane-bg {
+  position: absolute;
+  left: 220px; right: 220px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(45, 212, 191, 0.12);
+  background: rgba(45, 212, 191, 0.018);
+}
+
+.lane-label {
+  position: absolute;
+  left: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  display: flex; align-items: center;
+  gap: 8px;
+}
+.lane-label::before {
+  content: "";
+  display: inline-block;
+  width: 18px; height: 1px;
+  background: var(--ink-4);
+}
+.lane-label.right { left: auto; right: 16px; text-align: right; flex-direction: row-reverse; }
+.lane-label.right::before { background: var(--amber); }
+
+.section-title-flow {
+  position: absolute;
+  top: 16px;
+  left: 240px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+
+/* ===== Nodes ===== */
+.node {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--ink-2);
+  transition: opacity 200ms, box-shadow 200ms, border-color 200ms, background 200ms;
+  min-width: 130px;
+  max-width: 160px;
+  cursor: default;
+}
+.node.dim { opacity: 0.25; }
+.node.lit {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.12) 0%, rgba(45, 212, 191, 0.04) 100%);
+  color: var(--ink);
+  box-shadow: var(--shadow-glow);
+  opacity: 1;
+}
+.node.lit-violet {
+  border-color: var(--violet);
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.14) 0%, rgba(167, 139, 250, 0.04) 100%);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--violet), 0 0 24px rgba(167, 139, 250, 0.4);
+}
+.node.lit-amber {
+  border-color: var(--amber);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.14) 0%, rgba(251, 191, 36, 0.04) 100%);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--amber), 0 0 24px rgba(251, 191, 36, 0.4);
+}
+.node.lit-red {
+  border-color: var(--red);
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.14) 0%, rgba(248, 113, 113, 0.04) 100%);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--red), 0 0 24px rgba(248, 113, 113, 0.4);
+}
+
+.node-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink);
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-sub {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node.kind-external {
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.06) 0%, rgba(251, 191, 36, 0.02) 100%);
+  border-color: rgba(251, 191, 36, 0.3);
+  border-style: dashed;
+}
+.node.kind-external .node-sub::before {
+  content: "↗ ";
+  color: var(--amber);
+}
+.node.kind-table {
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.05) 0%, rgba(167, 139, 250, 0.01) 100%);
+  border-color: rgba(167, 139, 250, 0.25);
+}
+.node.kind-queue {
+  background: linear-gradient(180deg, rgba(129, 140, 248, 0.05) 0%, rgba(129, 140, 248, 0.01) 100%);
+  border-color: rgba(129, 140, 248, 0.3);
+}
+.node.kind-queue .node-name::after {
+  content: "  ⟶";
+  color: var(--indigo);
+  font-size: 10px;
+}
+
+/* ===== Paths (SVG) ===== */
+.flow-path {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  transition: opacity 200ms, stroke 200ms;
+  opacity: 0.18;
+}
+.flow-path.active {
+  opacity: 1;
+  stroke-width: 2;
+}
+.flow-path.req.active { stroke: var(--accent); filter: drop-shadow(0 0 6px var(--accent-glow)); }
+.flow-path.write.active { stroke: var(--violet); filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.5)); }
+.flow-path.ext.active { stroke: var(--amber); filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.5)); }
+.flow-path.err.active { stroke: var(--red); filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.5)); }
+.flow-path.delay.active { stroke: var(--indigo); filter: drop-shadow(0 0 6px rgba(129, 140, 248, 0.5)); }
+
+@keyframes march {
+  to { stroke-dashoffset: -28; }
+}
+.flow-path.req.active {
+  stroke-dasharray: 8 6;
+  animation: march 0.9s linear infinite;
+}
+.flow-path.write.active {
+  stroke-dasharray: 10 5;
+  animation: march 1.2s linear infinite;
+}
+.flow-path.ext.active {
+  stroke-dasharray: 4 6;
+  animation: march 0.7s linear infinite;
+}
+.flow-path.err.active {
+  stroke-dasharray: 2 5;
+  animation: march 0.5s linear infinite;
+}
+.flow-path.delay.active {
+  stroke-dasharray: 12 8;
+  animation: march 1.6s linear infinite;
+}
+
+/* ===== Description panel ===== */
+.desc-panel {
+  position: absolute;
+  top: 16px; right: 16px;
+  width: 360px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  z-index: 5;
+  box-shadow: var(--shadow-1);
+}
+.desc-panel h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+.desc-panel .desc-meta {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.desc-panel .step {
+  padding: 6px 0;
+  font-size: 12px;
+  border-bottom: 1px dashed var(--border);
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 8px;
+}
+.desc-panel .step:last-child { border-bottom: none; }
+.desc-panel .step-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.desc-panel .step-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Tip text on each node hover */
+.node:hover .node-sub {
+  color: var(--ink);
+}
+
+/* Tooltip */
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 11.5px;
+  color: var(--ink);
+  max-width: 240px;
+  z-index: 10;
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.tip.show { opacity: 1; }
+.tip b { color: var(--accent); font-family: var(--mono); font-size: 10.5px; }
+
+/* Footer note */
+.canvas-footer {
+  position: absolute;
+  bottom: 8px;
+  left: 240px;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-family: var(--mono);
+}
+
+/* Responsive */
+@media (max-width: 880px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+
+    <div class="brand">
+      <div class="brand-mark">EW</div>
+      <div>
+        <div class="brand-name">EmailWarm</div>
+        <div class="brand-sub">Live Data Flow</div>
+      </div>
+    </div>
+
+    <div class="section-title">Scenarios</div>
+    <div class="scenarios" id="scenarios">
+      <button class="scenario" data-scenario="overview">
+        <span class="scenario-num">○</span><span>Overview</span>
+      </button>
+      <button class="scenario" data-scenario="signin">
+        <span class="scenario-num">1</span><span>Sign in</span>
+      </button>
+      <button class="scenario" data-scenario="gmail">
+        <span class="scenario-num">2</span><span>Connect Gmail inbox</span>
+      </button>
+      <button class="scenario" data-scenario="send">
+        <span class="scenario-num">3</span><span>Daily warmup send</span>
+      </button>
+      <button class="scenario" data-scenario="recv">
+        <span class="scenario-num">4</span><span>Receive + engage</span>
+      </button>
+      <button class="scenario" data-scenario="dns">
+        <span class="scenario-num">5</span><span>DNS check</span>
+      </button>
+      <button class="scenario" data-scenario="bl">
+        <span class="scenario-num">6</span><span>Blacklist hit</span>
+      </button>
+      <button class="scenario" data-scenario="score">
+        <span class="scenario-num">7</span><span>Score compute</span>
+      </button>
+      <button class="scenario" data-scenario="placement">
+        <span class="scenario-num">8</span><span>Placement test</span>
+      </button>
+      <button class="scenario" data-scenario="diag">
+        <span class="scenario-num">9</span><span>AI diagnostics</span>
+      </button>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn" id="playBtn">▶ Play all</button>
+      <button class="ctrl-btn" id="resetBtn">⏹ Reset</button>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="dot req"></span>Request / queue enqueue</div>
+      <div class="legend-item"><span class="dot write"></span>DB write / read</div>
+      <div class="legend-item"><span class="dot ext"></span>External call</div>
+      <div class="legend-item"><span class="dot delay"></span>Delayed enqueue</div>
+      <div class="legend-item"><span class="dot err"></span>Pause / notify / drop</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat-row"><span>Nodes</span><b>50</b></div>
+      <div class="stat-row"><span>Connections</span><b>62</b></div>
+      <div class="stat-row"><span>Scenarios</span><b>9</b></div>
+      <div class="stat-row"><span>Updated</span><b>2026-06-25</b></div>
+    </div>
+
+  </aside>
+
+  <!-- ============ CANVAS ============ -->
+  <main class="canvas-wrap">
+    <div class="canvas-inner" id="canvasInner">
+
+      <svg class="canvas-svg" id="canvasSvg">
+        <defs>
+            <marker id="arrow-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="#2dd4bf"/>
+            </marker>
+            <marker id="arrow-write" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="#a78bfa"/>
+            </marker>
+            <marker id="arrow-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="#fbbf24"/>
+            </marker>
+            <marker id="arrow-delay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="#818cf8"/>
+            </marker>
+            <marker id="arrow-err" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0,0 L10,5 L0,10 Z" fill="#f87171"/>
+            </marker>
+        </defs>
+        <g id="pathsLayer"></g>
+      </svg>
+
+      <div class="lane-bg" style="top: 50px; height: 100px;"></div>
+      <div class="lane-bg" style="top: 170px; height: 100px;"></div>
+      <div class="lane-bg" style="top: 290px; height: 100px;"></div>
+      <div class="lane-bg" style="top: 410px; height: 180px;"></div>
+      <div class="lane-bg" style="top: 610px; height: 100px;"></div>
+      <div class="lane-bg" style="top: 730px; height: 100px;"></div>
+      <div class="lane-bg" style="top: 850px; height: 220px;"></div>
+
+      <div class="ext-col-bg"></div>
+
+      <div class="lane-label" style="top: 90px;">Triggers</div>
+      <div class="lane-label" style="top: 210px;">Frontend · Next.js</div>
+      <div class="lane-label" style="top: 330px;">API · Controllers</div>
+      <div class="lane-label" style="top: 490px;">Services · Business Logic</div>
+      <div class="lane-label" style="top: 650px;">BullMQ Queues</div>
+      <div class="lane-label" style="top: 770px;">Workers · Processors</div>
+      <div class="lane-label" style="top: 950px;">Data · PostgreSQL</div>
+
+      <div class="lane-label right" style="top: 90px; color: var(--amber);">External · third-party</div>
+
+      <div class="canvas-footer" id="canvasFooter">
+        ● email-warmup · 7 layers · 9 scenarios · click any node to highlight its role
+      </div>
+
+    </div>
+
+    <div class="desc-panel" id="descPanel">
+      <h3>EmailWarm — Live data flow</h3>
+      <div class="desc-meta" id="descMeta">9 scenarios · pick one to watch the data flow</div>
+      <div id="descBody">
+        <div class="step"><span class="step-num">→</span><span class="step-text">Click a <strong>scenario button</strong> on the left to see every node that fires and every DB/external call it makes. Inactive nodes fade so the path stands out.</span></div>
+        <div class="step"><span class="step-num">→</span><span class="step-text">Animated dots <strong>flow along the active path</strong>. Colors tell you the type: <span style="color:var(--accent)">teal</span> = request, <span style="color:var(--violet)">violet</span> = DB write, <span style="color:var(--amber)">amber</span> = external call, <span style="color:var(--indigo)">indigo</span> = delayed enqueue, <span style="color:var(--red)">red</span> = pause/notify.</span></div>
+        <div class="step"><span class="step-num">→</span><span class="step-text">Hit <strong>Play all</strong> to auto-cycle through every scenario, ~5s each. <strong>Reset</strong> returns to overview.</span></div>
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ============================================================
+// NODE DEFINITIONS
+// Positioned by lane (y) and slot (x). Each lane has a fixed y center.
+// Lane heights: Triggers=100, Frontend=100, API=100, Services=180, Queues=100, Workers=100, Data=220
+// ============================================================
+
+const LANES = {
+  trigger:    { y: 100 },
+  frontend:   { y: 220 },
+  api:        { y: 340 },
+  services:   { y: 460, y2: 540 },  // two rows for services
+  queues:     { y: 660 },
+  workers:    { y: 780 },
+  data:       { y: 900, y2: 970, y3: 1040 },  // three rows for tables
+  external:   { y: 100, yCols: [1750, 1900, 2050] }  // right-side column for external services
+};
+
+// X positions for main lanes
+const X_START = 240;
+const X_GAP = 170;
+function slotX(slot) { return X_START + slot * X_GAP; }
+
+// External column gets its own x calculation
+const EXT_X_START = 1750;
+const EXT_X_GAP = 150;
+function extX(col) { return EXT_X_START + col * EXT_X_GAP; }
+
+// Node definitions
+const NODES = {
+  // ============= TRIGGERS =============
+  't-user':      { lane: 'trigger', slot: 0,  name: 'User clicks', sub: 'browser action', tip: 'User clicks a button, fills a form, or navigates a page in the dashboard.' },
+  't-cron':      { lane: 'trigger', slot: 1,  name: '@Cron', sub: '05:00 / 06:00 / 6h', tip: 'NestJS @Cron schedule decorators fire on the backend process.' },
+  't-webhook':   { lane: 'trigger', slot: 2,  name: 'Webhook', sub: 'Stripe event', tip: 'External service POSTs to our webhook endpoint.' },
+  't-err':       { lane: 'trigger', slot: 3,  name: 'Job retry', sub: 'UnrecoverableError', tip: 'A worker throws UnrecoverableError → job dead-letters.' },
+
+  // ============= FRONTEND (Next.js) =============
+  'fe-signin':   { lane: 'frontend', slot: 0,  name: '/sign-in', sub: 'better-auth form', tip: 'Email/password form. Submits via better-auth client.' },
+  'fe-dash':     { lane: 'frontend', slot: 1,  name: 'DashboardShell', sub: '(dashboard) layout', tip: 'Server Component shell — fetches /inboxes, /score, etc. on every page load.' },
+  'fe-connect':  { lane: 'frontend', slot: 2,  name: 'ConnectInboxForm', sub: 'OAuth + SMTP/IMAP', tip: 'Form for connecting Gmail, Outlook, or custom SMTP/IMAP inboxes.' },
+  'fe-inboxes':  { lane: 'frontend', slot: 3,  name: '/inboxes', sub: 'list + bulk', tip: 'Lists user inboxes with bulk pause/resume and connect buttons.' },
+  'fe-pool':     { lane: 'frontend', slot: 4,  name: '/pool', sub: 'private pool', tip: 'Tenant-private pool inbox list with batch CSV upload.' },
+  'fe-detail':   { lane: 'frontend', slot: 5,  name: '/inboxes/[id]', sub: '5-tab dashboard', tip: 'Per-inbox activity dashboard: Activity, Sent, DNS+BL, Placement, Logs.' },
+  'fe-billing':  { lane: 'frontend', slot: 6,  name: '/billing', sub: 'Stripe portal', tip: 'Plan + payment management. Calls Stripe Customer Portal.' },
+  'fe-apisvr':   { lane: 'frontend', slot: 7,  name: 'api-server.ts', sub: 'HMAC bearer mint', tip: 'Server-side helper that mints an HMAC-signed bearer token from the user session.' },
+
+  // ============= API Controllers =============
+  'ctrl-usersync': { lane: 'api', slot: 0,  name: 'Internal Ctrl', sub: 'POST /internal/user-sync', tip: 'Trusted internal endpoint called from frontend user-sync.ts on first sign-in.' },
+  'ctrl-auth':     { lane: 'api', slot: 1,  name: 'Auth Callback', sub: 'GET /auth/{gmail,outlook}/connect', tip: 'Builds OAuth URL and redirects to provider.' },
+  'ctrl-callback': { lane: 'api', slot: 2,  name: 'OAuth Callback', sub: 'GET /auth/callback/{google,microsoft}', tip: 'Receives ?code=... from provider, exchanges for tokens.' },
+  'ctrl-inbox':    { lane: 'api', slot: 3,  name: 'Inbox Ctrl', sub: 'connect · batch · precheck', tip: 'CRUD on user inboxes plus batch upload + DNS precheck.' },
+  'ctrl-activity': { lane: 'api', slot: 4,  name: 'Activity Ctrl', sub: '9 endpoints (T027)', tip: 'Inbox activity feed endpoints backing the 5-tab dashboard.' },
+  'ctrl-pool':     { lane: 'api', slot: 5,  name: 'Pool Ctrl', sub: 'pool-inboxes + reanalyze', tip: 'Private pool inbox CRUD + reanalyze route.' },
+  'ctrl-score':    { lane: 'api', slot: 6,  name: 'Scoring Ctrl', sub: 'GET /inboxes/:id/score', tip: 'Returns composite score + 90-day history. Plan-gates the breakdown.' },
+  'ctrl-placement':{ lane: 'api', slot: 7,  name: 'Placement Ctrl', sub: 'POST /placement-test', tip: 'Triggers a placement test. Enforces monthly plan quota (429).' },
+  'ctrl-diag':     { lane: 'api', slot: 8,  name: 'Diagnostics Ctrl', sub: 'POST /diagnostics', tip: 'Enqueues a diagnostics job for the AI analyzer.' },
+  'ctrl-billing':  { lane: 'api', slot: 9,  name: 'Billing Ctrl', sub: 'Stripe webhook + portal', tip: 'Stripe webhook receiver + customer portal redirect.' },
+
+  // ============= SERVICES (row 1) =============
+  'svc-guard':    { lane: 'services', row: 0, slot: 0, name: 'BetterAuthGuard', sub: 'HMAC verify · redact', tip: 'Guards every non-public route. Verifies HMAC bearer, redacts password fields from logs.' },
+  'svc-usersync': { lane: 'services', row: 0, slot: 1, name: 'UserSyncService', sub: 'upsertUser', tip: 'INSERT-or-UPDATE users row. Plan=trial, 7-day trial_ends_at default.' },
+  'svc-google':   { lane: 'services', row: 0, slot: 2, name: 'GoogleOAuthService', sub: 'exchangeCode', tip: 'Exchanges auth code for access + refresh tokens. Encrypts before write.' },
+  'svc-ms':       { lane: 'services', row: 0, slot: 3, name: 'MicrosoftOAuthService', sub: 'exchangeCode', tip: 'Same as Google but for Microsoft.' },
+  'svc-warmup':   { lane: 'services', row: 0, slot: 4, name: 'WarmupService', sub: '@Cron 05:00 schedule', tip: 'Daily cron. Walks active inboxes, ramps volume, queues send jobs. Also pauseInbox/resumeInbox.' },
+  'svc-ramp':     { lane: 'services', row: 0, slot: 5, name: 'RampService', sub: 'linear, cap 200', tip: 'Daily send volume = ramp(day). Linear interpolation, capped at 200.' },
+  'svc-pair':     { lane: 'services', row: 0, slot: 6, name: 'PairingService', sub: 'same-domain block', tip: 'Picks peer inboxes. Hard-block same-domain. Scoring + 7-day recency penalty.' },
+  'svc-content':  { lane: 'services', row: 0, slot: 7, name: 'ContentService', sub: 'Claude + 50-template fallback', tip: 'Generates warmup body via Claude (10s timeout). Falls back to 50 hand-written templates.' },
+  'svc-smtp':     { lane: 'services', row: 0, slot: 8, name: 'SmtpClientService', sub: 'Nodemailer · errCode', tip: 'Verifies + sends SMTP. Logs errCode+errResponseCode+host+port on errors.' },
+  'svc-imap':     { lane: 'services', row: 0, slot: 9, name: 'ImapClientService', sub: 'imapflow · pool', tip: 'IMAP connection pool. Reuses connections per receiver.' },
+
+  // ============= SERVICES (row 2) =============
+  'svc-dns':      { lane: 'services', row: 1, slot: 0, name: 'DnsService', sub: '5 checks', tip: 'checkSpf / checkDkim / checkDmarc / checkMx / checkRdns. Uses Cloudflare + Google DNS.' },
+  'svc-bl':       { lane: 'services', row: 1, slot: 1, name: 'BlacklistService', sub: '8 RBLs (5s timeout)', tip: 'DNS-resolves {domain}.{rblZone} across 8 zones. Each lookup 5s timeboxed. Listed=127.x.' },
+  'svc-score':    { lane: 'services', row: 1, slot: 2, name: 'ScoringService', sub: 'compute 0-100', tip: 'DNS 40 + Blacklist 20 + Placement 40. Clamped to 0-100.' },
+  'svc-trend':    { lane: 'services', row: 1, slot: 3, name: 'TrendService', sub: '≥4 rows to decide', tip: 'Trend needs ≥4 historical rows before declaring up/down, else stable.' },
+  'svc-place':    { lane: 'services', row: 1, slot: 4, name: 'PlacementService', sub: 'BCC to seeds · 429', tip: 'Picks quick/full seed list, BCCs all with one shared Message-ID, enqueues test.' },
+  'svc-analyzer': { lane: 'services', row: 1, slot: 5, name: 'PlacementAnalyzer', sub: 'X-GM-LABELS classify', tip: 'Classifies Gmail by labels; Outlook/Yahoo by folder name + specialUse.' },
+  'svc-diag':     { lane: 'services', row: 1, slot: 6, name: 'DiagnosticsService', sub: 'AI codes + fixes', tip: 'Reads inbox health, calls Claude for issueCodes + fixSteps.' },
+  'svc-ai':       { lane: 'services', row: 1, slot: 7, name: 'AiAnalyzerService', sub: 'Claude · prompt', tip: 'Builds the prompt from current health signals. Calls Claude API.' },
+  'svc-notify':   { lane: 'services', row: 1, slot: 8, name: 'NotifyProcessor', sub: 'email + Slack', tip: 'Renders the alert template, sends via Nodemailer + Slack webhook.' },
+  'svc-billing':  { lane: 'services', row: 1, slot: 9, name: 'BillingService', sub: 'plan gating · trial', tip: 'assertInboxLimit + assertPlan. Trial expiry pauses inboxes.' },
+
+  // ============= QUEUES (BullMQ) =============
+  'q-send':       { lane: 'queues', slot: 0, name: 'warmup-send', sub: '2-240min delay', kind: 'queue', tip: 'Send a warmup email. Delayed 2-240min per ramp curve + jitter.' },
+  'q-recv':       { lane: 'queues', slot: 1, name: 'warmup-receive', sub: 'delayed · reply', kind: 'queue', tip: 'Engagement actions: rescue, open, star, reply, file.' },
+  'q-dns':        { lane: 'queues', slot: 2, name: 'dns-check', sub: 'cron + manual', kind: 'queue', tip: '5 DNS lookups for one inbox. Runs daily at 06:00 UTC + on demand.' },
+  'q-bl':         { lane: 'queues', slot: 3, name: 'blacklist-check', sub: 'every 6h', kind: 'queue', tip: '8 RBL DNS queries. Every 6h + on demand.' },
+  'q-score':      { lane: 'queues', slot: 4, name: 'score-compute', sub: 'triggered', kind: 'queue', tip: 'Triggered by dns-check, blacklist-check, placement-test completion.' },
+  'q-place':      { lane: 'queues', slot: 5, name: 'placement-test', sub: '5min delay', kind: 'queue', tip: 'BCC already sent. Wait 5min for seeds to receive + classify.' },
+  'q-notify':     { lane: 'queues', slot: 6, name: 'notify', sub: 'all alerts', kind: 'queue', tip: 'Email + Slack delivery. Render template, send, log.' },
+  'q-diag':       { lane: 'queues', slot: 7, name: 'diagnostics', sub: 'on-demand', kind: 'queue', tip: 'AI analysis job. Manual, auto_blacklist, auto_drop triggers.' },
+  'q-ready':      { lane: 'queues', slot: 8, name: 'readiness-report', sub: 'graduation', kind: 'queue', tip: 'Day 28 graduation. AI readiness report.' },
+  'q-token':      { lane: 'queues', slot: 9, name: 'token-refresh', sub: 'pre-expiry', kind: 'queue', tip: 'Refresh OAuth access tokens before expiry.' },
+  'q-analysis':   { lane: 'queues', slot: 10, name: 'inbox-analysis', sub: 'initial · re', kind: 'queue', tip: 'Initial or re-analysis on upload. DNS + health score.' },
+
+  // ============= WORKERS =============
+  'w-send':       { lane: 'workers', slot: 0, name: 'WarmupSendProc', sub: 'Nodemailer send', tip: 'Generates body, connects SMTP, sends, inserts warmup_sends row, enqueues warmup-receive.' },
+  'w-recv':       { lane: 'workers', slot: 1, name: 'WarmupRecvProc', sub: 'rescue → file', tip: 'IMAP poll. rescue from spam → open → star → reply → file to WarmupHub.' },
+  'w-dns':        { lane: 'workers', slot: 2, name: 'DnsCheckProc', sub: '@Cron 06:00', tip: 'Daily 06:00 cron. Schedules one dns-check job per inbox.' },
+  'w-bl':         { lane: 'workers', slot: 3, name: 'BlacklistProc', sub: 'pause on hit', tip: 'Every 6h. On any RBL hit → pauseInbox() → notify → diagnostics.' },
+  'w-score':      { lane: 'workers', slot: 4, name: 'ScoreProc', sub: 'trend + alert', tip: 'Compute score, query trend, insert row. If drop ≥15 → notify + diagnostics.' },
+  'w-place':      { lane: 'workers', slot: 5, name: 'PlacementProc', sub: 'IMAP classify', tip: 'Reads each seed inbox, classifies by Gmail labels or folder names.' },
+  'w-diag':       { lane: 'workers', slot: 6, name: 'DiagProc', sub: 'Claude API', tip: 'Calls Claude. Saves diagnostics row. Enqueues notify.' },
+  'w-ready':      { lane: 'workers', slot: 7, name: 'ReadinessProc', sub: 'day-28', tip: 'Generates post-warmup readiness report at graduation.' },
+  'w-token':      { lane: 'workers', slot: 8, name: 'TokenRefresh', sub: 'pre-expiry', tip: 'Refreshes OAuth tokens before expiry, writes new encrypted tokens.' },
+  'w-analysis':   { lane: 'workers', slot: 9, name: 'InboxAnalysisProc', sub: 'DNS · health', tip: 'Runs DNS checks on uploaded inbox. Sets status, computes health score.' },
+
+  // ============= DATA (PostgreSQL) — row 1 =============
+  'db-users':      { lane: 'data', row: 0, slot: 0, name: 'users', sub: 'id · email · plan', kind: 'table', tip: 'User identity, plan, trial state, Stripe customer/sub IDs, Slack webhook.' },
+  'db-inboxes':    { lane: 'data', row: 0, slot: 1, name: 'inboxes', sub: 'creds (enc) · status', kind: 'table', tip: 'Per-inbox state: provider, encrypted SMTP/IMAP + OAuth creds, status, warmupDay, sendingIp.' },
+  'db-pool-inb':   { lane: 'data', row: 0, slot: 2, name: 'pool_inboxes', sub: 'encryptedCredentials', kind: 'table', tip: 'Tenant-private pool inboxes. encryptedCredentials JSONB. activePairs counter.' },
+  'db-pool-mem':   { lane: 'data', row: 0, slot: 3, name: 'pool_members', sub: 'shared pool', kind: 'table', tip: 'Shared warmup pool members. domain + provider indexed. quarantined flag.' },
+  'db-sends':      { lane: 'data', row: 0, slot: 4, name: 'warmup_sends', sub: 'lifecycle', kind: 'table', tip: 'Every send row. openedAt, repliedAt, spamLandedAt, rescuedAt, filedAt timestamps.' },
+  'db-dns':        { lane: 'data', row: 0, slot: 5, name: 'dns_checks', sub: '5 booleans', kind: 'table', tip: 'Per-inbox daily DNS run. SPF/DKIM/DMARC/MX/rDNS booleans only.' },
+  'db-bl':         { lane: 'data', row: 0, slot: 6, name: 'blacklist_checks', sub: 'rblResults JSONB', kind: 'table', tip: 'rblResults JSONB of {zone, listed} per RBL zone.' },
+
+  // ============= DATA (PostgreSQL) — row 2 =============
+  'db-score':      { lane: 'data', row: 1, slot: 0, name: 'reputation_scores', sub: '0-100 history', kind: 'table', tip: 'Composite score history. breakdown JSONB. trigger column.' },
+  'db-place':      { lane: 'data', row: 1, slot: 1, name: 'placement_tests', sub: 'tab counts', kind: 'table', tip: 'primary/promotions/spam counts per seed. placementScore.' },
+  'db-seed':       { lane: 'data', row: 1, slot: 2, name: 'seed_inboxes', sub: 'encrypted creds', kind: 'table', tip: 'Platform-controlled seed accounts (encrypted). Empty in dev.' },
+  'db-diag':       { lane: 'data', row: 1, slot: 3, name: 'diagnostics', sub: 'issueCodes', kind: 'table', tip: 'AI-generated. issueCodes array, fixSteps array, trigger.' },
+  'db-stripe':     { lane: 'data', row: 1, slot: 4, name: 'stripe_events', sub: 'webhook log', kind: 'table', tip: 'Webhook idempotency log. eventId unique, payload JSONB.' },
+  'db-notif':      { lane: 'data', row: 1, slot: 5, name: 'notifications', sub: 'delivery log', kind: 'table', tip: 'Every notify job. channel, status, eventType.' },
+  'db-analysis':   { lane: 'data', row: 1, slot: 6, name: 'inbox_analysis', sub: 'healthScore', kind: 'table', tip: 'Latest DNS+health snapshot per inbox/pool inbox.' },
+
+  // ============= EXTERNAL (right column) =============
+  // Use col: 0..2 in EXT_X range
+  'ext-google':    { lane: 'external', col: 0, row: 0, name: 'Google OAuth', sub: 'accounts.google.com', kind: 'external', tip: 'Google OAuth 2.0 server. Returns code on user consent.' },
+  'ext-ms':        { lane: 'external', col: 0, row: 1, name: 'Microsoft OAuth', sub: 'login.microsoft.com', kind: 'external', tip: 'Microsoft OAuth 2.0 server.' },
+  'ext-stripe':    { lane: 'external', col: 0, row: 2, name: 'Stripe', sub: 'checkout · webhook', kind: 'external', tip: 'Checkout, Customer Portal, webhook receiver.' },
+  'ext-claude':    { lane: 'external', col: 1, row: 0, name: 'Anthropic Claude', sub: 'api.anthropic.com', kind: 'external', tip: 'AI content generation. 10s timeout. Industry-aware warmup bodies.' },
+  'ext-imap':      { lane: 'external', col: 2, row: 0, name: 'IMAP', sub: 'imap.gmail.com · outlook', kind: 'external', tip: 'IMAP inbox. We read WarmupHub folder, write labels/move.' },
+  'ext-smtp':      { lane: 'external', col: 2, row: 1, name: 'SMTP', sub: 'smtp.gmail.com · outlook', kind: 'external', tip: 'SMTP submission. We send warmup emails and replies.' },
+  'ext-dns':       { lane: 'external', col: 2, row: 2, name: 'Cloudflare/Google DNS', sub: '1.1.1.1 · 8.8.8.8', kind: 'external', tip: 'Public DNS resolvers we query for TXT/MX/NS lookups.' },
+  'ext-rbl':       { lane: 'external', col: 2, row: 3, name: 'RBL zones', sub: '8 zones · Spamhaus+', kind: 'external', tip: 'Realtime Blackhole Lists. We DNS-resolve {domain}.{zone} and check for 127.x.' },
+  'ext-email':     { lane: 'external', col: 1, row: 2, name: 'Email SMTP', sub: 'alerts', kind: 'external', tip: 'Outbound SMTP for notify emails to users.' },
+  'ext-slack':     { lane: 'external', col: 1, row: 3, name: 'Slack webhook', sub: 'alerts', kind: 'external', tip: 'Slack incoming webhook URL stored per user.' },
+};
+
+// ============================================================
+// CONNECTIONS — typed by data flow kind
+// ============================================================
+
+const CONNECTIONS = [
+  // ============ Sign in ============
+  { from: 't-user',   to: 'fe-signin', scenarios: ['signin'], type: 'req' },
+  { from: 'fe-signin',to: 'fe-apisvr', scenarios: ['signin'], type: 'req' },
+  { from: 'fe-apisvr',to: 'ctrl-usersync', scenarios: ['signin'], type: 'req' },
+  { from: 'ctrl-usersync', to: 'svc-usersync', scenarios: ['signin'], type: 'req' },
+  { from: 'svc-usersync', to: 'db-users', scenarios: ['signin'], type: 'write' },
+  { from: 'svc-usersync', to: 'fe-dash', scenarios: ['signin'], type: 'req' },
+
+  // ============ Connect Gmail ============
+  { from: 't-user',   to: 'fe-connect', scenarios: ['gmail'], type: 'req' },
+  { from: 'fe-connect', to: 'ctrl-auth', scenarios: ['gmail'], type: 'req' },
+  { from: 'ctrl-auth', to: 'ext-google', scenarios: ['gmail'], type: 'ext' },
+  { from: 'ext-google', to: 'ctrl-callback', scenarios: ['gmail'], type: 'req' },
+  { from: 'ctrl-callback', to: 'svc-google', scenarios: ['gmail'], type: 'req' },
+  { from: 'svc-google', to: 'db-inboxes', scenarios: ['gmail'], type: 'write' },
+  { from: 'svc-google', to: 'fe-inboxes', scenarios: ['gmail'], type: 'req' },
+  { from: 'db-inboxes', to: 'q-token', scenarios: ['gmail'], type: 'req' },
+
+  // ============ Daily warmup send ============
+  { from: 't-cron',   to: 'svc-warmup', scenarios: ['send'], type: 'req' },
+  { from: 'svc-warmup', to: 'svc-ramp', scenarios: ['send'], type: 'req' },
+  { from: 'svc-warmup', to: 'svc-pair', scenarios: ['send'], type: 'req' },
+  { from: 'svc-warmup', to: 'q-send', scenarios: ['send'], type: 'req' },
+  { from: 'q-send',   to: 'w-send', scenarios: ['send'], type: 'req' },
+  { from: 'w-send',   to: 'svc-content', scenarios: ['send'], type: 'req' },
+  { from: 'svc-content', to: 'ext-claude', scenarios: ['send'], type: 'ext' },
+  { from: 'w-send',   to: 'svc-smtp', scenarios: ['send'], type: 'req' },
+  { from: 'svc-smtp', to: 'ext-smtp', scenarios: ['send'], type: 'ext' },
+  { from: 'ext-smtp', to: 'ext-imap', scenarios: ['send'], type: 'ext', tip: 'receiver IMAP picks up' },
+  { from: 'w-send',   to: 'db-sends', scenarios: ['send'], type: 'write' },
+  { from: 'w-send',   to: 'q-recv', scenarios: ['send'], type: 'delay' },
+
+  // ============ Receive + engage ============
+  { from: 'q-recv',   to: 'w-recv', scenarios: ['recv'], type: 'req' },
+  { from: 'w-recv',   to: 'svc-imap', scenarios: ['recv'], type: 'req' },
+  { from: 'svc-imap', to: 'ext-imap', scenarios: ['recv'], type: 'ext' },
+  { from: 'ext-imap', to: 'w-recv', scenarios: ['recv'], type: 'req' },
+  { from: 'w-recv',   to: 'svc-content', scenarios: ['recv'], type: 'req' },
+  { from: 'svc-content', to: 'ext-claude', scenarios: ['recv'], type: 'ext' },
+  { from: 'w-recv',   to: 'svc-smtp', scenarios: ['recv'], type: 'req' },
+  { from: 'svc-smtp', to: 'ext-smtp', scenarios: ['recv'], type: 'ext' },
+  { from: 'w-recv',   to: 'db-sends', scenarios: ['recv'], type: 'write' },
+
+  // ============ DNS check ============
+  { from: 't-cron',   to: 'w-dns', scenarios: ['dns'], type: 'req' },
+  { from: 'w-dns',    to: 'svc-dns', scenarios: ['dns'], type: 'req' },
+  { from: 'svc-dns',  to: 'ext-dns', scenarios: ['dns'], type: 'ext' },
+  { from: 'w-dns',    to: 'db-dns', scenarios: ['dns'], type: 'write' },
+  { from: 'w-dns',    to: 'q-score', scenarios: ['dns'], type: 'req' },
+  { from: 'w-dns',    to: 'q-notify', scenarios: ['dns'], type: 'err', onlyIf: 'critical fail' },
+
+  // ============ Blacklist hit ============
+  { from: 't-cron',   to: 'w-bl', scenarios: ['bl'], type: 'req' },
+  { from: 'w-bl',     to: 'svc-bl', scenarios: ['bl'], type: 'req' },
+  { from: 'svc-bl',   to: 'ext-rbl', scenarios: ['bl'], type: 'ext' },
+  { from: 'w-bl',     to: 'db-bl', scenarios: ['bl'], type: 'write' },
+  { from: 'w-bl',     to: 'svc-warmup', scenarios: ['bl'], type: 'err', onlyIf: 'listed' },
+  { from: 'w-bl',     to: 'q-notify', scenarios: ['bl'], type: 'err', onlyIf: 'listed' },
+  { from: 'w-bl',     to: 'q-diag', scenarios: ['bl'], type: 'err', onlyIf: 'listed' },
+
+  // ============ Score compute ============
+  { from: 'q-score',  to: 'w-score', scenarios: ['score'], type: 'req' },
+  { from: 'w-score',  to: 'svc-score', scenarios: ['score'], type: 'req' },
+  { from: 'w-score',  to: 'svc-trend', scenarios: ['score'], type: 'req' },
+  { from: 'svc-trend', to: 'db-score', scenarios: ['score'], type: 'write' },
+  { from: 'w-score',  to: 'db-score', scenarios: ['score'], type: 'write' },
+  { from: 'w-score',  to: 'q-notify', scenarios: ['score'], type: 'err', onlyIf: 'drop≥15' },
+  { from: 'w-score',  to: 'q-diag', scenarios: ['score'], type: 'err', onlyIf: 'drop≥15' },
+
+  // ============ Placement test ============
+  { from: 't-user',   to: 'fe-detail', scenarios: ['placement'], type: 'req' },
+  { from: 'fe-detail', to: 'ctrl-placement', scenarios: ['placement'], type: 'req' },
+  { from: 'ctrl-placement', to: 'svc-place', scenarios: ['placement'], type: 'req' },
+  { from: 'svc-place', to: 'ext-smtp', scenarios: ['placement'], type: 'ext' },
+  { from: 'svc-place', to: 'db-place', scenarios: ['placement'], type: 'write' },
+  { from: 'svc-place', to: 'q-place', scenarios: ['placement'], type: 'delay' },
+  { from: 'q-place',  to: 'w-place', scenarios: ['placement'], type: 'req' },
+  { from: 'w-place',  to: 'svc-analyzer', scenarios: ['placement'], type: 'req' },
+  { from: 'svc-analyzer', to: 'ext-imap', scenarios: ['placement'], type: 'ext' },
+  { from: 'w-place',  to: 'db-place', scenarios: ['placement'], type: 'write' },
+  { from: 'w-place',  to: 'q-score', scenarios: ['placement'], type: 'req' },
+
+  // ============ AI diagnostics ============
+  { from: 't-user',   to: 'fe-detail', scenarios: ['diag'], type: 'req' },
+  { from: 'fe-detail', to: 'ctrl-diag', scenarios: ['diag'], type: 'req' },
+  { from: 'ctrl-diag', to: 'q-diag', scenarios: ['diag'], type: 'req' },
+  { from: 'q-diag',   to: 'w-diag', scenarios: ['diag'], type: 'req' },
+  { from: 'w-diag',   to: 'svc-diag', scenarios: ['diag'], type: 'req' },
+  { from: 'svc-diag', to: 'svc-ai', scenarios: ['diag'], type: 'req' },
+  { from: 'svc-ai',   to: 'ext-claude', scenarios: ['diag'], type: 'ext' },
+  { from: 'w-diag',   to: 'db-diag', scenarios: ['diag'], type: 'write' },
+  { from: 'w-diag',   to: 'q-notify', scenarios: ['diag'], type: 'req' },
+  { from: 'q-notify', to: 'svc-notify', scenarios: ['diag','send','dns','bl','score','placement'], type: 'req' },
+  { from: 'svc-notify', to: 'ext-email', scenarios: ['diag','send','dns','bl','score','placement'], type: 'ext' },
+  { from: 'svc-notify', to: 'ext-slack', scenarios: ['diag','send','dns','bl','score','placement'], type: 'ext' },
+];
+
+// ============================================================
+// SCENARIO DESCRIPTIONS
+// ============================================================
+
+const SCENARIOS = {
+  overview:  { meta: 'Overview · pick a scenario',
+    steps: [
+      'Every node and connection visible at 20% opacity.',
+      'Click any scenario on the left to see the data flow animate.',
+      'Hit Play all to cycle through them automatically.'
+    ]
+  },
+  signin:    { meta: '1 · Sign in — first-time user lands on dashboard',
+    steps: [
+      '<strong>Browser:</strong> user enters email/password on /sign-in page.',
+      '<strong>Frontend:</strong> better-auth verifies, api-server.ts mints an HMAC bearer token.',
+      '<strong>API:</strong> POST /internal/user-sync fires on first sign-in.',
+      '<strong>Service:</strong> UserSyncService.upsertUser() inserts the users row with plan=trial, 7-day trial_ends_at.',
+      '<strong>Frontend:</strong> redirect to /(dashboard) → DashboardShell renders Server Component data.'
+    ]
+  },
+  gmail:     { meta: '2 · Connect Gmail inbox — full OAuth flow',
+    steps: [
+      '<strong>User clicks "Connect Gmail"</strong> in ConnectInboxForm.',
+      '<strong>Backend:</strong> GET /auth/gmail/connect → redirect to accounts.google.com.',
+      '<strong>Google:</strong> user consents → redirect to /auth/callback/google?code=...',
+      '<strong>GoogleOAuthService.exchangeCode()</strong> → access + refresh tokens.',
+      '<strong>inboxes row</strong> written with encrypted OAuth credentials.',
+      '<strong>token-refresh queue</strong> scheduled for pre-expiry refresh. inbox appears in /inboxes.'
+    ]
+  },
+  send:      { meta: '3 · Daily warmup send — 05:00 UTC schedule',
+    steps: [
+      '<strong>@Cron 05:00 UTC</strong> fires WarmupService.scheduleAll().',
+      '<strong>RampService.dailyVolume(day)</strong> — linear interpolation, capped at 200.',
+      '<strong>PairingService.pair(sender)</strong> — hard-blocks same-domain, scoring + recency penalty.',
+      '<strong>warmup-send queue</strong> enqueued with 8min spacing ± 15min jitter.',
+      '<strong>WarmupSendProcessor</strong> → ContentService.generate() (Claude 10s, fallback to templates) → Nodemailer SMTP.',
+      '<strong>warmup_sends row</strong> written; <strong>warmup-receive queue</strong> enqueued with 2-240min delay.'
+    ]
+  },
+  recv:      { meta: '4 · Receive + engage — pool inbox simulates a real reply',
+    steps: [
+      '<strong>warmup-receive queue</strong> fires after the delayed wait.',
+      '<strong>WarmupReceiveProcessor</strong> connects via IMAP, opens WarmupHub folder.',
+      '<strong>Rescue:</strong> if landed_in_spam, MOVE to Inbox (sets rescuedAt).',
+      '<strong>Engage:</strong> messageFlagsAdd(\Seen) → openedAt; star → starredAt.',
+      '<strong>Reply:</strong> ContentService.generateReply() → Nodemailer SMTP back to sender.',
+      '<strong>File:</strong> MOVE message to WarmupHub folder (hidden) → filedAt.'
+    ]
+  },
+  dns:       { meta: '5 · DNS check — daily 06:00 UTC',
+    steps: [
+      '<strong>@Cron 06:00 UTC</strong> fires DnsCheckProcessor.scheduleAll().',
+      '<strong>One dns-check job per inbox</strong> enqueued.',
+      '<strong>DnsService</strong> runs 5 checks in parallel: SPF, DKIM, DMARC, MX, rDNS — via Cloudflare (1.1.1.1) + Google (8.8.8.8).',
+      '<strong>dns_checks row</strong> written with booleans only.',
+      '<strong>score-compute queue</strong> enqueued to recompute reputation.',
+      '<strong>If critical failure</strong> (SPF/DKIM/MX): notify queue fires (email + Slack).'
+    ]
+  },
+  bl:        { meta: '6 · Blacklist hit — every 6h, pause + notify',
+    steps: [
+      '<strong>Cron every 6h</strong> fires BlacklistCheckProcessor.scheduleAll().',
+      '<strong>BlacklistService</strong> resolves {domain}.{rblZone} across 8 zones (Spamhaus + 7) in parallel. Each 5s timeboxed.',
+      '<strong>127.x response → listed.</strong> ENOTFOUND/ENODATA → clean. Anything else → unknown (doesn\'t block others).',
+      '<strong>blacklist_checks row</strong> written with rblResults JSONB.',
+      '<strong>If any hit</strong>: WarmupService.pauseInbox() → drain both send-as-sender and receive-as-receiver queues → set status=paused.',
+      '<strong>notify queue</strong> (blacklist_hit) + <strong>diagnostics queue</strong> (auto_blacklist) enqueued.'
+    ]
+  },
+  score:     { meta: '7 · Score compute — composite 0-100 + trend',
+    steps: [
+      '<strong>Triggered</strong> by completion of dns-check, blacklist-check, or placement-test.',
+      '<strong>ScoreComputeProcessor</strong> loads latest dns_checks + blacklist_checks + placement_tests rows.',
+      '<strong>ScoringService.compute</strong> — DNS 40 + Blacklist 20 + Placement 40, clamped to 0-100.',
+      '<strong>TrendService</strong> needs ≥4 historical rows before up/down, else stable.',
+      '<strong>reputation_scores row</strong> inserted with breakdown JSONB.',
+      '<strong>If drop ≥15</strong> from prior score: notify queue (score_drop) + diagnostics queue (auto_drop).'
+    ]
+  },
+  placement: { meta: '8 · Placement test — primary vs promotions vs spam',
+    steps: [
+      '<strong>User clicks "Run placement test"</strong> on /inboxes/[id].',
+      '<strong>Backend</strong>: plan quota check (trial/starter:1, growth:5, agency:unlimited). 429 if exceeded.',
+      '<strong>PlacementService</strong> picks quick (10) or full (35) seed list → BCCs all with one shared Message-ID.',
+      '<strong>placement_tests row</strong> written (status derived from placementScore IS NULL).',
+      '<strong>placement-test queue</strong> with 5min delay (let seeds receive).',
+      '<strong>PlacementTestProcessor</strong> → PlacementAnalyzerService classifies Gmail by X-GM-LABELS, Outlook/Yahoo by folder.',
+      '<strong>placement_tests row</strong> updated → score-compute enqueued.'
+    ]
+  },
+  diag:      { meta: '9 · AI diagnostics — Claude explains why you\'re in spam',
+    steps: [
+      '<strong>User clicks "Request analysis"</strong> on /inboxes/[id]/diagnostics.',
+      '<strong>POST /diagnostics</strong> → enqueue diagnostics job.',
+      '<strong>DiagnosticsProcessor</strong> loads current health signals (DNS, BL, placement).',
+      '<strong>AiAnalyzerService</strong> builds prompt, calls Anthropic Claude API (10s timeout).',
+      '<strong>diagnostics row</strong> written with issueCodes + fixSteps.',
+      '<strong>notify queue</strong> fires — email the user a summary.'
+    ]
+  }
+};
+
+// ============================================================
+// RENDERING
+// ============================================================
+
+function laneY(lane, row) {
+  const l = LANES[lane];
+  if (l.y2 && row === 1) return l.y2;
+  if (l.y3 && row === 2) return l.y3;
+  return l.y;
+}
+
+function renderNodes() {
+  const layer = document.getElementById('pathsLayer');
+  // Clear existing nodes
+  document.querySelectorAll('.node').forEach(n => n.remove());
+
+  const wrap = document.getElementById('canvasInner');
+
+  Object.entries(NODES).forEach(([id, n]) => {
+    let x, y;
+    if (n.lane === 'external') {
+      x = extX(n.col);
+      y = 100 + (n.row || 0) * 90;
+    } else {
+      x = slotX(n.slot);
+      y = laneY(n.lane, n.row || 0) - 25;
+    }
+    const el = document.createElement('div');
+    el.className = 'node' + (n.kind ? ' kind-' + n.kind : '');
+    el.id = 'node-' + id;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.innerHTML = `<div class="node-name">${n.name}</div><div class="node-sub">${n.sub}</div>`;
+    el.addEventListener('mouseenter', (e) => showTip(e, n));
+    el.addEventListener('mousemove', moveTip);
+    el.addEventListener('mouseleave', hideTip);
+    wrap.appendChild(el);
+  });
+}
+
+function getNodeCenter(id) {
+  const el = document.getElementById('node-' + id);
+  if (!el) return null;
+  const x = parseInt(el.style.left);
+  const y = parseInt(el.style.top);
+  return { cx: x + el.offsetWidth / 2, cy: y + el.offsetHeight / 2, x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+
+// Compute path between two nodes (smart routing)
+function buildPath(fromId, toId) {
+  const a = getNodeCenter(fromId);
+  const b = getNodeCenter(toId);
+  if (!a || !b) return null;
+
+  // Decide exit/entry edges based on relative position
+  const sameLane = Math.abs(a.cy - b.cy) < 5;
+  const fromRight = a.x < b.x;
+  const toLeft = a.x > b.x;
+
+  let x1 = fromRight ? a.x + a.w : a.x;
+  let y1 = a.cy;
+  let x2 = toLeft ? b.x : b.x + b.w;
+  let y2 = b.cy;
+
+  if (sameLane) {
+    // Simple horizontal line
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  // Stepped polyline: exit horizontally, then vertically, then horizontally
+  const midX = x1 + (x2 - x1) / 2;
+  return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+}
+
+function renderPaths() {
+  const layer = document.getElementById('pathsLayer');
+  layer.innerHTML = '';
+
+  CONNECTIONS.forEach((conn, idx) => {
+    const d = buildPath(conn.from, conn.to);
+    if (!d) return;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', `flow-path ${conn.type}`);
+    path.setAttribute('data-scenarios', conn.scenarios.join(','));
+    path.setAttribute('data-from', conn.from);
+    path.setAttribute('data-to', conn.to);
+    path.setAttribute('data-only-if', conn.onlyIf || '');
+    path.id = `path-${idx}`;
+    layer.appendChild(path);
+  });
+}
+
+// ============================================================
+// SCENARIO SWITCHING
+// ============================================================
+
+function setScenario(name) {
+  // Update buttons
+  document.querySelectorAll('.scenario').forEach(b => {
+    b.classList.toggle('active', b.dataset.scenario === name);
+  });
+
+  // Update description
+  const s = SCENARIOS[name];
+  document.getElementById('descMeta').textContent = s.meta;
+  document.getElementById('descBody').innerHTML = s.steps
+    .map((step, i) => `<div class="step"><span class="step-num">${i+1}</span><span class="step-text">${step}</span></div>`)
+    .join('');
+
+  const activeScenario = name;
+
+  // Mark nodes
+  const activeNodes = new Set();
+  CONNECTIONS.forEach(c => {
+    if (c.scenarios.includes(name)) {
+      activeNodes.add(c.from);
+      activeNodes.add(c.to);
+    }
+  });
+
+  document.querySelectorAll('.node').forEach(el => {
+    const id = el.id.replace('node-', '');
+    if (name === 'overview') {
+      el.classList.remove('lit','lit-violet','lit-amber','lit-red','dim');
+    } else if (activeNodes.has(id)) {
+      el.classList.remove('dim');
+      // Decide color based on what role this node plays in the flow
+      const isWrite = CONNECTIONS.some(c => c.scenarios.includes(name) && ((c.from === id && c.type === 'write') || (c.to === id && c.type === 'write')));
+      const isExt = CONNECTIONS.some(c => c.scenarios.includes(name) && ((c.from === id && c.type === 'ext') || (c.to === id && c.type === 'ext')));
+      const isErr = CONNECTIONS.some(c => c.scenarios.includes(name) && ((c.from === id && c.type === 'err') || (c.to === id && c.type === 'err')));
+      el.classList.remove('lit','lit-violet','lit-amber','lit-red');
+      if (isExt) el.classList.add('lit-amber');
+      else if (isErr) el.classList.add('lit-red');
+      else if (isWrite) el.classList.add('lit-violet');
+      else el.classList.add('lit');
+    } else {
+      el.classList.remove('lit','lit-violet','lit-amber','lit-red');
+      el.classList.add('dim');
+    }
+  });
+
+  // Mark paths
+  document.querySelectorAll('.flow-path').forEach(p => {
+    const scenarios = p.getAttribute('data-scenarios').split(',');
+    if (name === 'overview' || scenarios.includes(name)) {
+      p.classList.add('active');
+    } else {
+      p.classList.remove('active');
+    }
+  });
+}
+
+// ============================================================
+// TOOLTIPS
+// ============================================================
+
+const tipEl = document.getElementById('tip');
+
+function showTip(e, n) {
+  tipEl.innerHTML = `<b>${n.name}</b><br><span style="color:var(--ink-3)">${n.tip || n.sub}</span>`;
+  tipEl.classList.add('show');
+  moveTip(e);
+}
+
+function moveTip(e) {
+  const wrap = document.querySelector('.canvas-wrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  tipEl.style.left = (e.clientX - wrapRect.left + wrap.scrollLeft + 14) + 'px';
+  tipEl.style.top = (e.clientY - wrapRect.top + wrap.scrollTop + 14) + 'px';
+}
+
+function hideTip() {
+  tipEl.classList.remove('show');
+}
+
+// ============================================================
+// PLAY ALL
+// ============================================================
+
+let playInterval = null;
+const playBtn = document.getElementById('playBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+playBtn.addEventListener('click', () => {
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    playBtn.classList.remove('active');
+    playBtn.textContent = '▶ Play all';
+    return;
+  }
+  playBtn.classList.add('active');
+  playBtn.textContent = '⏸ Pause';
+  resetBtn.classList.remove('active');
+
+  const scenarios = ['signin', 'gmail', 'send', 'recv', 'dns', 'bl', 'score', 'placement', 'diag'];
+  let idx = scenarios.indexOf('signin');
+  if (idx < 0) idx = 0;
+  setScenario(scenarios[idx]);
+  playInterval = setInterval(() => {
+    idx = (idx + 1) % scenarios.length;
+    setScenario(scenarios[idx]);
+  }, 5000);
+});
+
+resetBtn.addEventListener('click', () => {
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    playBtn.classList.remove('active');
+    playBtn.textContent = '▶ Play all';
+  }
+  resetBtn.classList.add('active');
+  setTimeout(() => resetBtn.classList.remove('active'), 300);
+  setScenario('overview');
+  document.querySelectorAll('.scenario').forEach(b => b.classList.remove('active'));
+});
+
+document.querySelectorAll('.scenario').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (playInterval) {
+      clearInterval(playInterval);
+      playInterval = null;
+      playBtn.classList.remove('active');
+      playBtn.textContent = '▶ Play all';
+    }
+    setScenario(btn.dataset.scenario);
+  });
+});
+
+// ============================================================
+// INIT
+// ============================================================
+
+// Render once the DOM is laid out
+requestAnimationFrame(() => {
+  renderNodes();
+  // Wait one frame for nodes to size, then render paths
+  requestAnimationFrame(() => {
+    renderPaths();
+    // Allow URL hash to drive initial scenario (#send, #bl, etc.)
+    const hash = (location.hash || '').replace('#','');
+    const initialScenario = SCENARIOS[hash] ? hash : 'overview';
+    setScenario(initialScenario);
+  });
+});
+
+// Re-render paths on resize (node widths may have shifted)
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    renderPaths();
+  }, 100);
+});
+
+</script>
+
+</body>
+</html>

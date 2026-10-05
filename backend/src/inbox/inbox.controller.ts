@@ -5,7 +5,6 @@ import {
   Body,
   Param,
   Query,
-  Redirect,
   Req,
   UseGuards,
   UseInterceptors,
@@ -17,14 +16,13 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { validateSync } from 'class-validator';
+import { Throttle } from '@nestjs/throttler';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
-import { Public } from '@/auth/public.decorator';
 import { InboxService, BatchInboxEntry } from './inbox.service';
-import { GoogleOAuthService } from './oauth/google-oauth.service';
-import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
+import { MailboxLinkService, LinkProvider } from './oauth/mailbox-link.service';
 import { normalizeAliases } from './dto/connect-custom-smtp.dto';
-import { BatchUploadDto } from '@/pool-inbox/dto/batch-inbox-entry.dto';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
+import { MAX_IMPORT_BYTES, assertImportSize } from '@/common/import-limits';
 import {
   getLatestAnalysisForInbox,
   getLatestAnalysisForInboxes,
@@ -61,18 +59,24 @@ export class InboxController {
 
   /**
    * Batch upload (T020). Accepts `{ inboxes: [...] }`, same per-entry shape
-   * as `POST /pool-inboxes/batch`. class-validator (via BatchUploadDto)
-   * structurally rejects entries missing required fields for their
-   * provider before they ever reach InboxService — those land in
-   * `failed[]`, never abort the whole request, matching the "partial
-   * success" requirement (validateBatchEntry duplicates the same checks
-   * for entries that the ValidationPipe can't catch, e.g. an unrecognized
-   * provider value combined with otherwise-empty fields — defense in depth
-   * with the service-layer validation that also runs per row).
+   * as `POST /pool-inboxes/batch`. Per-row structural validation is done in
+   * InboxService.batchUpload (validateBatchEntry): entries missing required
+   * fields for their provider land in `failed[]` and never abort the whole
+   * request, matching the "partial success" requirement.
+   *
+   * The body is typed loosely on purpose so the global strict ValidationPipe
+   * (whitelist + forbidNonWhitelisted) does NOT run against it — otherwise a
+   * single malformed entry would reject the whole request with a 400 instead
+   * of landing in `failed[]`.
    */
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('batch')
-  async batchUpload(@Req() req: Request & { userId?: string }, @Body() body: BatchUploadDto) {
+  async batchUpload(
+    @Req() req: Request & { userId?: string },
+    @Body() body: { inboxes?: unknown[] },
+  ) {
     const entries = (body?.inboxes ?? []) as BatchInboxEntry[];
+    assertImportSize(entries.length);
     return this.inboxService.batchUpload(req.userId!, entries);
   }
 
@@ -86,8 +90,9 @@ export class InboxController {
    * reaching the service — they never had enough information to attempt
    * an insert.
    */
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('batch/csv')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES, files: 1 } }))
   async batchUploadCsv(
     @Req() req: Request & { userId?: string },
     @UploadedFile() file: Express.Multer.File,
@@ -97,6 +102,7 @@ export class InboxController {
     }
 
     const parsedRows = parseInboxBatchCsv(file.buffer.toString('utf8'));
+    assertImportSize(parsedRows.length);
 
     const failed: { email: string; reason: string }[] = [];
     const validEntries: BatchInboxEntry[] = [];
@@ -117,6 +123,22 @@ export class InboxController {
     };
   }
 
+  /** Grant or withdraw consent to the shared warmup pool for one inbox. */
+  @Post(':id/pool-consent')
+  async setPoolConsent(
+    @Req() req: Request & { userId?: string },
+    @Param('id') id: string,
+    @Body() body: { granted?: unknown },
+  ) {
+    if (typeof body?.granted !== 'boolean') {
+      throw new BadRequestException('granted must be true or false');
+    }
+    const result = await this.inboxService.setPoolConsent(req.userId!, id, body.granted);
+    if (!result) throw new NotFoundException();
+    return result;
+  }
+
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('connect/smtp')
   async connectCustomSmtp(
     @Req() req: Request & { userId?: string },
@@ -153,47 +175,50 @@ export class InboxController {
   }
 }
 
+const CALLBACK_PROVIDERS: Record<string, LinkProvider> = { google: 'gmail', microsoft: 'outlook' };
+
+/**
+ * Mailbox OAuth linking endpoints (MR-01). Every route here requires a
+ * signed-in user: the flow is started by, and may only be completed by, the
+ * same account. The provider redirects the browser to the frontend
+ * (/api/mailbox-oauth/callback/*), which forwards the result here with the
+ * user's session — there is no public callback on the API.
+ */
 @Controller('auth')
+@UseGuards(BetterAuthGuard)
 export class AuthCallbackController {
-  constructor(
-    private readonly inboxService: InboxService,
-    private readonly googleOAuth: GoogleOAuthService,
-    private readonly microsoftOAuth: MicrosoftOAuthService,
-  ) {}
+  constructor(private readonly mailboxLink: MailboxLinkService) {}
 
-  @Public()
   @Get('gmail/connect')
-  getGmailConnectUrl(@Req() req: Request & { userId?: string }) {
-    const state = Buffer.from(JSON.stringify({ userId: req.userId || 'anonymous' })).toString(
-      'base64url',
-    );
-    return { url: this.googleOAuth.getAuthorizationUrl(state) };
+  getGmailConnectUrl(
+    @Req() req: Request & { userId?: string },
+    @Query('poolConsent') poolConsent?: string,
+  ) {
+    return this.mailboxLink.start(req.userId!, 'gmail', { poolConsent: poolConsent === 'true' });
   }
 
-  @Public()
   @Get('outlook/connect')
-  getOutlookConnectUrl(@Req() req: Request & { userId?: string }) {
-    const state = Buffer.from(JSON.stringify({ userId: req.userId || 'anonymous' })).toString(
-      'base64url',
-    );
-    return { url: this.microsoftOAuth.getAuthorizationUrl(state) };
+  getOutlookConnectUrl(
+    @Req() req: Request & { userId?: string },
+    @Query('poolConsent') poolConsent?: string,
+  ) {
+    return this.mailboxLink.start(req.userId!, 'outlook', { poolConsent: poolConsent === 'true' });
   }
 
-  @Public()
-  @Get('callback/google')
-  @Redirect()
-  async googleCallback(@Query('code') code: string, @Query('state') state: string) {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-    await this.inboxService.connectGmail(userId, code);
-    return { url: '/inboxes' };
-  }
-
-  @Public()
-  @Get('callback/microsoft')
-  @Redirect()
-  async microsoftCallback(@Query('code') code: string, @Query('state') state: string) {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-    await this.inboxService.connectOutlook(userId, code);
-    return { url: '/inboxes' };
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('mailbox/callback')
+  async completeLink(
+    @Req() req: Request & { userId?: string },
+    @Body() body: { provider?: unknown; code?: unknown; state?: unknown; error?: unknown },
+  ) {
+    const provider = typeof body?.provider === 'string' ? CALLBACK_PROVIDERS[body.provider] : null;
+    if (!provider) throw new BadRequestException('Unknown provider');
+    const text = (value: unknown) =>
+      typeof value === 'string' && value.length > 0 && value.length <= 4096 ? value : undefined;
+    return this.mailboxLink.complete(req.userId!, provider, {
+      code: text(body.code),
+      state: text(body.state),
+      error: text(body.error),
+    });
   }
 }

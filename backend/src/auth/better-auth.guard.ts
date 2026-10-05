@@ -14,6 +14,12 @@ import { IS_PUBLIC_KEY } from './public.decorator';
  * the API side — verification is a single HMAC compare + expiry check.
  */
 const TOKEN_VERSION = 'v1';
+/**
+ * Tokens are minted per request by the frontend's server-side proxy with a
+ * lifetime of about a minute. Anything claiming to be valid for longer than
+ * this was not minted by it.
+ */
+const MAX_TOKEN_LIFETIME_MS = 2 * 60 * 60 * 1000;
 
 @Injectable()
 export class BetterAuthGuard implements CanActivate {
@@ -106,11 +112,15 @@ export class BetterAuthGuard implements CanActivate {
       return { ok: false, reason: 'malformed' };
     }
     if (!Number.isFinite(exp) || exp < Date.now()) return { ok: false, reason: 'expired' };
+    if (exp > Date.now() + MAX_TOKEN_LIFETIME_MS) return { ok: false, reason: 'invalid' };
 
+    let userId: string;
     try {
-      return { ok: true, userId: Buffer.from(userPart, 'base64url').toString('utf8') };
+      userId = Buffer.from(userPart, 'base64url').toString('utf8');
     } catch {
       return { ok: false, reason: 'malformed' };
     }
+    if (!userId) return { ok: false, reason: 'malformed' };
+    return { ok: true, userId };
   }
 }

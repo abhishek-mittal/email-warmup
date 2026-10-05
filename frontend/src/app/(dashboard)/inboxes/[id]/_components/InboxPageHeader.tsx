@@ -39,8 +39,8 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
   }, [score]);
 
   const trendColor = useMemo(() => {
-    if (!score) return 'text-slate-400';
-    return score.trend === 'up' ? 'text-emerald-500' : score.trend === 'down' ? 'text-rose-500' : 'text-slate-400';
+    if (!score) return 'text-stone-400';
+    return score.trend === 'up' ? 'text-emerald-500' : score.trend === 'down' ? 'text-rose-500' : 'text-stone-400';
   }, [score]);
 
   const sparkData = useMemo(() => {
@@ -60,15 +60,15 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
       {/* Left: identity + status */}
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-slate-900">{email}</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">{email}</h1>
           <PulseDot state={pulse} label={`Status: ${status}`} />
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-stone-600">
           <span className="capitalize">{provider}</span>
           <span aria-hidden>·</span>
           <InboxStatusBadge status={status} />
           <span aria-hidden>·</span>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700">
             Day {warmupDay}
           </span>
         </div>
@@ -79,18 +79,23 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
         <div className="text-right">
           <div className="flex items-baseline gap-2">
             <span
-              className={`font-mono text-3xl font-semibold ${colors ? colors.text : 'text-slate-900'}`}
+              className={`font-mono text-3xl font-semibold ${colors ? colors.text : 'text-stone-900'}`}
             >
               {currentScoreLabel}
             </span>
-            <span className="text-xs text-slate-400">/ 100</span>
+            <span className="text-xs text-stone-400">/ 100</span>
             <span className={`text-lg font-semibold ${trendColor}`} aria-label={`Trend: ${score?.trend ?? 'stable'}`}>
               {trendArrow}
             </span>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-stone-500">
             {colors ? colors.label : 'No score yet'}
           </p>
+          {score?.completeness != null && score.completeness < 100 ? (
+            <p className="max-w-[220px] text-xs text-stone-500">
+              Based on {score.completeness}% of signals. The rest could not be measured yet.
+            </p>
+          ) : null}
         </div>
         <div className="h-[60px] w-[160px]" aria-hidden>
           {sparkData.length > 0 ? (
@@ -100,7 +105,7 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
                 <Line
                   type="monotone"
                   dataKey="score"
-                  stroke="#4f46e5"
+                  stroke="#d94f0b"
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
@@ -109,14 +114,14 @@ export function InboxPageHeader({ email, provider, status, warmupDay, score }: P
                   x={sparkData[sparkData.length - 1].x}
                   y={sparkData[sparkData.length - 1].score}
                   r={3}
-                  fill="#4f46e5"
+                  fill="#d94f0b"
                   stroke="#ffffff"
                   strokeWidth={1.5}
                 />
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-200 text-[10px] text-slate-400">
+            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-stone-200 text-[10px] text-stone-400">
               No history yet
             </div>
           )}

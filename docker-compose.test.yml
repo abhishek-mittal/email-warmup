@@ -1,0 +1,44 @@
+# Disposable services for backend integration tests (`pnpm --dir backend run test:int`).
+# Ports are offset from the dev defaults so this can run next to docker-compose.yml.
+# No volumes: every `up` starts from an empty database and empty mailboxes.
+name: emailwarm-test
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: emailwarm_test
+      POSTGRES_USER: emailwarm
+      POSTGRES_PASSWORD: localtest
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emailwarm -d emailwarm_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # GreenMail: real SMTP + IMAP servers in one container. Mailboxes are created
+  # on first login / first delivery, so tests can use arbitrary addresses.
+  greenmail:
+    image: greenmail/standalone:2.1.3
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp
+        -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.auth.disabled
+        -Dgreenmail.verbose=false
+    ports:
+      - "53025:3025"
+      - "53143:3143"

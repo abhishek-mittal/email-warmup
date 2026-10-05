@@ -1,46 +1,99 @@
 name: CI
 
+# This project directory is the repository root, so paths are `backend/` and
+# `frontend/` — not `projects/email-warmup/...`.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   backend:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: projects/email-warmup/backend
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11.8.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: projects/email-warmup/backend/pnpm-lock.yaml
+          cache-dependency-path: backend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
       - run: pnpm test
       - run: pnpm run build
 
-  frontend:
+  # Real Postgres + SMTP/IMAP (GreenMail): the warmup engine, scheduler,
+  # credential refresh and mailbox linking are tested against actual protocols.
+  backend-integration:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: projects/email-warmup/frontend
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11.8.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: projects/email-warmup/frontend/pnpm-lock.yaml
+          cache-dependency-path: backend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec next build
+      - name: Start Postgres, Redis and GreenMail
+        working-directory: .
+        run: docker compose -f docker-compose.test.yml up -d --wait postgres redis && docker compose -f docker-compose.test.yml up -d greenmail
+      - name: Wait for GreenMail
+        run: |
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/53143) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/53025) 2>/dev/null && exit 0
+            sleep 2
+          done
+          echo "GreenMail did not start" && exit 1
+      - name: Apply migrations to a fresh database
+        run: pnpm run db:migrate
+        env:
+          DATABASE_URL: postgresql://emailwarm:localtest@127.0.0.1:55432/emailwarm_test
+      - run: pnpm run test:int
+      - name: Service logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose -f docker-compose.test.yml logs --tail=200
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm test
+      - name: Build with sentinel secrets
+        run: pnpm run build
+        env:
+          BETTER_AUTH_SECRET: CI_SENTINEL_SERVER_SECRET_5e1c8a
+          NEXT_PUBLIC_BETTER_AUTH_SECRET: CI_SENTINEL_PUBLIC_SECRET_9d27bf
+          INTERNAL_SECRET: CI_SENTINEL_INTERNAL_SECRET_c03e41
+      - name: No signing secret or signing code in browser assets
+        run: |
+          if grep -rlE 'CI_SENTINEL_|NEXT_PUBLIC_BETTER_AUTH_SECRET|mintBearerToken' .next/static; then
+            echo "A server secret or the token-signing code reached the browser bundle" && exit 1
+          fi

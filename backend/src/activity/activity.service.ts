@@ -242,8 +242,12 @@ export class ActivityService {
       .from(warmupSends)
       .where(
         sinceTs
-          ? and(eq(warmupSends.senderInboxId, inboxId), lte(warmupSends.createdAt, sinceTs))
-          : eq(warmupSends.senderInboxId, inboxId),
+          ? and(
+              eq(warmupSends.senderInboxId, inboxId),
+              isNotNull(warmupSends.sentAt),
+              lte(warmupSends.createdAt, sinceTs),
+            )
+          : and(eq(warmupSends.senderInboxId, inboxId), isNotNull(warmupSends.sentAt)),
       )
       .orderBy(desc(warmupSends.createdAt))
       .limit(rowFetchLimit);
@@ -471,6 +475,8 @@ export class ActivityService {
       }
     }
 
+    // Only sends a server accepted count as activity; reserved, canceled and failed ledger rows do not.
+    filters.push(isNotNull(warmupSends.sentAt));
     const whereClause = filters.length === 1 ? filters[0] : and(...filters);
 
     const [{ total }] = await db
@@ -625,22 +631,36 @@ export class ActivityService {
     const rows = await db
       .select()
       .from(placementTests)
-      .where(eq(placementTests.inboxId, inboxId))
-      .orderBy(desc(placementTests.completedAt));
+      .where(
+        and(
+          eq(placementTests.inboxId, inboxId),
+          // Finished tests only. A failed test is shown too, with its reason
+          // and no figures, so a test that could not be measured is visible
+          // rather than silently absent.
+          inArray(placementTests.status, ['complete', 'partial', 'failed']),
+        ),
+      )
+      .orderBy(desc(placementTests.createdAt));
 
     return rows.map((r) => {
-      const seedCount = r.seedCount ?? 0;
+      const hasResult = r.status !== 'failed';
+      // Percentages are over seeds that were actually observed.
+      const observed = r.observedCount ?? r.seedCount ?? 0;
       const missing = r.missingCount ?? 0;
-      const missingPct = seedCount > 0 ? Math.round((missing / seedCount) * 100) : 0;
+      const missingPct = hasResult && observed > 0 ? Math.round((missing / observed) * 100) : null;
       return {
         id: r.id,
-        completedAt: r.completedAt.toISOString(),
+        status: r.status,
+        completedAt: (r.completedAt ?? r.createdAt).toISOString(),
         seedCount: r.seedCount,
-        primaryPct: r.primaryPct,
-        promotionsPct: r.promotionsPct,
-        spamPct: r.spamPct,
+        observedCount: r.observedCount ?? r.seedCount,
+        errorCount: r.errorCount ?? 0,
+        primaryPct: hasResult ? r.primaryPct : null,
+        promotionsPct: hasResult ? r.promotionsPct : null,
+        spamPct: hasResult ? r.spamPct : null,
         missingPct,
-        placementScore: r.placementScore,
+        placementScore: hasResult ? r.placementScore : null,
+        failureReason: hasResult ? null : r.failureReason,
       };
     });
   }
@@ -657,6 +677,8 @@ export class ActivityService {
     days: number,
   ): Promise<{
     current: number | null;
+    /** Share (0-100) of the latest score that rests on real, recent measurements. */
+    completeness: number | null;
     trend: 'up' | 'down' | 'stable';
     history: ScoreHistoryRow[];
   }> {
@@ -670,6 +692,7 @@ export class ActivityService {
     const rows = await db
       .select({
         score: reputationScores.score,
+        completeness: reputationScores.completeness,
         recordedAt: reputationScores.recordedAt,
         trend: reputationScores.trend,
       })
@@ -678,11 +701,12 @@ export class ActivityService {
       .orderBy(asc(reputationScores.recordedAt));
 
     if (rows.length === 0) {
-      return { current: null, trend: 'stable', history: [] };
+      return { current: null, completeness: null, trend: 'stable', history: [] };
     }
     const latest = rows[rows.length - 1];
     return {
       current: latest.score,
+      completeness: latest.completeness,
       trend: (latest.trend as 'up' | 'down' | 'stable') ?? 'stable',
       history: rows.map((r) => ({ recordedAt: r.recordedAt.toISOString(), score: r.score })),
     };

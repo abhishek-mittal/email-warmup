@@ -149,27 +149,27 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
       >
         {label}
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-900/40 p-4">
           <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Add via CSV</h2>
+              <h2 className="text-lg font-semibold text-stone-900">Add via CSV</h2>
               <button
                 type="button"
                 onClick={closeModal}
                 aria-label="Close"
-                className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
               >
                 ✕
               </button>
             </div>
 
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-stone-600">
               Columns: <code className="font-mono text-xs">email,provider,client_id,client_secret,refresh_token</code>{' '}
               for gmail/outlook, or{' '}
               <code className="font-mono text-xs">
@@ -179,32 +179,32 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: 
             </p>
 
             <label className="mt-4 block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-700">CSV file</span>
+              <span className="mb-1 block text-xs font-medium text-stone-700">CSV file</span>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 onChange={onFileSelected}
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </label>
 
             {rows && rows.length > 0 ? (
-              <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="mt-4 overflow-hidden rounded-xl border border-stone-200">
+                <table className="min-w-full divide-y divide-stone-200 text-sm">
+                  <thead className="bg-stone-50 text-left text-xs font-medium uppercase tracking-wide text-stone-500">
                     <tr>
                       <th className="px-3 py-2">Email</th>
                       <th className="px-3 py-2">Provider</th>
                       <th className="px-3 py-2">Detected columns</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-stone-100">
                     {rows.map((r, idx) => (
                       <tr key={idx} className={r.missing.length > 0 ? 'bg-amber-50' : undefined}>
-                        <td className="px-3 py-2 font-medium text-slate-900">{r.email || '—'}</td>
-                        <td className="px-3 py-2 capitalize text-slate-700">{r.provider || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-600">
+                        <td className="px-3 py-2 font-medium text-stone-900">{r.email || '—'}</td>
+                        <td className="px-3 py-2 capitalize text-stone-700">{r.provider || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-stone-600">
                           {r.detected.length > 0 ? r.detected.join(', ') : '—'}
                           {r.missing.length > 0 ? (
                             <span className="ml-2 font-medium text-amber-700">
@@ -220,12 +220,12 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: 
             ) : null}
 
             {rows && rows.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">No rows found in this file.</p>
+              <p className="mt-4 text-sm text-stone-500">No rows found in this file.</p>
             ) : null}
 
             {result ? (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <p className="font-medium text-slate-900">
+              <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm">
+                <p className="font-medium text-stone-900">
                   {result.created} added successfully, {result.failed.length} failed.
                 </p>
                 {result.failed.length > 0 ? (
@@ -244,7 +244,7 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: 
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
               >
                 Close
               </button>
@@ -252,7 +252,7 @@ export function BatchUploadCsv({ endpoint, label = 'Add via CSV', onUploaded }: 
                 type="button"
                 onClick={upload}
                 disabled={!file || busy}
-                className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
               >
                 {busy ? 'Uploading…' : 'Upload'}
               </button>

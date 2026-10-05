@@ -12,6 +12,7 @@ import {
   renderPlanActivatedEmail,
   renderScoreDropEmail,
   renderTokenRevokedEmail,
+  renderBouncePausedEmail,
   renderTrialExpiredEmail,
   renderWarmupCompleteEmail,
 } from './email-templates';
@@ -44,6 +45,35 @@ import { formatSlackMessage, SlackAlertType } from './slack-formatter';
  *     2. POST formatSlackMessage(...) to the webhook.
  */
 
+const SLACK_TIMEOUT_MS = 10_000;
+
+/**
+ * A Slack destination is a customer-supplied URL that this server will POST
+ * to. Only Slack's own incoming-webhook endpoint over HTTPS is accepted, and
+ * redirects are refused, so it can't be aimed at an internal address.
+ */
+export function assertSlackWebhookUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new UnrecoverableError('Slack webhook URL is not a valid URL');
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== 'hooks.slack.com' ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    !url.pathname.startsWith('/services/')
+  ) {
+    throw new UnrecoverableError(
+      'Slack webhook URL must be an https://hooks.slack.com/services/ URL',
+    );
+  }
+  return url.toString();
+}
+
 type Channel = 'email' | 'slack';
 
 type NotifyType =
@@ -51,6 +81,7 @@ type NotifyType =
   | 'blacklist_hit'
   | 'score_drop'
   | 'token_revoked'
+  | 'bounce_paused'
   | 'warmup_complete'
   | 'trial_expired'
   | 'plan_activated'
@@ -66,6 +97,7 @@ interface NotifyJobData {
 
 /** Inbox-scoped types — they need the inbox row to render the email body. */
 const INBOX_SCOPED_TYPES: ReadonlySet<NotifyType> = new Set<NotifyType>([
+  'bounce_paused',
   'dns_broken',
   'blacklist_hit',
   'score_drop',
@@ -242,7 +274,9 @@ export class NotifyProcessor extends WorkerHost {
       payload,
     });
 
-    const response = await fetch(user.slackWebhookUrl, {
+    const response = await fetch(assertSlackWebhookUrl(user.slackWebhookUrl), {
+      redirect: 'error',
+      signal: AbortSignal.timeout(SLACK_TIMEOUT_MS),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(message),
@@ -281,11 +315,22 @@ export class NotifyProcessor extends WorkerHost {
       payload,
     });
 
-    const response = await fetch(user.slackWebhookUrl!, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message),
-    });
+    let response: Response;
+    try {
+      response = await fetch(assertSlackWebhookUrl(user.slackWebhookUrl!), {
+        redirect: 'error',
+        signal: AbortSignal.timeout(SLACK_TIMEOUT_MS),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message),
+      });
+    } catch (err) {
+      // Slack failure should not undo a successful email — log and move on.
+      this.logger.warn(
+        `Slack fan-out failed for user ${user.id} (type=${type}): ${(err as Error)?.message}`,
+      );
+      return;
+    }
 
     if (!response.ok) {
       // Slack failure should not undo a successful email — log and move on.
@@ -330,6 +375,12 @@ export class NotifyProcessor extends WorkerHost {
         });
       case 'token_revoked':
         return renderTokenRevokedEmail({ inboxEmail: inbox!.email });
+      case 'bounce_paused':
+        return renderBouncePausedEmail({
+          inboxEmail: inbox!.email,
+          attempted: payload.attempted ?? 0,
+          bounced: payload.bounced ?? 0,
+        });
       case 'warmup_complete':
         return renderWarmupCompleteEmail({
           inboxEmail: inbox!.email,

@@ -5,12 +5,14 @@ import { PoolInboxService } from './pool-inbox.service';
 import {
   getLatestAnalysisForPoolInboxes,
   getLatestAnalysisForPoolInbox,
+  getLatestAnalysisForInboxes,
 } from '@/analysis/analysis.service';
 
 import { pinoLoggerStubsFor } from '../common/test-module';
 jest.mock('@/analysis/analysis.service', () => ({
   getLatestAnalysisForPoolInboxes: jest.fn(),
   getLatestAnalysisForPoolInbox: jest.fn(),
+  getLatestAnalysisForInboxes: jest.fn(),
 }));
 
 describe('PoolInboxController', () => {
@@ -24,11 +26,13 @@ describe('PoolInboxController', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     (getLatestAnalysisForPoolInboxes as jest.Mock).mockResolvedValue(new Map());
+    (getLatestAnalysisForInboxes as jest.Mock).mockResolvedValue(new Map());
 
     service = {
       batchUpload: jest.fn(),
       create: jest.fn(),
       findByUser: jest.fn(),
+      findConsentedOwnedForPool: jest.fn().mockResolvedValue([]),
       findById: jest.fn(),
       softDelete: jest.fn(),
       reanalyze: jest.fn(),
@@ -139,7 +143,7 @@ describe('PoolInboxController', () => {
   });
 
   describe('GET /pool-inboxes', () => {
-    it('returns pool inboxes for the authenticated user with their latest analysis attached', async () => {
+    it('returns dedicated pool inboxes tagged source=dedicated with their latest analysis attached', async () => {
       const rows = [{ id: 'pi-1', userId: 'user-1' }];
       const analysisRow = { id: 'analysis-1', poolInboxId: 'pi-1', healthScore: 80 };
       service.findByUser.mockResolvedValue(rows);
@@ -151,7 +155,7 @@ describe('PoolInboxController', () => {
 
       expect(service.findByUser).toHaveBeenCalledWith('user-1');
       expect(getLatestAnalysisForPoolInboxes).toHaveBeenCalledWith(['pi-1']);
-      expect(result).toEqual([{ ...rows[0], analysis: analysisRow }]);
+      expect(result).toEqual([{ ...rows[0], source: 'dedicated', analysis: analysisRow }]);
     });
 
     it('attaches analysis: null when no analysis row exists yet', async () => {
@@ -161,7 +165,28 @@ describe('PoolInboxController', () => {
 
       const result = await controller.findAll(makeReq('user-1'));
 
-      expect(result).toEqual([{ ...rows[0], analysis: null }]);
+      expect(result).toEqual([{ ...rows[0], source: 'dedicated', analysis: null }]);
+    });
+
+    it('also returns consented own inboxes tagged source=owned, analysis keyed by inbox id', async () => {
+      const dedicated = [{ id: 'pi-1', userId: 'user-1' }];
+      const owned = [{ id: 'ib-1', userId: 'user-1', email: 'me@mine.com', activePairs: 2 }];
+      service.findByUser.mockResolvedValue(dedicated);
+      service.findConsentedOwnedForPool.mockResolvedValue(owned);
+      (getLatestAnalysisForPoolInboxes as jest.Mock).mockResolvedValue(new Map());
+      const ownedAnalysis = { id: 'analysis-9', inboxId: 'ib-1', healthScore: 70 };
+      (getLatestAnalysisForInboxes as jest.Mock).mockResolvedValue(
+        new Map([['ib-1', ownedAnalysis]]),
+      );
+
+      const result = await controller.findAll(makeReq('user-1'));
+
+      expect(service.findConsentedOwnedForPool).toHaveBeenCalledWith('user-1');
+      expect(getLatestAnalysisForInboxes).toHaveBeenCalledWith(['ib-1']);
+      expect(result).toEqual([
+        { ...dedicated[0], source: 'dedicated', analysis: null },
+        { ...owned[0], source: 'owned', analysis: ownedAnalysis },
+      ]);
     });
   });
 

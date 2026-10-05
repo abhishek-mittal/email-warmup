@@ -3,6 +3,8 @@ import type { Plan } from './types';
 export const PLAN_RANK: Record<Plan, number> = {
   free: 0,
   trial: 1,
+  // Demo accounts get growth-level features on fixed test credits.
+  demo: 3,
   starter: 2,
   growth: 3,
   agency: 4,

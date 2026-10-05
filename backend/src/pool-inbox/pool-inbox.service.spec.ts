@@ -10,6 +10,7 @@ jest.mock('@/db', () => ({
     select: jest.fn(),
     insert: jest.fn(),
     update: jest.fn(),
+    execute: jest.fn(),
   },
 }));
 
@@ -247,6 +248,84 @@ describe('PoolInboxService', () => {
 
       const result = await service.findByUser('user-1');
       expect(result).toEqual(rows);
+    });
+  });
+
+  describe('findConsentedOwnedForPool', () => {
+    it('maps consented own inboxes into pool-row shape with computed active pairs', async () => {
+      const inboxRows = [
+        {
+          id: 'ib-1',
+          userId: 'user-1',
+          email: 'me@mine.com',
+          provider: 'gmail',
+          status: 'active',
+          statusReason: null,
+          enrolledInPoolAt: new Date('2026-01-02T00:00:00Z'),
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+        },
+      ];
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockResolvedValue(inboxRows),
+      });
+      (db.execute as jest.Mock).mockResolvedValue({ rows: [{ inbox_id: 'ib-1', pairs: 3 }] });
+
+      const result = await service.findConsentedOwnedForPool('user-1');
+
+      expect(result).toEqual([
+        {
+          id: 'ib-1',
+          userId: 'user-1',
+          email: 'me@mine.com',
+          provider: 'gmail',
+          status: 'active',
+          displayName: null,
+          lastUsedAt: inboxRows[0].enrolledInPoolAt,
+          activePairs: 3,
+          errorMessage: null,
+          createdAt: inboxRows[0].createdAt,
+          updatedAt: inboxRows[0].createdAt,
+        },
+      ]);
+    });
+
+    it('defaults active pairs to 0 when the inbox has no in-flight sends, and skips the pairs query when empty', async () => {
+      const inboxRows = [
+        {
+          id: 'ib-2',
+          userId: 'user-1',
+          email: 'solo@mine.com',
+          provider: 'outlook',
+          status: 'paused',
+          statusReason: 'rate limited',
+          enrolledInPoolAt: null,
+          createdAt: new Date('2026-02-01T00:00:00Z'),
+        },
+      ];
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockResolvedValue(inboxRows),
+      });
+      (db.execute as jest.Mock).mockResolvedValue({ rows: [] });
+
+      const result = await service.findConsentedOwnedForPool('user-1');
+
+      expect(result[0].activePairs).toBe(0);
+      expect(result[0].errorMessage).toBe('rate limited');
+      expect(result[0].lastUsedAt).toBeNull();
+    });
+
+    it('returns an empty array (and runs no pairs query) when no inbox has consented', async () => {
+      (db.select as jest.Mock).mockReturnValue({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.findConsentedOwnedForPool('user-1');
+
+      expect(result).toEqual([]);
+      expect(db.execute as jest.Mock).not.toHaveBeenCalled();
     });
   });
 

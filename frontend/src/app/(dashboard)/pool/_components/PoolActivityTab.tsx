@@ -27,7 +27,7 @@ const EVENT_CONFIG: Record<
   replied: { dotClass: 'bg-emerald-500', label: 'Replied' },
   rescued: { dotClass: 'bg-violet-500', label: 'Rescued from spam' },
   spam_landed: { dotClass: 'bg-rose-500', label: 'Landed in spam' },
-  filed: { dotClass: 'bg-slate-400', label: 'Filed' },
+  filed: { dotClass: 'bg-stone-400', label: 'Filed' },
 };
 
 function renderEvent(event: PoolActivityEvent): string {
@@ -156,9 +156,9 @@ export function PoolActivityTab({ poolInboxId }: Props) {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-700">Activity timeline</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-sm font-semibold text-stone-700">Activity timeline</h2>
+        <p className="mt-1 text-xs text-stone-500">
           Most recent first. Pool inboxes receive warmup emails from the inboxes you&rsquo;re
           warming and take actions (open, star, reply, rescue).
         </p>
@@ -170,12 +170,12 @@ export function PoolActivityTab({ poolInboxId }: Props) {
         ) : null}
 
         {loading ? (
-          <div className="mt-6 flex items-center gap-2 text-sm text-slate-500">
+          <div className="mt-6 flex items-center gap-2 text-sm text-stone-500">
             <PulseDot state="busy" label="Loading activity" />
             Loading activity…
           </div>
         ) : events.length === 0 ? (
-          <div className="mt-6 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          <div className="mt-6 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
             No warmup emails received yet. This pool inbox will start appearing here once it
             is paired with an inbox being warmed.
           </div>
@@ -190,15 +190,15 @@ export function PoolActivityTab({ poolInboxId }: Props) {
                 >
                   <div className="mt-1.5 flex h-2.5 w-2.5 flex-none items-center justify-center">
                     <span
-                      className={`h-2.5 w-2.5 rounded-full ${cfg?.dotClass ?? 'bg-slate-300'}`}
+                      className={`h-2.5 w-2.5 rounded-full ${cfg?.dotClass ?? 'bg-stone-300'}`}
                       title={cfg?.label ?? event.type}
                       aria-hidden
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-slate-800">{renderEvent(event)}</p>
+                    <p className="text-sm text-stone-800">{renderEvent(event)}</p>
                     <p
-                      className="text-xs text-slate-500"
+                      className="text-xs text-stone-500"
                       title={new Date(event.timestamp).toISOString()}
                     >
                       {formatRelative(event.timestamp)} · {formatDateTime(event.timestamp)}
@@ -216,7 +216,7 @@ export function PoolActivityTab({ poolInboxId }: Props) {
               type="button"
               onClick={() => void loadMore()}
               disabled={loadingMore}
-              className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full border border-stone-300 bg-white px-4 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingMore ? 'Loading…' : 'Load more'}
             </button>
@@ -240,12 +240,12 @@ function StatChip({
 }) {
   const toneClass = tone === 'warning'
     ? 'border-amber-300 bg-amber-50 text-amber-800'
-    : 'border-slate-200 bg-slate-50 text-slate-700';
+    : 'border-stone-200 bg-stone-50 text-stone-700';
   return (
     <div className={`rounded-full border px-3 py-1.5 text-xs ${toneClass}`}>
       <span className="font-medium">{label}: {value}</span>
       {percent !== undefined && percent !== null ? (
-        <span className="ml-1 text-slate-500">({percent}%)</span>
+        <span className="ml-1 text-stone-500">({percent}%)</span>
       ) : null}
     </div>
   );

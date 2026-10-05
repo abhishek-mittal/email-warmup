@@ -1,5 +1,8 @@
 # EmailWarm — Spec Status Tracker
 
+> **Readiness audit, 2026-10-03:** This tracker preserves historical implementation results. For current release blockers and new work use [Market readiness assessment](../docs/07-market-readiness/README.md) and [MR task status](../docs/07-market-readiness/STATUS.md). The audit found incomplete integration and missing safeguards; prior `done` rows are not release acceptance.
+
+
 **Purpose:** Single source of truth for what has been built, what is in progress, and what is blocked.  
 Every coding agent MUST update this file when it starts a task and when it completes one.  
 Do not mark a task `done` unless all acceptance criteria in its spec file have been verified.
@@ -145,7 +148,7 @@ Replaced the third-party Clerk SaaS with self-hosted [better-auth](https://bette
 **Caveats / not done in this commit:**
 - The `UserSyncService` (backend) and the backend's `users` table are now decoupled from the better-auth `user` table. The service exists but is unwired. A follow-up should add a `databaseHooks.user.create.after` in `lib/auth-server.ts` to call `userSyncService.upsertUser()` so the backend's plan/trial fields stay in sync.
 - No real OAuth round-trip was tested (requires real Google + Microsoft credentials); structurally complete.
-- Better-auth is mounted on the frontend (`:3000`) and the backend (`:3001`) only share the HMAC secret. The session cookie is httpOnly and not shared cross-origin — `useApi`/`serverApi` carry the bearer token explicitly so no cookie plumbing is needed.
+- Better-auth is mounted on the frontend (`:3000`) and the backend (`:4611`) only share the HMAC secret. The session cookie is httpOnly and not shared cross-origin — `useApi`/`serverApi` carry the bearer token explicitly so no cookie plumbing is needed.
 
 ## Wave 7 — Private Pool Architecture
 

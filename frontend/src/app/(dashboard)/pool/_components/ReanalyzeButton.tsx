@@ -60,7 +60,7 @@ export function ReanalyzeButton({ poolInboxId, onReanalyzed }: Props) {
           onClick={reanalyze}
           disabled={busy}
           title="Re-run the DNS analysis (SPF, DKIM, DMARC, MX, rDNS)"
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-2.5 py-1 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <PulseDot state={pulse} size="xs" label={pulse === 'busy' ? 'Re-analyzing…' : pulse === 'live' ? 'Analysis queued' : undefined} />
           {busy ? 'Re-analyzing…' : 'Re-analyze'}

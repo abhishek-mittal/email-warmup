@@ -11,7 +11,7 @@
  *   | live    | emerald-500   | yes      | data is fresh and updating on its own |
  *   | busy    | sky-500       | yes      | a request is in flight, please wait    |
  *   | error   | rose-500      | no       | the last poll/request failed           |
- *   | idle    | slate-400     | no       | component is mounted but quiet        |
+ *   | idle    | stone-400     | no       | component is mounted but quiet        |
  *
  * The `live` and `busy` states share the same animation (Tailwind's
  * `animate-ping` — an expanding ring fading outward) so the visual
@@ -36,7 +36,7 @@ const STYLES: Record<PulseState, { dot: string; ring: string; pulse: boolean }> 
   live: { dot: 'bg-emerald-500', ring: 'bg-emerald-500/40', pulse: true },
   busy: { dot: 'bg-sky-500', ring: 'bg-sky-500/40', pulse: true },
   error: { dot: 'bg-rose-500', ring: 'bg-rose-500/40', pulse: false },
-  idle: { dot: 'bg-slate-400', ring: 'bg-slate-400/40', pulse: false },
+  idle: { dot: 'bg-stone-400', ring: 'bg-stone-400/40', pulse: false },
 };
 
 interface Props {

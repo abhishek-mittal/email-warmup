@@ -1,5 +1,9 @@
+import 'server-only';
+
 /**
- * Mint a signed bearer token for the backend. Token format:
+ * Mint a signed bearer token for the backend. Server-only: the signing
+ * secret must never be reachable from browser code (see lib/server/backend-proxy.ts).
+ * Token format:
  *   v1.<base64url(userId)>.<base64url(expiryMs)>.<base64url(hmac)>
  *
  * The HMAC is computed over the first three parts using BETTER_AUTH_SECRET

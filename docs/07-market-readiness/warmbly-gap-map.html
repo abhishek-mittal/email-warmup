@@ -1,0 +1,367 @@
+<title>Warmbly Gap Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one wide comparison table-of-cards, Warmbly on the left, EmailWarm on the right; verdict first, plan last. */
+:root {
+  --bg: #f4f6f3; --surface: #ffffff; --sunk: #e9eee8; --ink: #17241f; --muted: #556560; --line: #cbd6cf; --line-soft: #dde5df;
+  --accent: #1b4d3e;
+  --yes: #1a7a46; --yes-bg: #d8f0e1; --part: #94610a; --part-bg: #f8e8c4; --no: #b3261e; --no-bg: #f9dad6; --unk: #5d6b78; --unk-bg: #e3e8ee;
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1814; --surface: #17241e; --sunk: #1d2d26; --ink: #e6efe9; --muted: #98aaa2; --line: #3a4f45; --line-soft: #25362e;
+    --accent: #7fd1ae;
+    --yes: #6fd39b; --yes-bg: #173626; --part: #e6b45c; --part-bg: #3a2c10; --no: #f08a82; --no-bg: #411d1a; --unk: #9fb0c0; --unk-bg: #222e39;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1814; --surface: #17241e; --sunk: #1d2d26; --ink: #e6efe9; --muted: #98aaa2; --line: #3a4f45; --line-soft: #25362e;
+  --accent: #7fd1ae;
+  --yes: #6fd39b; --yes-bg: #173626; --part: #e6b45c; --part-bg: #3a2c10; --no: #f08a82; --no-bg: #411d1a; --unk: #9fb0c0; --unk-bg: #222e39;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.page { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.12; text-wrap: balance; }
+h1 { font-size: clamp(32px, 5.2vw, 52px); font-weight: 700; }
+h2 { font-size: 27px; font-weight: 700; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); max-width: 70ch; font-size: 17px; }
+.prose { color: var(--muted); max-width: 72ch; }
+.prose strong, .lede strong { color: var(--ink); font-weight: 600; }
+code { font-family: var(--mono); font-size: .86em; background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+header.top { display: flex; flex-direction: column; gap: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+/* verdict */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card p { color: var(--muted); font-size: 15px; }
+.card .tag { font-family: var(--mono); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; }
+.card.good .tag { color: var(--yes); } .card.warn .tag { color: var(--part); } .card.bad .tag { color: var(--no); }
+
+/* scoreboard */
+.score { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.side { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side h3 small { font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--muted); display: block; margin-top: 4px; }
+.bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--sunk); }
+.bar span { height: 100%; transform-origin: left; animation: grow .7s ease-out; }
+@keyframes grow { from { transform: scaleX(.2); } to { transform: scaleX(1); } }
+.bar .y { background: var(--yes); } .bar .p { background: var(--part); } .bar .n { background: var(--no); } .bar .u { background: var(--unk); }
+.nums { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--mono); font-size: 13px; }
+.nums b { font-weight: 500; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.dot.y { background: var(--yes); } .dot.p { background: var(--part); } .dot.n { background: var(--no); } .dot.u { background: var(--unk); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.fact { background: var(--sunk); border-radius: 10px; padding: 10px 12px; }
+.fact b { display: block; font-family: var(--display); font-size: 24px; line-height: 1.1; }
+.fact span { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 720px) { .score { grid-template-columns: 1fr; } }
+
+/* matrix */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters button { font: inherit; font-size: 14px; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.heads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: var(--mono); font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); padding-block: 8px; z-index: 2; border-bottom: 1px solid var(--line-soft); }
+.group { display: flex; flex-direction: column; gap: 10px; }
+.group > h3 { padding-top: 10px; }
+.row { display: flex; flex-direction: column; gap: 6px; }
+.row .cap { font-weight: 600; font-size: 15px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cell { border-radius: 10px; padding: 10px 12px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; border: 1px solid transparent; }
+.cell .st { font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 500; }
+.cell.y { background: var(--yes-bg); color: var(--ink); border-color: color-mix(in srgb, var(--yes) 40%, transparent); } .cell.y .st { color: var(--yes); }
+.cell.p { background: var(--part-bg); border-color: color-mix(in srgb, var(--part) 40%, transparent); } .cell.p .st { color: var(--part); }
+.cell.n { background: var(--no-bg); border-color: color-mix(in srgb, var(--no) 40%, transparent); } .cell.n .st { color: var(--no); }
+.cell.u { background: var(--unk-bg); border-color: color-mix(in srgb, var(--unk) 40%, transparent); } .cell.u .st { color: var(--unk); }
+.cell .note { color: var(--muted); }
+.pair.w .lab { display: none; }
+.lab { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+@media (max-width: 640px) {
+  .heads { display: none; }
+  .pair { grid-template-columns: 1fr; }
+  .pair.w .lab { display: block; }
+}
+.empty { color: var(--muted); padding: 14px 0; }
+
+/* adopt + roadmap */
+.adopt { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.adopt .card h3 { font-size: 17px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.chip { font-family: var(--mono); font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+.chip.hi { background: var(--no-bg); color: var(--no); } .chip.mid { background: var(--part-bg); color: var(--part); } .chip.lo { background: var(--yes-bg); color: var(--yes); }
+.path { display: flex; flex-direction: column; gap: 12px; }
+.phase { display: grid; grid-template-columns: 150px 1fr; gap: 16px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 16px; }
+.phase .when { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.phase ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 15px; }
+.phase li { margin-top: 3px; }
+.phase .exit { margin-top: 10px; font-size: 14px; }
+.phase .exit b { color: var(--ink); }
+@media (max-width: 640px) { .phase { grid-template-columns: 1fr; gap: 6px; } }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--mono); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.note { color: var(--muted); }
+.foot { color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--line-soft); padding-top: 18px; max-width: 80ch; }
+@media (prefers-reduced-motion: reduce) { .bar span { animation: none; } }
+</style>
+
+<div class="page">
+  <header class="top">
+    <span class="eyebrow">Competitive read · 3 October 2026</span>
+    <h1>Where EmailWarm stands against Warmbly</h1>
+    <p class="lede">Warmbly is an open-source cold outreach and warmup platform. I read its code. <strong>On warmup alone we are a credible, well-tested early version. As a platform, we are far behind.</strong> Closing that gap means choosing a narrower product, not copying theirs.</p>
+    <div class="meta">
+      <span>github.com/warmbly/warmbly @ c3da0d6</span><span>Apache-2.0</span><span>348 stars</span><span>last push 3 Oct 2026</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-verdict">
+    <h2 id="h-verdict">The short answer</h2>
+    <div class="verdict">
+      <div class="card good"><span class="tag">Where we are level</span><h3>Core warmup mechanics</h3><p>Ramped daily volume, jittered spaced sends, hard caps, bounce-rate pause, authentication checks and GDPR-style erase and export all exist on both sides.</p></div>
+      <div class="card warn"><span class="tag">Where we are behind on warmup</span><h3>Trust and realism</h3><p>No verified-delivery tokens, no tamper detection, no graded health bands, no reciprocity weighting, and no real network of mailboxes to warm against.</p></div>
+      <div class="card bad"><span class="tag">Where we are far behind</span><h3>Enterprise platform</h3><p>No organizations or roles, SSO, 2FA, audit log, public API, webhooks, admin console, worker fleet or observability. Warmbly has all of these.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-score">
+    <h2 id="h-score">Scoreboard</h2>
+    <p class="prose">Counted from the matrix below. Green means it exists and works, amber means partly, red means absent, grey means I could not confirm from the code.</p>
+    <div class="score" id="score"></div>
+    <div class="facts">
+      <div class="fact"><b>304k vs 15k</b><span>lines of backend code (Go, excluding tests) vs ours (TypeScript)</span></div>
+      <div class="fact"><b>250 vs 11</b><span>database migrations</span></div>
+      <div class="fact"><b>608 vs 56</b><span>backend test files</span></div>
+      <div class="fact"><b>5 vs 1</b><span>main languages: Go, TypeScript, Rust, Elixir, Swift vs TypeScript only</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-matrix">
+    <h2 id="h-matrix">Side by side</h2>
+    <div class="filters" role="group" aria-label="Filter rows">
+      <button type="button" data-f="all" aria-pressed="true">Everything</button>
+      <button type="button" data-f="gap" aria-pressed="false">Gaps we must close</button>
+      <button type="button" data-f="par" aria-pressed="false">Level</button>
+      <button type="button" data-f="warm" aria-pressed="false">Warmup only</button>
+    </div>
+    <div class="heads" aria-hidden="true"><span>Warmbly</span><span>EmailWarm (today)</span></div>
+    <div id="matrix"></div>
+  </section>
+
+  <section aria-labelledby="h-adopt">
+    <h2 id="h-adopt">What to learn from their warmup engine</h2>
+    <p class="prose">These are design ideas that are cheap to port and raise trust. They are in Go, so we reimplement them in TypeScript rather than copy files.</p>
+    <div class="adopt">
+      <div class="card"><h3>1. Verified-delivery tokens</h3><p>Every warmup email carries a platform-minted token, single use and bound to its recipient. It stops replay and proves a mailbox really received the mail.</p><div class="chips"><span class="chip hi">impact high</span><span class="chip lo">effort small</span><span class="chip">their warmup_token flow</span></div></div>
+      <div class="card"><h3>2. Tamper attribution</h3><p>If a mailbox deletes or spam-flags warmup mail it verifiably received, only its owner could have done it. They count that as a strike on a ladder, not a first-offense ban.</p><div class="chips"><span class="chip hi">impact high</span><span class="chip mid">effort medium</span><span class="chip">warmup_tampering</span></div></div>
+      <div class="card"><h3>3. Graded health bands</h3><p>Healthy, watch, throttled, quarantined, blocked. Throttled means half volume and double spacing while warmup keeps running. Spam placement only slows a mailbox, never bans it.</p><div class="chips"><span class="chip hi">impact high</span><span class="chip mid">effort medium</span><span class="chip">evaluateMetrics</span></div></div>
+      <div class="card"><h3>4. Placement read over verified deliveries</h3><p>Rates come from verified receipts at Google, Microsoft and Yahoo only, with a floor of 20 deliveries in 7 days. Small hosts never build a headline number.</p><div class="chips"><span class="chip hi">impact high</span><span class="chip lo">effort small</span><span class="chip">warmup_placement_sql</span></div></div>
+      <div class="card"><h3>5. Reciprocity and partner diversity</h3><p>Pick partners with weights for recent use, domain frequency and how far behind each mailbox is on what it sent. Cross-tier fallback when the pool is small.</p><div class="chips"><span class="chip mid">impact medium</span><span class="chip mid">effort medium</span><span class="chip">WarmupPartnerCandidates</span></div></div>
+      <div class="card"><h3>6. Warmup to cold graduation</h3><p>A mailbox leaves warmup at 5, 10 or 20 cold sends a day depending on how long it warmed, then adds 5 per clean day.</p><div class="chips"><span class="chip mid">impact medium</span><span class="chip lo">effort small</span><span class="chip">warmupramp/cold.go</span></div></div>
+      <div class="card"><h3>7. Control plane and worker fleet</h3><p>Workers never touch the database and send through each mailbox's own provider, so throughput scales by adding workers. This is their main architectural bet.</p><div class="chips"><span class="chip hi">impact high</span><span class="chip hi">effort large</span><span class="chip">Kafka or event bus</span></div></div>
+      <div class="card"><h3>8. Operator tooling</h3><p>An admin app, a CLI that works when sign-in does, an instance health page and a doctor command. They treat operations as a product surface.</p><div class="chips"><span class="chip mid">impact medium</span><span class="chip mid">effort medium</span><span class="chip">warmblyctl, admin/</span></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-honest">
+    <h2 id="h-honest">An honest read of both sides</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Point</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Our small edges</td><td class="note">A send ledger with an explicit uncertain state, so a lost acknowledgement is never blindly resent. Placement results that exclude unreachable seeds instead of counting them as spam. Scores that say how much is measured. Egress limits on customer mail hosts. I did not confirm the absence of these in Warmbly, so treat them as areas where we are at least deliberate, not proven ahead.</td></tr>
+          <tr><td>Their real moat</td><td class="note">A network of monitored mailboxes to warm against, plus years of breadth. Warmup quality depends on pool size and trust. We have no customers, so our shared pool is empty and our placement tests have no seed mailboxes.</td></tr>
+          <tr><td>Their own gaps</td><td class="note">Their internal deliverability report lists open-loop ramps, shallow threads, and worker bounce results not feeding the health model. Part of that report is stale: the auth sweep and cold graduation it calls missing now exist in code. Docs lag the code there, so do not rely on it.</td></tr>
+          <tr><td>Scope warning</td><td class="note">"Enterprise Warmbly" is campaigns, CRM, inbox, automations, forms, tracking and an iOS app on top of warmup. Rebuilding that is years of work. A warmup and deliverability product with enterprise controls is reachable.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-plan">
+    <h2 id="h-plan">Path to an enterprise warmup product</h2>
+    <p class="prose">Order matters: a warmup network nobody trusts cannot be rescued by SSO. Each phase has an exit test, not a date.</p>
+    <div class="path">
+      <div class="phase"><div><span class="when">Phase A</span><h3>A pool worth joining</h3></div><div>
+        <ul><li>Verified-delivery tokens, tamper strikes, graded health bands</li><li>Placement over verified receipts at the big three, with a sample floor</li><li>Provision seed mailboxes and a Spamhaus key; run a real two-domain warm cycle</li><li>Reciprocity-weighted partner choice; graduation ramp</li></ul>
+        <p class="exit"><b>Exit:</b> 14 days of real warming across at least 3 providers with measured inbox rate and no manual intervention.</p></div></div>
+      <div class="phase"><div><span class="when">Phase B</span><h3>Enterprise controls</h3></div><div>
+        <ul><li>Organizations, members, roles and permission checks on every route</li><li>OIDC single sign-on, then SAML and SCIM; 2FA</li><li>Audit log; API keys with scopes; signed outbound webhooks</li><li>Key rotation and optional KMS for stored secrets</li></ul>
+        <p class="exit"><b>Exit:</b> a tenant-isolation test suite that fails if any route returns another organization's data.</p></div></div>
+      <div class="phase"><div><span class="when">Phase C</span><h3>Run it like a service</h3></div><div>
+        <ul><li>Split API from workers; worker heartbeat in readiness</li><li>Metrics and tracing; central logs; runbooks; restore rehearsal</li><li>Admin console and operator CLI for stops, seeds, holds</li><li>Rate limits; browser tests; deploy pipeline run end to end</li></ul>
+        <p class="exit"><b>Exit:</b> kill a worker mid-send and restore from backup, both rehearsed, with measured recovery time.</p></div></div>
+      <div class="phase"><div><span class="when">Phase D</span><h3>Scale and sell</h3></div><div>
+        <ul><li>Dedicated pools per enterprise customer; data residency choice</li><li>Self-host installer for customers who want it</li><li>Real billing; provider app approval; privacy and terms pages</li></ul>
+        <p class="exit"><b>Exit:</b> a paying pilot customer on a written service level.</p></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-license">
+    <h2 id="h-license">Can we reuse their code?</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+        <tbody>
+          <tr><td>Licence</td><td class="note">Apache License 2.0, copyright Mindroot Ltd. It allows copying, modifying and commercial use.</td></tr>
+          <tr><td>What it requires</td><td class="note">Keep the licence text and copyright notices, mark files you changed, and carry over any NOTICE file. It also grants a patent licence.</td></tr>
+          <tr><td>What it does not give</td><td class="note">The Warmbly name, logo and branding. Marketing copy and images are best treated as theirs unless a licence file says otherwise.</td></tr>
+          <tr><td>Practical limit</td><td class="note">It is Go and we are TypeScript, so files cannot be dropped in. The useful reuse is their design: schemas, thresholds, state machines. Reimplementing from those ideas is the clean route.</td></tr>
+          <tr><td>Check first</td><td class="note">The root is Apache-2.0; their <code>web</code> and <code>site</code> folders carry their own MIT licence, also permissive but with its own notice to keep. This is not legal advice.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot"><b>How this was made.</b> I cloned the repository, read its README, architecture notes, warmup package, SQL and tests, and counted code. I did not run Warmbly, so "works" means the code implements it, not that I saw it behave. Rows marked unconfirmed rest on file counts or docs I could not tie to code. Our side comes from this repository as of the current branch, uncommitted. Their stars, activity and file counts will change.</p>
+</div>
+
+<script>
+(function () {
+  // state: y = has it, p = partial, n = missing, u = could not confirm
+  var ST = { y: 'Has it', p: 'Partial', n: 'Missing', u: 'Not confirmed' };
+  var G = [
+    ['Warmup engine', 'warm', [
+      ['Pool of real mailboxes to warm against', ['y', 'Free and premium pools, a managed cloud pool of monitored mailboxes'], ['p', 'Shared and private pool both work; no customers yet, so the shared pool is empty']],
+      ['Verified-delivery tokens', ['y', 'Single use, bound to the recipient'], ['n', 'We match by Message-ID only']],
+      ['Tamper detection on received mail', ['y', 'Delete or spam-move of verified mail counts as a strike'], ['n', 'Not built']],
+      ['Graded health bands driving volume', ['y', 'Healthy, watch, throttled, quarantined, blocked'], ['p', 'Binary pauses for bounces and blocklists; no graded slowdown']],
+      ['Partner diversity and reciprocity', ['y', 'Recency, domain frequency, starvation boost, tier fallback'], ['p', 'Per-pair and per-receiver daily caps, spread across partners; no reciprocity']],
+      ['Content realism', ['y', 'Template bank plus AI bank, persona-biased engagement, threads'], ['p', 'AI content with fallback templates; single reply']],
+      ['Ramped, jittered, capped schedule', ['y', 'Ramp with ceiling, jitter, minimum gaps'], ['y', 'Ramp, random spaced slots, hard daily cap, once-per-day plan']],
+      ['Warmup to cold graduation', ['y', 'Cold start by warmup age, +5 per clean day'], ['p', 'Graduation rule exists; there is no cold sending to graduate into']],
+      ['Safe against double sends', ['u', 'Idempotency is widespread in code; an explicit uncertain state was not confirmed'], ['y', 'Ledger with uncertain state; never resent blindly']],
+      ['Bounce-rate auto pause', ['y', 'Bounce and complaint thresholds drive bands'], ['y', 'Pause when more than 3% bounce in 24 hours']],
+      ['Operator stop switches', ['u', 'Admin panel and danger zone exist; per-scope stop not confirmed'], ['y', 'Global, per-provider and per-account stops with audit rows']]
+    ]],
+    ['Deliverability monitoring', 'warm', [
+      ['SPF, DKIM, DMARC checks', ['y', 'Checker plus scheduled sweep'], ['y', 'Pass, fail, unknown with real record validation']],
+      ['Blocklist monitoring', ['u', 'Present in few files; coverage not confirmed'], ['p', 'Five live lists; Spamhaus needs a key we do not have']],
+      ['Inbox placement testing', ['y', 'Placement poller and per-provider evidence'], ['p', 'Built and tested; no seed mailboxes, so it cannot run']],
+      ['Complaint feedback loops', ['y', 'FBL and ARF handling, Postmaster'], ['n', 'Not read']],
+      ['Honest unknown versus healthy', ['u', 'Sample floors exist; scoring semantics not confirmed'], ['y', 'Scores report completeness; unmeasured is not healthy']]
+    ]],
+    ['Enterprise platform', 'plat', [
+      ['Organizations, members, roles', ['y', 'Org model with fine-grained permissions on routes'], ['n', 'One user owns their inboxes']],
+      ['Single sign-on (OIDC)', ['y', 'OIDC provider support'], ['n', 'Google and Microsoft login only']],
+      ['SAML and SCIM', ['n', 'One mention of SAML, none of SCIM'], ['n', 'Not built']],
+      ['Two-factor authentication', ['y', 'TOTP and login codes'], ['n', 'Password or social only']],
+      ['Audit log', ['y', 'Broad audit coverage'], ['n', 'Only stop-switch rows']],
+      ['Public API, keys, webhooks', ['y', 'REST API, scoped keys, signed webhooks'], ['n', 'Internal routes only']],
+      ['Third-party integrations', ['y', 'HubSpot, Slack, Zapier, Make'], ['p', 'Slack alerts only']],
+      ['Secret encryption', ['y', 'Envelope encryption, local key or KMS'], ['p', 'AES-256-GCM with a single key; no rotation']],
+      ['GDPR erase and export', ['y', 'Mailbox erasure and danger zone'], ['y', 'Anonymising delete and data export']]
+    ]],
+    ['Operations', 'plat', [
+      ['Control plane and worker fleet', ['y', 'Workers send through each mailbox provider; add workers to scale'], ['n', 'API and workers share one process']],
+      ['Admin console', ['y', 'Separate admin app'], ['n', 'curl against internal routes']],
+      ['Operator CLI', ['y', 'warmblyctl works when sign-in does'], ['n', 'None']],
+      ['One-command self-host', ['y', 'Install script with wizard'], ['n', 'Images build; no installer']],
+      ['Metrics and tracing', ['p', 'Instance health, doctor, limited telemetry'], ['n', 'Logs and a readiness probe']],
+      ['Test depth', ['y', '608 test files, many against a live database'], ['p', '604 unit, 121 integration, 23 frontend; no browser tests']],
+      ['CI and security scanning', ['y', 'CI, security and release workflows'], ['p', 'Workflow written; never run on GitHub']],
+      ['Realtime collaboration', ['y', 'Live presence and edits'], ['n', 'Polling']],
+      ['Mobile app', ['y', 'iOS app'], ['n', 'None']],
+      ['Billing', ['y', 'Optional Stripe; runs without cloud accounts'], ['p', 'Demo credits; Stripe not hardened']]
+    ]],
+    ['Outreach product', 'out', [
+      ['Campaigns and sequences', ['y', 'Multi-step, per-mailbox caps'], ['n', 'Out of scope for us']],
+      ['Unified inbox and CRM', ['y', 'Inbox, contacts, pipelines, deals'], ['n', 'Out of scope for us']],
+      ['Automations', ['y', 'Visual reply playbooks with AI steps'], ['n', 'Out of scope for us']],
+      ['Suppression and unsubscribe', ['y', 'One-click unsubscribe, org-wide suppression'], ['n', 'Not applicable to warmup mail']]
+    ]]
+  ];
+
+  var tally = { w: { y: 0, p: 0, n: 0, u: 0 }, e: { y: 0, p: 0, n: 0, u: 0 } };
+  var rows = [];
+  G.forEach(function (g) {
+    g[2].forEach(function (r) {
+      tally.w[r[1][0]]++; tally.e[r[2][0]]++;
+      var wy = r[1][0], ey = r[2][0];
+      rows.push({
+        group: g[0], scope: g[1], cap: r[0], w: r[1], e: r[2],
+        gap: (wy === 'y' || wy === 'p') && (ey === 'n' || ey === 'p') && wy !== ey && g[1] !== 'out',
+        par: wy === ey
+      });
+    });
+  });
+
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+
+  function scoreCard(name, sub, t) {
+    var total = t.y + t.p + t.n + t.u;
+    var box = el('div', 'side');
+    var h = el('h3', null, name); h.appendChild(el('small', null, sub)); box.appendChild(h);
+    var bar = el('div', 'bar');
+    bar.setAttribute('role', 'img');
+    bar.setAttribute('aria-label', name + ': ' + t.y + ' have, ' + t.p + ' partial, ' + t.n + ' missing, ' + t.u + ' unconfirmed of ' + total);
+    ['y', 'p', 'n', 'u'].forEach(function (k) {
+      if (!t[k]) return;
+      var s = el('span', k); s.style.width = (t[k] / total * 100) + '%'; bar.appendChild(s);
+    });
+    box.appendChild(bar);
+    var nums = el('div', 'nums');
+    [['y', 'has it'], ['p', 'partial'], ['n', 'missing'], ['u', 'unconfirmed']].forEach(function (p) {
+      var s = el('span'); s.appendChild(el('i', 'dot ' + p[0])); var b = el('b', null, String(t[p[0]])); s.appendChild(b); s.appendChild(document.createTextNode(' ' + p[1])); nums.appendChild(s);
+    });
+    box.appendChild(nums);
+    return box;
+  }
+  var sc = document.getElementById('score');
+  sc.appendChild(scoreCard('Warmbly', 'of ' + rows.length + ' capabilities', tally.w));
+  sc.appendChild(scoreCard('EmailWarm', 'of ' + rows.length + ' capabilities', tally.e));
+
+  function cell(c, who) {
+    var d = el('div', 'cell ' + c[0]);
+    d.appendChild(el('span', 'lab', who));
+    d.appendChild(el('span', 'st', ST[c[0]]));
+    d.appendChild(el('span', 'note', c[1]));
+    return d;
+  }
+
+  var mx = document.getElementById('matrix');
+  function render(f) {
+    mx.textContent = '';
+    var shown = 0;
+    G.forEach(function (g) {
+      var list = rows.filter(function (r) {
+        if (r.group !== g[0]) return false;
+        if (f === 'gap') return r.gap;
+        if (f === 'par') return r.par;
+        if (f === 'warm') return r.scope === 'warm';
+        return true;
+      });
+      if (!list.length) return;
+      var grp = el('div', 'group'); grp.appendChild(el('h3', null, g[0]));
+      list.forEach(function (r) {
+        shown++;
+        var row = el('div', 'row'); row.appendChild(el('div', 'cap', r.cap));
+        var pair = el('div', 'pair w');
+        pair.appendChild(cell(r.w, 'Warmbly')); pair.appendChild(cell(r.e, 'EmailWarm'));
+        row.appendChild(pair); grp.appendChild(row);
+      });
+      mx.appendChild(grp);
+    });
+    if (!shown) mx.appendChild(el('p', 'empty', 'Nothing matches this filter.'));
+  }
+  document.querySelectorAll('.filters button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.filters button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      render(b.getAttribute('data-f'));
+    });
+  });
+  render('all');
+})();
+</script>

@@ -5,6 +5,7 @@ import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { BillingService } from '@/billing/billing.service';
 import { ImapClientService, ImapNotConfiguredError } from './imap/imap-client.service';
 import { SmtpClientService } from './smtp/smtp-client.service';
+import { DnsService } from '@/monitor/dns.service';
 import { QueueService } from '@/queue/queue.service';
 import { db } from '@/db';
 
@@ -97,13 +98,24 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
         { provide: ImapClientService, useValue: imapClientService },
         { provide: SmtpClientService, useValue: smtpClientService },
         { provide: QueueService, useValue: { addTokenRefresh: jest.fn() } },
+        {
+          provide: DnsService,
+          useValue: {
+            checkSpf: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+            checkDkimForInbox: jest
+              .fn()
+              .mockResolvedValue({ status: 'unknown', code: null, detail: '' }),
+            checkDmarc: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+            checkMx: jest.fn().mockResolvedValue({ status: 'pass', code: null, detail: '' }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<InboxService>(InboxService);
   });
 
-  it('inserts a pool_members row with active=true, reputation=50 when precheck passes', async () => {
+  it('does not enroll in the pool or record consent when the owner did not give it', async () => {
     mockSelectChain([inboxRow]);
     mockInsert();
     mockUpdate();
@@ -111,39 +123,21 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     const steps = await (service as any).runPrecheck('inbox-1', 'gmail');
 
     expect(steps.smtp && steps.imap && steps.dns).toBe(true);
-
-    // db.insert is called twice during a passing precheck: once for the dns_checks
-    // row, once (this fix) for the pool_members row. Find the pool_members insert by
-    // its distinguishing field (`inboxId` + `reputation`) rather than assuming order.
+    // Only the dns_checks row — no pool_members insert without consent.
     const insertMock = db.insert as jest.Mock;
-    expect(insertMock).toHaveBeenCalledTimes(2);
-
-    const poolMembersCallIndex = insertMock.mock.results.findIndex((result) => {
-      const valuesCalls = result.value.values.mock.calls;
-      return valuesCalls.some((call: any[]) => call[0]?.reputation === 50);
-    });
-    expect(poolMembersCallIndex).toBeGreaterThanOrEqual(0);
-
-    const valuesArg = insertMock.mock.results[poolMembersCallIndex].value.values.mock.calls[0][0];
-    expect(valuesArg).toEqual({
-      inboxId: 'inbox-1',
-      email: 'sender@sendco.com',
-      domain: 'sendco.com',
-      provider: 'gmail',
-      reputation: 50,
-      active: true,
-      quarantined: false,
-    });
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
+    expect(setCall.status).toBe('active');
+    expect(setCall).not.toHaveProperty('poolConsentAt');
   });
 
-  it('also sets inbox status=active and poolConsentAt when precheck passes', async () => {
+  it('records pool consent only when it was explicitly given on the request', async () => {
     mockSelectChain([inboxRow]);
     mockInsert();
     mockUpdate();
 
-    await (service as any).runPrecheck('inbox-1', 'gmail');
+    await (service as any).runPrecheck('inbox-1', 'gmail', true);
 
-    expect(db.update).toHaveBeenCalled();
     const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
     expect(setCall.status).toBe('active');
     expect(setCall.poolConsentAt).toBeInstanceOf(Date);
@@ -233,9 +227,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
   it('attaches errCode, host, and port to the thrown error when SMTP verify fails', async () => {
     const err = Object.assign(new Error('Invalid login'), { code: 'EAUTH' });
     smtpClientService.verify.mockRejectedValue(err);
-    mockSelectChain([
-      { ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 },
-    ]);
+    mockSelectChain([{ ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 }]);
     mockInsert();
     mockUpdate();
 
@@ -270,9 +262,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
   });
 
   it('returns a detail object with smtp/imap timing, host, port, and mailbox count on success', async () => {
-    mockSelectChain([
-      { ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 },
-    ]);
+    mockSelectChain([{ ...inboxRow, smtpHost: 'smtp.sendco.com', smtpPort: 587 }]);
     mockInsert();
     mockUpdate();
     imapClientService.getConnection.mockResolvedValue({

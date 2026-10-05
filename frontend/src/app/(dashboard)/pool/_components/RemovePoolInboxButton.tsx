@@ -41,7 +41,7 @@ export function RemovePoolInboxButton({ poolInboxId, email, onRemoved }: Props) 
   if (confirming) {
     return (
       <span className="inline-flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <span className="text-xs text-slate-600">Remove {email}?</span>
+        <span className="text-xs text-stone-600">Remove {email}?</span>
         <button
           type="button"
           onClick={remove}
@@ -57,7 +57,7 @@ export function RemovePoolInboxButton({ poolInboxId, email, onRemoved }: Props) 
             setConfirming(false);
           }}
           disabled={busy}
-          className="rounded-full border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-full border border-stone-300 px-2.5 py-1 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-50"
         >
           Cancel
         </button>

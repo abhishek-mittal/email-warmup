@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApi, ApiError } from '@/lib/api';
 import { useToasts } from '@/components/Toast';
 import {
   ProviderQuickFill,
   ProviderAppPasswordNote,
+  ZohoRegionChips,
   SmtpPortChips,
   errorHint,
   type Provider,
@@ -14,16 +15,37 @@ import {
 
 type Tab = 'gmail' | 'outlook' | 'custom';
 
-// Backend owns the OAuth client_id/secret + state encoding. Frontend just
-// fetches the Google/Microsoft URL it should redirect to, then bounces the
-// browser there. Backend's /auth/callback/{google,microsoft} handles the
-// code exchange + token encryption + inbox creation, then redirects to /inboxes.
+// The API owns the OAuth client and the single-use state. This form asks it
+// for the provider URL and sends the browser there; the provider returns to
+// /api/mailbox-oauth/callback/{google,microsoft}, which completes the link
+// for the signed-in user and comes back here (with `link_error`) or to /inboxes.
+
+const LINK_ERRORS: Record<string, string> = {
+  denied: 'Access to the mailbox was not granted, so nothing was connected.',
+  state_invalid: 'That connection attempt expired or was already used. Please start again.',
+  provider_error: 'The mail provider did not complete the connection. Please try again.',
+  duplicate: 'This mailbox is already connected to another account.',
+  limit: 'You have reached the inbox limit for your plan.',
+  connection_failed:
+    'Access was granted, but the mailbox did not pass the connection check. Make sure IMAP is enabled for it, then try again.',
+};
 
 export function ConnectInboxForm() {
   const [tab, setTab] = useState<Tab>('gmail');
+  // Joining the shared pool is the owner's explicit choice, never a default.
+  const [poolConsent, setPoolConsent] = useState(false);
+  const linkError = useSearchParams().get('link_error');
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex border-b border-slate-200">
+    <div className="rounded-2xl border border-stone-200 bg-white shadow-sm">
+      {linkError ? (
+        <div
+          role="alert"
+          className="rounded-t-2xl border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-red-800"
+        >
+          {LINK_ERRORS[linkError] ?? LINK_ERRORS.provider_error}
+        </div>
+      ) : null}
+      <div className="flex border-b border-stone-200">
         <TabButton active={tab === 'gmail'} onClick={() => setTab('gmail')}>
           Gmail
         </TabButton>
@@ -35,10 +57,41 @@ export function ConnectInboxForm() {
         </TabButton>
       </div>
       <div className="p-6">
-        {tab === 'gmail' ? <GmailConnect /> : null}
-        {tab === 'outlook' ? <OutlookConnect /> : null}
-        {tab === 'custom' ? <CustomSmtpForm /> : null}
+        {tab === 'gmail' ? <GmailConnect poolConsent={poolConsent} /> : null}
+        {tab === 'outlook' ? <OutlookConnect poolConsent={poolConsent} /> : null}
+        {tab === 'custom' ? <CustomSmtpForm poolConsent={poolConsent} /> : null}
+        <PoolConsentField checked={poolConsent} onChange={setPoolConsent} />
       </div>
+    </div>
+  );
+}
+
+function PoolConsentField({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border border-stone-200 bg-stone-50 p-4">
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
+        />
+        <span className="text-sm text-stone-700">
+          <span className="font-medium text-stone-900">Join the shared warmup pool</span>
+          <span className="mt-1 block text-stone-600">
+            This inbox will exchange automated warmup emails with other customers’ inboxes: it
+            sends to them, and it automatically opens, stars, replies to and files the warmup
+            emails it receives into a “WarmupHub” folder. Leave this off to warm only against
+            your own private pool. You can change it later from the inbox page.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -58,8 +111,8 @@ function TabButton({
       onClick={onClick}
       className={`flex-1 px-5 py-3 text-sm font-medium transition-colors ${
         active
-          ? 'border-b-2 border-indigo-600 text-indigo-700'
-          : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900'
+          ? 'border-b-2 border-brand-600 text-brand-700'
+          : 'border-b-2 border-transparent text-stone-600 hover:text-stone-900'
       }`}
     >
       {children}
@@ -67,7 +120,7 @@ function TabButton({
   );
 }
 
-function GmailConnect() {
+function GmailConnect({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const { show } = useToasts();
   const [busy, setBusy] = useState(false);
@@ -75,7 +128,9 @@ function GmailConnect() {
   async function startGmail() {
     setBusy(true);
     try {
-      const { url } = await api<{ url: string }>('/auth/gmail/connect');
+      const { url } = await api<{ url: string }>(
+        `/auth/gmail/connect?poolConsent=${poolConsent}`,
+      );
       window.location.href = url;
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to start Google connect';
@@ -85,8 +140,8 @@ function GmailConnect() {
   }
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Connect with Google</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-stone-900">Connect with Google</h2>
+      <p className="text-sm text-stone-600">
         We request Gmail send + read access to run warmup traffic. Tokens are encrypted at rest
         with AES-256-GCM and never shared.
       </p>
@@ -94,7 +149,7 @@ function GmailConnect() {
         type="button"
         onClick={startGmail}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         <GoogleMark /> {busy ? 'Redirecting…' : 'Connect with Google'}
       </button>
@@ -102,7 +157,7 @@ function GmailConnect() {
   );
 }
 
-function OutlookConnect() {
+function OutlookConnect({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const { show } = useToasts();
   const [busy, setBusy] = useState(false);
@@ -110,7 +165,9 @@ function OutlookConnect() {
   async function startOutlook() {
     setBusy(true);
     try {
-      const { url } = await api<{ url: string }>('/auth/outlook/connect');
+      const { url } = await api<{ url: string }>(
+        `/auth/outlook/connect?poolConsent=${poolConsent}`,
+      );
       window.location.href = url;
     } catch (e) {
       const msg = e instanceof ApiError ? e.body : 'Failed to start Microsoft connect';
@@ -120,8 +177,8 @@ function OutlookConnect() {
   }
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Connect with Microsoft</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-stone-900">Connect with Microsoft</h2>
+      <p className="text-sm text-stone-600">
         We request Mail send + read access for warmup. Tokens are encrypted with AES-256-GCM at
         rest.
       </p>
@@ -129,7 +186,7 @@ function OutlookConnect() {
         type="button"
         onClick={startOutlook}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         <MicrosoftMark /> {busy ? 'Redirecting…' : 'Connect with Microsoft'}
       </button>
@@ -137,7 +194,7 @@ function OutlookConnect() {
   );
 }
 
-function CustomSmtpForm() {
+function CustomSmtpForm({ poolConsent }: { poolConsent: boolean }) {
   const api = useApi();
   const router = useRouter();
   const { show } = useToasts();
@@ -198,6 +255,7 @@ function CustomSmtpForm() {
       smtpUser: String(data.get('smtpUser') ?? ''),
       smtpPassword: String(data.get('smtpPassword') ?? ''),
       useImap,
+      poolConsent,
       dkimSelector: (data.get('dkimSelector') as string) || undefined,
     };
     if (useImap) {
@@ -252,7 +310,7 @@ function CustomSmtpForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Custom SMTP / IMAP</h2>
+      <h2 className="text-base font-semibold text-stone-900">Custom SMTP / IMAP</h2>
 
       {/* T028: provider quick-fill chips + App Password hint */}
       <ProviderQuickFill
@@ -275,6 +333,9 @@ function CustomSmtpForm() {
         }}
       />
       <ProviderAppPasswordNote provider={provider} />
+      {provider === 'zoho' ? (
+        <ZohoRegionChips currentSmtpHost={smtpHost} onPick={applyProviderPreset} />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Email address" name="email" type="email" required className="sm:col-span-2" />
@@ -286,7 +347,7 @@ function CustomSmtpForm() {
           onChange={(v) => setSmtpHost(v)}
         />
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-slate-700" htmlFor="smtpPort">
+          <label className="text-xs font-medium text-stone-700" htmlFor="smtpPort">
             SMTP port
           </label>
           <SmtpPortChips name="smtpPort" value={smtpPort} onChange={setSmtpPort} />
@@ -295,7 +356,7 @@ function CustomSmtpForm() {
             type="number"
             value={smtpPort}
             onChange={(e) => setSmtpPort(Number(e.target.value || 587))}
-            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
             placeholder="Or type a custom port"
             min={1}
             max={65535}
@@ -306,16 +367,16 @@ function CustomSmtpForm() {
         <Field label="DKIM selector (optional)" name="dkimSelector" className="sm:col-span-2" />
       </div>
 
-      <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+      <label className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
         <input
           type="checkbox"
           checked={useImap}
           onChange={(e) => setUseImap(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
         />
         <span>
-          <span className="block font-medium text-slate-900">Also configure IMAP (recommended)</span>
-          <span className="block text-xs text-slate-600">
+          <span className="block font-medium text-stone-900">Also configure IMAP (recommended)</span>
+          <span className="block text-xs text-stone-600">
             IMAP lets us open, reply to, and rescue-from-spam the warmup emails we send
             you, and is required to join the warmup pool. Leave unchecked if your SMTP
             provider does not expose IMAP — sending will still work.
@@ -333,7 +394,7 @@ function CustomSmtpForm() {
             onChange={(v) => setImapHost(v)}
           />
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-700" htmlFor="imapPort">
+            <label className="text-xs font-medium text-stone-700" htmlFor="imapPort">
               IMAP port
             </label>
             <input
@@ -341,7 +402,7 @@ function CustomSmtpForm() {
               type="number"
               value={imapPort}
               onChange={(e) => setImapPort(Number(e.target.value || 993))}
-              className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
               min={1}
               max={65535}
             />
@@ -400,7 +461,7 @@ function CustomSmtpForm() {
       <button
         type="submit"
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
       >
         {busy ? 'Connecting…' : 'Connect inbox'}
       </button>
@@ -429,7 +490,7 @@ function Field({
 }) {
   return (
     <label className={`block text-sm ${className ?? ''}`}>
-      <span className="text-xs font-medium text-slate-700">{label}</span>
+      <span className="text-xs font-medium text-stone-700">{label}</span>
       <input
         name={name}
         type={type}
@@ -437,7 +498,7 @@ function Field({
         defaultValue={defaultValue}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-        className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+        className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
       />
     </label>
   );

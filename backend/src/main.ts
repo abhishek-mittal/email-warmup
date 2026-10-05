@@ -9,7 +9,10 @@ loadDotenv({ path: ['.env', '../.env'] });
 
 import { NestFactory, Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import * as bodyParser from 'body-parser';
+import { markUnready } from './health/health.controller';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { BetterAuthGuard } from './auth/better-auth.guard';
@@ -31,7 +34,39 @@ async function bootstrap() {
   // needed here.)
   app.use('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }));
   app.use(bodyParser.json());
-  app.enableCors();
+  // Security headers on every response. This is a JSON API consumed by the
+  // frontend proxy, not a browser-rendered site, so CSP (geared at HTML) is
+  // left off and the resource policies that would block the proxy are relaxed;
+  // the useful headers here are nosniff, frameguard, HSTS and referrer policy.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+  // Validate and strip every incoming DTO. `whitelist` drops unknown
+  // properties, `forbidNonWhitelisted` rejects requests that send them, and
+  // `transform` coerces payloads into the DTO classes (so `@Type`/typed params
+  // are honoured). This is the single enforcement point the MR-11 DTO sweep
+  // relies on; per-route manual validators remain only where a payload shape
+  // cannot be expressed as a class (e.g. the batch import alias handling).
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+  // The browser reaches the API only through the frontend's same-origin
+  // proxy, so no other origin has a reason to call it from a page.
+  app.enableCors({
+    origin: (process.env.CORS_ORIGINS || process.env.APP_URL || 'http://localhost:3000')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  });
   // `BetterAuthGuard` takes the pino-backed logger as its first constructor
   // arg (T025). The global instance is constructed outside Nest's DI
   // container, so we pull both the Logger and the Reflector out manually.
@@ -47,23 +82,33 @@ async function bootstrap() {
   // in AppModule via LoggerModule.forRoot(...). This includes framework
   // messages (InstanceLoader, RoutesResolver, Mapped {/path, METHOD}).
   app.useLogger(app.get(PinoNestLogger));
-  await app.listen(process.env.PORT || 3001);
+  await app.listen(process.env.PORT || 4611);
 
-  // Process-level safety nets. Without these, an unhandled error from a
-  // third-party library (notably imapflow, which emits 'error' on the
-  // ImapFlow instance when its underlying socket drops mid-conversation)
-  // will crash the entire backend process — every concurrent job, every
-  // web request, everything. We saw exactly this happen in prod on
-  // 2026-06-24: a single ECONNRESET from a pool-inbox IMAP connection
-  // took the whole NestJS app down. Log + survive; the next health
-  // probe will reflect reality if the process really is broken.
+  app.enableShutdownHooks();
+
+  // An unhandled promise rejection is logged and survived: libraries such as
+  // imapflow reject in-flight commands when a socket drops, and one lost
+  // connection must not take every job and request down with it (this
+  // happened on 2026-06-24). Known socket errors are also handled at source
+  // by the 'error' listeners in ImapClientService.
   process.on('unhandledRejection', (reason) => {
     // eslint-disable-next-line no-console
     console.error('[backend] unhandledRejection:', reason);
   });
+  // An uncaught exception leaves the process in an unknown state. Stop
+  // reporting ready, let in-flight work drain briefly, then exit so the
+  // supervisor starts a clean process. Jobs are safe to resume: sends and
+  // receive actions are recorded in the ledger as they happen.
   process.on('uncaughtException', (err) => {
     // eslint-disable-next-line no-console
-    console.error('[backend] uncaughtException:', err);
+    console.error('[backend] uncaughtException — shutting down:', err);
+    markUnready();
+    const force = setTimeout(() => process.exit(1), 10_000);
+    force.unref?.();
+    app
+      .close()
+      .catch(() => undefined)
+      .finally(() => process.exit(1));
   });
 }
 bootstrap();

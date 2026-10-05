@@ -1,16 +1,16 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { inboxes, dnsChecks, poolMembers } from '@/db/schema';
-import { GoogleOAuthService } from './oauth/google-oauth.service';
-import { MicrosoftOAuthService } from './oauth/microsoft-oauth.service';
 import { BillingService } from '@/billing/billing.service';
 import { encrypt } from '@/common/crypto';
 import { ImapClientService } from './imap/imap-client.service';
 import { SmtpClientService } from './smtp/smtp-client.service';
 import { QueueService } from '@/queue/queue.service';
-import * as dns from 'dns';
+import { providerEndpoints } from './provider-config';
+import { MailboxLinkError } from './oauth/mailbox-link-error';
+import { DnsService, outcomeToBoolean } from '@/monitor/dns.service';
 
 /**
  * Columns safe to return to the frontend — excludes oauthAccessToken,
@@ -39,11 +39,29 @@ const SAFE_INBOX_COLUMNS = {
   warmupSpeed: inboxes.warmupSpeed,
   warmupDay: inboxes.warmupDay,
   status: inboxes.status,
+  statusReason: inboxes.statusReason,
   poolConsentAt: inboxes.poolConsentAt,
   enrolledInPoolAt: inboxes.enrolledInPoolAt,
   graduatedAt: inboxes.graduatedAt,
   createdAt: inboxes.createdAt,
 };
+
+const SECRET_INBOX_FIELDS = [
+  'oauthAccessToken',
+  'oauthRefreshToken',
+  'oauthClientSecret',
+  'smtpPass',
+  'imapPass',
+] as const;
+
+/** Strips credential ciphertext from a full row before it leaves the API. */
+export function toSafeInbox<T extends Record<string, unknown>>(
+  row: T,
+): Omit<T, (typeof SECRET_INBOX_FIELDS)[number]> {
+  const copy: Record<string, unknown> = { ...row };
+  for (const field of SECRET_INBOX_FIELDS) delete copy[field];
+  return copy as Omit<T, (typeof SECRET_INBOX_FIELDS)[number]>;
+}
 
 /**
  * Per-entry shape accepted by both `POST /inboxes/batch` (this service) and
@@ -145,78 +163,112 @@ export class InboxService {
   constructor(
     @InjectPinoLogger(InboxService.name)
     private readonly logger: PinoLogger,
-    private readonly googleOAuth: GoogleOAuthService,
-    private readonly microsoftOAuth: MicrosoftOAuthService,
     private readonly billing: BillingService,
     private readonly imap: ImapClientService,
     private readonly smtp: SmtpClientService,
     private readonly queue: QueueService,
+    private readonly dns: DnsService,
   ) {}
 
-  async connectGmail(userId: string, code: string) {
-    this.logger.info({ userId, provider: 'gmail' }, 'inbox connect attempt');
-    const tokens = await this.googleOAuth.exchangeCode(code);
-    const userinfo = await this.fetchGoogleUserinfo(tokens.access_token);
-    await this.billing.assertInboxLimit(userId);
+  /**
+   * Stores a mailbox that was just authorized through the OAuth linking flow
+   * (see MailboxLinkService, which has already validated the state and
+   * exchanged the code) and runs the connection pre-check.
+   *
+   * The address comes from the provider's ID token, never from the client.
+   * Linking a mailbox this user already has re-links it in place: new
+   * tokens, status back to pending, then the same pre-check — which is how
+   * a mailbox whose access was revoked is reconnected. A mailbox that is
+   * already connected under a different account is refused.
+   */
+  async connectOAuthMailbox(
+    userId: string,
+    provider: 'gmail' | 'outlook',
+    tokens: { access_token: string; refresh_token: string; expires_in: number; email: string },
+    opts: { poolConsent?: boolean } = {},
+  ) {
+    const email = tokens.email.toLowerCase();
+    this.logger.info({ userId, provider }, 'inbox connect attempt');
 
-    const [inbox] = await db
-      .insert(inboxes)
-      .values({
-        userId,
-        email: userinfo.email,
-        provider: 'gmail',
-        oauthProvider: 'google',
-        oauthAccessToken: encrypt(tokens.access_token),
-        oauthRefreshToken: encrypt(tokens.refresh_token),
-        oauthTokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
-        status: 'pending',
-      })
-      .returning();
+    const sameAddress = await db
+      .select()
+      .from(inboxes)
+      .where(sql`lower(${inboxes.email}) = ${email}`);
+    const mine = sameAddress.find((row) => row.userId === userId);
+    if (!mine && sameAddress.some((row) => row.status !== 'disconnected')) {
+      throw new MailboxLinkError(
+        'duplicate',
+        'This mailbox is already connected to another account.',
+      );
+    }
+
+    const endpoints = providerEndpoints(provider);
+    const credentials = {
+      provider,
+      oauthProvider: provider === 'gmail' ? 'google' : 'microsoft',
+      oauthAccessToken: encrypt(tokens.access_token),
+      oauthRefreshToken: encrypt(tokens.refresh_token),
+      oauthTokenExpiry: new Date(Date.now() + (tokens.expires_in || 1800) * 1000),
+      // Tokens now belong to the platform's OAuth app, not a customer-supplied one.
+      oauthClientId: null,
+      oauthClientSecret: null,
+      imapHost: endpoints.imap.host,
+      imapPort: endpoints.imap.port,
+      smtpHost: endpoints.smtp.host,
+      smtpPort: endpoints.smtp.port,
+      status: 'pending',
+      statusReason: null,
+    };
+
+    let inbox: typeof inboxes.$inferSelect;
+    if (mine) {
+      // Drop any pooled connection still authenticated with the old grant.
+      await this.imap.close(mine.id).catch(() => undefined);
+      [inbox] = await db
+        .update(inboxes)
+        .set(credentials)
+        .where(eq(inboxes.id, mine.id))
+        .returning();
+    } else {
+      try {
+        // Reserve the plan slot and insert atomically (race-safe cap).
+        [inbox] = await this.billing.withReservedInboxSlot(userId, (tx) =>
+          tx.insert(inboxes).values({ userId, email, ...credentials }).returning(),
+        );
+      } catch (err: any) {
+        if (err instanceof ForbiddenException) {
+          throw new MailboxLinkError(
+            'limit',
+            err?.message ?? 'Inbox limit reached for your plan.',
+          );
+        }
+        throw err;
+      }
+    }
     this.logger.info(
-      { userId, inboxId: inbox.id, provider: 'gmail', email: userinfo.email },
+      { userId, inboxId: inbox.id, provider, relinked: Boolean(mine) },
       'inbox connect attempt',
     );
 
-    const precheck = await this.runPrecheck(inbox.id, 'gmail');
+    let precheck;
+    try {
+      precheck = await this.runPrecheck(
+        inbox.id,
+        provider,
+        opts.poolConsent === true || Boolean(mine?.poolConsentAt),
+      );
+    } catch (err: any) {
+      throw new MailboxLinkError(
+        'connection_failed',
+        `Connected, but the mailbox did not pass the ${err?.step ?? 'connection'} check: ${
+          err?.message ?? 'unknown error'
+        }`.slice(0, 300),
+      );
+    }
 
     await this.queue.addTokenRefresh({ inboxId: inbox.id }, { delay: 45 * 60 * 1000 });
 
-    return { inbox, precheck };
-  }
-
-  async connectOutlook(userId: string, code: string) {
-    this.logger.info({ userId, provider: 'outlook' }, 'inbox connect attempt');
-    const tokens = await this.microsoftOAuth.exchangeCode(code);
-    const userinfo = await this.fetchMicrosoftUserinfo(tokens.access_token);
-    await this.billing.assertInboxLimit(userId);
-
-    const [inbox] = await db
-      .insert(inboxes)
-      .values({
-        userId,
-        email: userinfo.email,
-        provider: 'outlook',
-        oauthProvider: 'microsoft',
-        oauthAccessToken: encrypt(tokens.access_token),
-        oauthRefreshToken: encrypt(tokens.refresh_token),
-        oauthTokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
-        imapHost: 'outlook.office365.com',
-        imapPort: 993,
-        smtpHost: 'smtp.office365.com',
-        smtpPort: 587,
-        status: 'pending',
-      })
-      .returning();
-    this.logger.info(
-      { userId, inboxId: inbox.id, provider: 'outlook', email: userinfo.email },
-      'inbox connect attempt',
-    );
-
-    const precheck = await this.runPrecheck(inbox.id, 'outlook');
-
-    await this.queue.addTokenRefresh({ inboxId: inbox.id }, { delay: 45 * 60 * 1000 });
-
-    return { inbox, precheck };
+    return { inbox: toSafeInbox(inbox), precheck };
   }
 
   async connectCustomSmtp(
@@ -233,6 +285,7 @@ export class InboxService {
       imapUser?: string;
       imapPass?: string;
       dkimSelector?: string;
+      poolConsent?: boolean;
     },
   ) {
     this.logger.info(
@@ -245,7 +298,6 @@ export class InboxService {
       },
       'inbox connect attempt',
     );
-    await this.billing.assertInboxLimit(userId);
 
     // Normalize: an all-or-nothing IMAP block. If the user opted in, all
     // four fields must be present. If they didn't, the IMAP columns stay
@@ -265,24 +317,109 @@ export class InboxService {
           imapPass: null as unknown as string,
         };
 
-    const [inbox] = await db
-      .insert(inboxes)
-      .values({
-        userId,
-        email: dto.email,
-        provider: 'custom',
-        smtpHost: dto.smtpHost,
-        smtpPort: dto.smtpPort,
-        smtpUser: dto.smtpUser,
-        smtpPass: encrypt(dto.smtpPass),
-        ...imapFields,
-        dkimSelector: dto.dkimSelector,
-        status: 'pending',
-      })
-      .returning();
+    // Reserve the plan slot and insert atomically so two concurrent connects
+    // cannot both slip past the cap (see BillingService.withReservedInboxSlot).
+    const [inbox] = await this.billing.withReservedInboxSlot(userId, (tx) =>
+      tx
+        .insert(inboxes)
+        .values({
+          userId,
+          email: dto.email,
+          provider: 'custom',
+          smtpHost: dto.smtpHost,
+          smtpPort: dto.smtpPort,
+          smtpUser: dto.smtpUser,
+          smtpPass: encrypt(dto.smtpPass),
+          ...imapFields,
+          dkimSelector: dto.dkimSelector,
+          status: 'pending',
+        })
+        .returning(),
+    );
 
-    const precheck = await this.runPrecheck(inbox.id, 'custom');
-    return { inbox, precheck };
+    let precheck;
+    try {
+      precheck = await this.runPrecheck(inbox.id, 'custom', dto.poolConsent === true);
+    } catch (err) {
+      // Nothing was connected: don't leave a pending row behind that would
+      // count against the plan's inbox limit and hold unusable credentials.
+      await this.imap.close(inbox.id).catch(() => undefined);
+      await db.delete(inboxes).where(eq(inboxes.id, inbox.id));
+      throw err;
+    }
+    return { inbox: toSafeInbox(inbox), precheck };
+  }
+
+  /**
+   * Records or withdraws the owner's consent to take part in the shared
+   * warmup pool. Consent is only ever set by this explicit call (or the
+   * explicit flag on a connect request) — never inferred from a passing
+   * health check.
+   *
+   * Granting enrolls the inbox as a pool member if it can receive (IMAP).
+   * Withdrawing takes it out of pairing immediately and drops engagement
+   * jobs still queued for it; sends reserved to or from it are canceled at
+   * dispatch by the send worker's own eligibility check. Mail a server has
+   * already accepted cannot be recalled.
+   */
+  async setPoolConsent(userId: string, inboxId: string, granted: boolean) {
+    const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const inbox = rows[0];
+    if (!inbox || inbox.userId !== userId) return null;
+
+    if (!granted) {
+      await db.update(inboxes).set({ poolConsentAt: null }).where(eq(inboxes.id, inboxId));
+      await db.update(poolMembers).set({ active: false }).where(eq(poolMembers.inboxId, inboxId));
+      await this.queue.removeJobsForReceiver('warmup-receive', inboxId);
+      this.logger.info({ userId, inboxId }, 'pool consent withdrawn');
+      return { id: inboxId, poolConsentAt: null, enrolled: false };
+    }
+
+    const poolConsentAt = inbox.poolConsentAt ?? new Date();
+    await db.update(inboxes).set({ poolConsentAt }).where(eq(inboxes.id, inboxId));
+    const enrolled = inbox.status === 'active' && (await this.enrollInPool(inbox));
+    this.logger.info({ userId, inboxId, enrolled }, 'pool consent recorded');
+    return { id: inboxId, poolConsentAt, enrolled };
+  }
+
+  /**
+   * Makes the inbox an active shared-pool member. Requires IMAP: the warmup
+   * engine has to confirm delivery, mark-as-read, reply and rescue from
+   * spam, which a send-only inbox can't do. Reuses an existing membership
+   * row rather than adding a duplicate.
+   */
+  private async enrollInPool(inbox: typeof inboxes.$inferSelect): Promise<boolean> {
+    const canReceive =
+      inbox.provider !== 'custom' ||
+      Boolean(inbox.imapHost && inbox.imapPort && inbox.imapUser && inbox.imapPass);
+    if (!canReceive) return false;
+
+    const existing = await db
+      .select()
+      .from(poolMembers)
+      .where(eq(poolMembers.inboxId, inbox.id))
+      .limit(1);
+    if (existing[0]) {
+      await db
+        .update(poolMembers)
+        .set({ active: true })
+        .where(and(eq(poolMembers.inboxId, inbox.id), eq(poolMembers.quarantined, false)));
+    } else {
+      await db.insert(poolMembers).values({
+        inboxId: inbox.id,
+        email: inbox.email,
+        domain: inbox.email.split('@')[1].toLowerCase(),
+        provider: inbox.provider,
+        reputation: 50,
+        active: true,
+        quarantined: false,
+      });
+    }
+    await db
+      .update(inboxes)
+      .set({ enrolledInPoolAt: inbox.enrolledInPoolAt ?? new Date() })
+      .where(eq(inboxes.id, inbox.id));
+    return true;
   }
 
   async findByUser(userId: string) {
@@ -320,63 +457,70 @@ export class InboxService {
     entries: BatchInboxEntry[],
   ): Promise<{ created: number; failed: { email: string; reason: string }[] }> {
     const failed: { email: string; reason: string }[] = [];
-    let created = 0;
+    const createdInboxIds: string[] = [];
 
-    const existingRows = await db
-      .select({ email: inboxes.email })
-      .from(inboxes)
-      .where(eq(inboxes.userId, userId));
-    const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
-    const seenInBatch = new Set<string>();
+    // The whole batch reserves its slots inside one locked transaction so a
+    // concurrent connect or a second parallel import cannot share-count the
+    // same free slots and together overrun the plan cap. Rows past the limit,
+    // in-batch duplicates and malformed rows land in `failed[]` — the batch
+    // never aborts (T020 partial success).
+    await db.transaction(async (tx) => {
+      let slotsLeft = await this.billing.lockInboxSlots(tx, userId);
+      const existingRows = await tx
+        .select({ email: inboxes.email })
+        .from(inboxes)
+        .where(eq(inboxes.userId, userId));
+      const existingEmails = new Set(existingRows.map((r) => r.email.toLowerCase()));
+      const seenInBatch = new Set<string>();
 
-    for (const entry of entries) {
-      const email = entry?.email ?? '(unknown)';
-      try {
-        const validationError = validateBatchEntry(entry);
-        if (validationError) {
-          failed.push({ email, reason: validationError });
-          continue;
+      for (const entry of entries) {
+        const email = entry?.email ?? '(unknown)';
+        try {
+          const validationError = validateBatchEntry(entry);
+          if (validationError) {
+            failed.push({ email, reason: validationError });
+            continue;
+          }
+
+          const normalizedEmail = entry.email.toLowerCase();
+          if (existingEmails.has(normalizedEmail) || seenInBatch.has(normalizedEmail)) {
+            failed.push({ email, reason: 'duplicate email — already exists for this user' });
+            continue;
+          }
+
+          if (slotsLeft <= 0) {
+            failed.push({ email, reason: 'inbox limit reached for your plan' });
+            continue;
+          }
+
+          const values = buildInboxInsertValues(userId, entry);
+          // Each insert runs in its own savepoint (a nested drizzle
+          // transaction). A row-level DB error rolls back only that savepoint —
+          // in plain Postgres a failed statement aborts the whole transaction
+          // and poisons every later command, so the savepoint is what keeps
+          // the batch's partial-success contract intact.
+          const [inbox] = await tx.transaction((sp) =>
+            sp.insert(inboxes).values(values).returning(),
+          );
+
+          seenInBatch.add(normalizedEmail);
+          createdInboxIds.push(inbox.id);
+          slotsLeft -= 1;
+        } catch (err: any) {
+          failed.push({ email, reason: err?.message || 'failed to process row' });
         }
-
-        const normalizedEmail = entry.email.toLowerCase();
-        if (existingEmails.has(normalizedEmail) || seenInBatch.has(normalizedEmail)) {
-          failed.push({ email, reason: 'duplicate email — already exists for this user' });
-          continue;
-        }
-
-        const values = buildInboxInsertValues(userId, entry);
-        const [inbox] = await db.insert(inboxes).values(values).returning();
-
-        seenInBatch.add(normalizedEmail);
-        created += 1;
-
-        await this.queue.add('inbox-analysis', { inboxId: inbox.id, userId });
-      } catch (err: any) {
-        failed.push({ email, reason: err?.message || 'failed to process row' });
       }
+    });
+
+    // Enqueue analysis only after the slots are durably committed.
+    for (const inboxId of createdInboxIds) {
+      await this.queue.add('inbox-analysis', { inboxId, userId });
     }
 
-    return { created, failed };
+    return { created: createdInboxIds.length, failed };
   }
 
-  private async fetchGoogleUserinfo(accessToken: string): Promise<{ email: string }> {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) throw new BadRequestException('Failed to fetch Google userinfo');
-    return res.json();
-  }
-
-  private async fetchMicrosoftUserinfo(accessToken: string): Promise<{ email: string }> {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) throw new BadRequestException('Failed to fetch Microsoft userinfo');
-    const data = await res.json();
-    return { email: data.mail || data.userPrincipalName };
-  }
-
-  private async runPrecheck(inboxId: string, provider: string) {
+  private async runPrecheck(inboxId: string, provider: string, poolConsent = false) {
     this.logger.info({ inboxId, provider }, 'precheck started');
     // Each step is one of:
     //   true  — step passed
@@ -433,12 +577,13 @@ export class InboxService {
     try {
       const client = await this.imap.getConnection(inboxId);
       imapAttempted = true;
-      try {
+      // Check the listing rather than parsing a server-specific
+      // "already exists" error (imapflow reports only "Command failed").
+      let mailboxes = await client.list();
+      if (!mailboxes.some((m) => m.path === 'WarmupHub')) {
         await client.mailboxCreate('WarmupHub');
-      } catch (err: any) {
-        if (!err.message?.includes('exists')) throw err;
+        mailboxes = await client.list();
       }
-      const mailboxes = await client.list();
       await this.imap.close(inboxId);
       steps.imap = true;
       hasImap = true;
@@ -480,7 +625,7 @@ export class InboxService {
     const inbox = rows[0];
     const domain = inbox.email.split('@')[1];
 
-    const dnsResult = await this.checkDns(domain);
+    const dnsResult = await this.checkDns(domain, inbox.dkimSelector, inbox.provider);
     await db.insert(dnsChecks).values({
       inboxId,
       spfValid: dnsResult.spf,
@@ -488,16 +633,23 @@ export class InboxService {
       dmarcValid: dnsResult.dmarc,
       mxValid: dnsResult.mx,
     });
-    steps.dns = dnsResult.spf && dnsResult.dkim && dnsResult.dmarc && dnsResult.mx;
+    // What blocks activation is a definite problem with the two records mail
+    // flow depends on: SPF and MX. A lookup that could not be completed, an
+    // unverifiable DKIM selector, or a missing DMARC record are recorded and
+    // shown as health issues but do not stop the inbox from warming.
+    steps.dns = dnsResult.spf !== false && dnsResult.mx !== false;
 
     // Inbox is "active" when SMTP and DNS both pass. 'skipped' counts as
     // pass; 'true' counts as pass; 'false' would have thrown above.
     const activationPass = steps.smtp === true && steps.dns === true && steps.imap !== false;
     if (activationPass) {
+      // Conditional on 'pending' so a slow precheck can't re-activate an
+      // inbox that was paused or removed in the meantime. Pool consent is
+      // recorded only when the owner explicitly gave it on this request.
       await db
         .update(inboxes)
-        .set({ status: 'active', poolConsentAt: new Date() })
-        .where(eq(inboxes.id, inboxId));
+        .set({ status: 'active', ...(poolConsent ? { poolConsentAt: new Date() } : {}) })
+        .where(and(eq(inboxes.id, inboxId), eq(inboxes.status, 'pending')));
       this.logger.info(
         { inboxId, provider, fromStatus: 'pending', toStatus: 'active' },
         'inbox status changed',
@@ -505,48 +657,41 @@ export class InboxService {
     }
     this.logger.info({ inboxId, provider, activationPass, steps }, 'precheck completed');
 
-    // Enroll in the warmup pool ONLY if IMAP is actually configured and
-    // passed. The warmup engine needs to confirm delivery via IMAP,
-    // mark-as-read, reply, and rescue from spam. Without IMAP the
-    // inbox is a one-way sender only.
-    if (activationPass && hasImap) {
-      await db.insert(poolMembers).values({
-        inboxId,
-        email: inbox.email,
-        domain: inbox.email.split('@')[1].toLowerCase(),
-        provider: inbox.provider,
-        reputation: 50,
-        active: true,
-        quarantined: false,
-      });
+    // Shared-pool enrollment needs both explicit consent and working IMAP.
+    if (activationPass && hasImap && poolConsent) {
+      await this.enrollInPool(inbox);
     }
 
     return { ...steps, detail };
   }
 
-  private async checkDns(domain: string): Promise<{
-    spf: boolean;
-    dkim: boolean;
-    dmarc: boolean;
-    mx: boolean;
+  /**
+   * SPF, DKIM, DMARC and MX for a newly connected inbox, using the same
+   * checks as ongoing monitoring. Each value is true (pass), false (fail) or
+   * null (could not be determined) — DKIM in particular is null unless a key
+   * was actually read.
+   */
+  private async checkDns(
+    domain: string,
+    dkimSelector: string | null,
+    provider: string,
+  ): Promise<{
+    spf: boolean | null;
+    dkim: boolean | null;
+    dmarc: boolean | null;
+    mx: boolean | null;
   }> {
-    const [mxRecords, spfTxt, dmarcTxt] = await Promise.allSettled([
-      dns.promises.resolveMx(domain),
-      this.resolveTxt(domain),
-      this.resolveTxt(`_dmarc.${domain}`),
+    const [spf, dkim, dmarc, mx] = await Promise.all([
+      this.dns.checkSpf(domain),
+      this.dns.checkDkimForInbox(domain, dkimSelector, provider),
+      this.dns.checkDmarc(domain),
+      this.dns.checkMx(domain),
     ]);
-
-    const mx = mxRecords.status === 'fulfilled' && mxRecords.value.length > 0;
-    const txt = spfTxt.status === 'fulfilled' ? spfTxt.value : [];
-    const spf = txt.some((r) => r.includes('v=spf1'));
-    const dmarcRecords = dmarcTxt.status === 'fulfilled' ? dmarcTxt.value : [];
-    const dmarc = dmarcRecords.some((r) => r.includes('v=DMARC1'));
-
-    return { spf, dkim: true, dmarc, mx };
-  }
-
-  private async resolveTxt(name: string): Promise<string[]> {
-    const records = await dns.promises.resolveTxt(name);
-    return records.map((r) => r.join(''));
+    return {
+      spf: outcomeToBoolean(spf),
+      dkim: outcomeToBoolean(dkim),
+      dmarc: outcomeToBoolean(dmarc),
+      mx: outcomeToBoolean(mx),
+    };
   }
 }

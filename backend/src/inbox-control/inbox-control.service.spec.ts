@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { InboxControlService } from './inbox-control.service';
 import { WarmupService } from '../warmup/warmup.service';
+import { BounceMonitorService } from '../safety/bounce-monitor.service';
 import { db } from '../db';
 import { pinoLoggerStubsFor } from '../common/test-module';
 
@@ -14,6 +15,11 @@ jest.mock('../db', () => ({
 describe('InboxControlService', () => {
   let service: InboxControlService;
   let warmupService: { pauseInbox: jest.Mock; resumeInbox: jest.Mock };
+  const bounceMonitor = {
+    stats: jest
+      .fn()
+      .mockResolvedValue({ attempted: 50, bounced: 2, rate: 0.04, limit: 0.03, windowHours: 24 }),
+  };
 
   function makeSelectChain(rows: unknown[]) {
     const chain: any = {
@@ -29,7 +35,7 @@ describe('InboxControlService', () => {
     jest.resetAllMocks();
     warmupService = {
       pauseInbox: jest.fn().mockResolvedValue(undefined),
-      resumeInbox: jest.fn().mockResolvedValue(undefined),
+      resumeInbox: jest.fn().mockResolvedValue('active'),
     };
 
     const module = await Test.createTestingModule({
@@ -37,6 +43,7 @@ describe('InboxControlService', () => {
         ...pinoLoggerStubsFor(NotFoundException, InboxControlService),
         InboxControlService,
         { provide: WarmupService, useValue: warmupService },
+        { provide: BounceMonitorService, useValue: bounceMonitor },
       ],
     }).compile();
     service = module.get(InboxControlService);
@@ -97,7 +104,8 @@ describe('InboxControlService', () => {
         const chain: any = {
           from: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
-          limit: jest.fn().mockResolvedValue([{ id: 'a', userId: 'user-1' }]),
+          // Serves both the inbox ownership lookup and the user plan lookup.
+          limit: jest.fn().mockResolvedValue([{ id: 'a', userId: 'user-1', plan: 'demo' }]),
         };
         return chain;
       });
@@ -106,6 +114,54 @@ describe('InboxControlService', () => {
       expect(r.updated).toEqual([{ id: 'a', status: 'active' }]);
       expect(r.failed).toEqual([]);
       expect(warmupService.resumeInbox).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['free plan', { plan: 'free' }],
+      ['unknown plan', { plan: 'mystery' }],
+      ['expired trial', { plan: 'trial', trialEndsAt: new Date(Date.now() - 60_000) }],
+    ])('refuses to resume on a plan without warmup: %s', async (_name, user) => {
+      (db.select as jest.Mock).mockImplementation(() => ({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([{ id: 'a', userId: 'user-1', ...user }]),
+      }));
+
+      await expect(service.resumeOne('user-1', 'a')).rejects.toThrow('does not include warmup');
+      expect(warmupService.resumeInbox).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bounceStats', () => {
+    function selectReturns(row: any) {
+      (db.select as jest.Mock).mockImplementation(() => ({
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue(row ? [row] : []),
+      }));
+    }
+
+    it('returns the figures with their sample size, and whether the inbox is held', async () => {
+      selectReturns({ id: 'a', userId: 'user-1', status: 'paused', statusReason: 'bounce_rate' });
+      bounceMonitor.stats.mockResolvedValue({
+        attempted: 50,
+        bounced: 2,
+        rate: 0.04,
+        limit: 0.03,
+        windowHours: 24,
+      });
+      await expect(service.bounceStats('user-1', 'a')).resolves.toMatchObject({
+        attempted: 50,
+        bounced: 2,
+        ratePct: 4,
+        limitPct: 3,
+        held: true,
+      });
+    });
+
+    it('is not available for an inbox owned by someone else', async () => {
+      selectReturns({ id: 'a', userId: 'user-2', status: 'active' });
+      await expect(service.bounceStats('user-1', 'a')).rejects.toThrow();
     });
   });
 });

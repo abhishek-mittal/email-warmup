@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray, and } from 'drizzle-orm';
 import { db } from '../db';
 import {
   dnsChecks,
@@ -10,7 +10,7 @@ import {
   reputationScores,
   inboxes,
 } from '../db/schema';
-import { ScoringService } from './scoring.service';
+import { SCORE_RULE_VERSION, ScoringService } from './scoring.service';
 import { TrendService } from './trend.service';
 import { QueueService } from '../queue/queue.service';
 
@@ -47,10 +47,10 @@ export class ScoreComputeProcessor extends WorkerHost {
       this.getLatestPlacementTest(inboxId),
     ]);
 
-    const dnsScore = this.scoringService.computeDnsScore(latestDns);
-    const blacklistScore = this.scoringService.computeBlacklistScore(latestBlacklist);
-    const placementScore = this.scoringService.computePlacementScore(latestPlacement);
-    const total = Math.max(0, Math.min(100, dnsScore + blacklistScore + placementScore));
+    const composed = this.scoringService.compose(latestDns, latestBlacklist, latestPlacement);
+    // Nothing measured, nothing to say: no score row rather than an invented one.
+    if (composed.score === null) return;
+    const total = composed.score;
 
     // Read the previous score and the trend BEFORE inserting the new row, so
     // both comparisons are against prior state rather than the row we're
@@ -61,11 +61,17 @@ export class ScoreComputeProcessor extends WorkerHost {
     await db.insert(reputationScores).values({
       inboxId,
       score: total,
-      dnsScore,
-      blacklistScore,
-      placementScore,
+      dnsScore: composed.dns.earned,
+      blacklistScore: composed.blacklist.earned,
+      placementScore: composed.placement.earned,
+      completeness: composed.completeness,
+      ruleVersion: SCORE_RULE_VERSION,
       trend,
     });
+
+    // A drop caused only by a change in how much could be measured is not a
+    // reputation event; compare like with like.
+    if (previous && Math.abs((previous.completeness ?? 100) - composed.completeness) > 15) return;
 
     await this.maybeAlertOnDrop(inbox, previous, total);
   }
@@ -98,7 +104,12 @@ export class ScoreComputeProcessor extends WorkerHost {
     const rows = await db
       .select()
       .from(placementTests)
-      .where(eq(placementTests.inboxId, inboxId))
+      .where(
+        and(
+          eq(placementTests.inboxId, inboxId),
+          inArray(placementTests.status, ['complete', 'partial']),
+        ),
+      )
       .orderBy(desc(placementTests.completedAt))
       .limit(1);
     return rows[0] ?? null;

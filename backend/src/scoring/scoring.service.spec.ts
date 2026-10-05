@@ -1,236 +1,219 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ScoringService } from './scoring.service';
+import { RBL_ZONES } from '../monitor/rbl-list';
+
+const NOW = new Date('2026-10-03T12:00:00.000Z');
+const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000);
+const daysAgo = (d: number) => hoursAgo(d * 24);
+
+const dnsRow = (overrides: Record<string, unknown> = {}) =>
+  ({
+    spfValid: true,
+    dkimValid: true,
+    dmarcValid: true,
+    mxValid: true,
+    rdnsValid: null,
+    checkedAt: hoursAgo(1),
+    ...overrides,
+  }) as any;
+
+const rbl = (statuses: Record<string, string>, overrides: Record<string, unknown> = {}) =>
+  ({
+    rblResults: { ...Object.fromEntries(RBL_ZONES.map((z) => [z.zone, 'unknown'])), ...statuses },
+    checkedAt: hoursAgo(1),
+    ...overrides,
+  }) as any;
+
+const placementRow = (overrides: Record<string, unknown> = {}) =>
+  ({
+    status: 'complete',
+    seedCount: 10,
+    observedCount: 10,
+    placementScore: 90,
+    completedAt: daysAgo(2),
+    ...overrides,
+  }) as any;
 
 describe('ScoringService', () => {
-  let service: ScoringService;
+  const service = new ScoringService();
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [ScoringService],
-    }).compile();
-    service = module.get<ScoringService>(ScoringService);
-  });
-
-  describe('computeDnsScore', () => {
-    it('returns 0 when there is no DNS check at all', () => {
-      expect(service.computeDnsScore(null)).toBe(0);
+  describe('DNS component', () => {
+    it('all four records passing earns 30 of 30', () => {
+      expect(service.dnsComponent(dnsRow(), NOW)).toEqual({ earned: 30, possible: 30 });
     });
 
-    it('returns 30 for a fully passing DNS check', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: true,
-          dkimValid: true,
-          dmarcValid: true,
-          mxValid: true,
-          rdnsValid: true,
-        } as any),
-      ).toBe(30);
+    it('a failing record loses its points', () => {
+      expect(service.dnsComponent(dnsRow({ spfValid: false }), NOW)).toEqual({
+        earned: 20,
+        possible: 30,
+      });
+      expect(service.dnsComponent(dnsRow({ dmarcValid: false, mxValid: false }), NOW)).toEqual({
+        earned: 20,
+        possible: 30,
+      });
     });
 
-    it('returns 10 for SPF_MISSING + DKIM_MISSING (30 - 10 - 10)', () => {
+    it('an unknown record is neither credited nor penalised', () => {
+      // DKIM could not be checked (no selector): 20 points knowable, all earned.
+      expect(service.dnsComponent(dnsRow({ dkimValid: null }), NOW)).toEqual({
+        earned: 20,
+        possible: 20,
+      });
       expect(
-        service.computeDnsScore({
-          spfValid: false,
-          dkimValid: false,
-          dmarcValid: true,
-          mxValid: true,
-          rdnsValid: true,
-        } as any),
-      ).toBe(10);
+        service.dnsComponent(
+          dnsRow({ spfValid: null, dkimValid: null, dmarcValid: null, mxValid: null }),
+          NOW,
+        ),
+      ).toEqual({ earned: 0, possible: 0 });
     });
 
-    it('applies -5 for dmarcValid false', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: true,
-          dkimValid: true,
-          dmarcValid: false,
-          mxValid: true,
-          rdnsValid: true,
-        } as any),
-      ).toBe(25);
+    it('a reverse-DNS failure costs one point; unknown reverse DNS costs nothing', () => {
+      expect(service.dnsComponent(dnsRow({ rdnsValid: false }), NOW)).toEqual({
+        earned: 29,
+        possible: 30,
+      });
+      expect(service.dnsComponent(dnsRow({ rdnsValid: null }), NOW).earned).toBe(30);
     });
 
-    it('applies -5 for mxValid false', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: true,
-          dkimValid: true,
-          dmarcValid: true,
-          mxValid: false,
-          rdnsValid: true,
-        } as any),
-      ).toBe(25);
-    });
-
-    it('applies -1 only when rdnsValid is exactly false', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: true,
-          dkimValid: true,
-          dmarcValid: true,
-          mxValid: true,
-          rdnsValid: false,
-        } as any),
-      ).toBe(29);
-    });
-
-    it('does NOT penalize rdnsValid === null (unknown, not a failure)', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: true,
-          dkimValid: true,
-          dmarcValid: true,
-          mxValid: true,
-          rdnsValid: null,
-        } as any),
-      ).toBe(30);
-    });
-
-    it('clamps at 0 when every field fails', () => {
-      expect(
-        service.computeDnsScore({
-          spfValid: false,
-          dkimValid: false,
-          dmarcValid: false,
-          mxValid: false,
-          rdnsValid: false,
-        } as any),
-      ).toBe(0);
+    it('no check, or a stale one, is unknown', () => {
+      expect(service.dnsComponent(null, NOW)).toEqual({ earned: 0, possible: 0 });
+      expect(service.dnsComponent(dnsRow({ checkedAt: daysAgo(4) }), NOW)).toEqual({
+        earned: 0,
+        possible: 0,
+      });
     });
   });
 
-  describe('computeBlacklistScore', () => {
-    it('returns 30 when there is no blacklist check yet (assume clean)', () => {
-      expect(service.computeBlacklistScore(null)).toBe(30);
+  describe('blocklist component', () => {
+    it('no check is unknown — not "assume clean"', () => {
+      expect(service.blacklistComponent(null, NOW)).toEqual({ earned: 0, possible: 0 });
     });
 
-    it('returns 30 when isClean is true', () => {
-      expect(
-        service.computeBlacklistScore({ isClean: true, listedCount: 0, rblResults: {} } as any),
-      ).toBe(30);
+    it('nothing answered is unknown', () => {
+      expect(service.blacklistComponent(rbl({}), NOW)).toEqual({ earned: 0, possible: 0 });
     });
 
-    it('returns 0 for a Spamhaus listing', () => {
-      expect(
-        service.computeBlacklistScore({
-          isClean: false,
-          listedCount: 1,
-          rblResults: { 'zen.spamhaus.org': 'listed' },
-        } as any),
-      ).toBe(0);
+    it('clean answers are credited only for the share of lists that answered', () => {
+      const twoOfEight = rbl({ 'dbl.spamhaus.org': 'clean', 'multi.surbl.org': 'clean' });
+      const result = service.blacklistComponent(twoOfEight, NOW);
+      expect(result.possible).toBe(Math.round(30 * (2 / RBL_ZONES.length)));
+      expect(result.earned).toBe(result.possible);
     });
 
-    it('returns 18 for exactly 1 non-Spamhaus listing', () => {
-      expect(
-        service.computeBlacklistScore({
-          isClean: false,
-          listedCount: 1,
-          rblResults: { 'bl.spamcop.net': 'listed', 'b.barracudacentral.org': 'clean' },
-        } as any),
-      ).toBe(18);
+    it('a Spamhaus listing earns nothing out of the full 30', () => {
+      expect(service.blacklistComponent(rbl({ 'dbl.spamhaus.org': 'listed' }), NOW)).toEqual({
+        earned: 0,
+        possible: 30,
+      });
     });
 
-    it('returns 12 for exactly 2 non-Spamhaus listings', () => {
+    it('other listings are tiered by count', () => {
+      expect(service.blacklistComponent(rbl({ 'bl.spamcop.net': 'listed' }), NOW)).toEqual({
+        earned: 18,
+        possible: 30,
+      });
       expect(
-        service.computeBlacklistScore({
-          isClean: false,
-          listedCount: 2,
-          rblResults: {
-            'bl.spamcop.net': 'listed',
-            'b.barracudacentral.org': 'listed',
-            'dnsbl.sorbs.net': 'clean',
-          },
-        } as any),
-      ).toBe(12);
+        service.blacklistComponent(
+          rbl({ 'bl.spamcop.net': 'listed', 'multi.surbl.org': 'listed' }),
+          NOW,
+        ),
+      ).toEqual({ earned: 12, possible: 30 });
     });
 
-    it('returns 5 for 3 or more non-Spamhaus listings', () => {
-      expect(
-        service.computeBlacklistScore({
-          isClean: false,
-          listedCount: 3,
-          rblResults: {
-            'bl.spamcop.net': 'listed',
-            'b.barracudacentral.org': 'listed',
-            'dnsbl.sorbs.net': 'listed',
-          },
-        } as any),
-      ).toBe(5);
-    });
-
-    it('derives listed status from rblResults, not listedCount alone', () => {
-      // listedCount says 1 but rblResults shows a spamhaus hit — must still be 0.
-      expect(
-        service.computeBlacklistScore({
-          isClean: false,
-          listedCount: 1,
-          rblResults: { 'zen.spamhaus.org': 'listed', 'bl.spamcop.net': 'clean' },
-        } as any),
-      ).toBe(0);
+    it('a stale check is unknown', () => {
+      const stale = rbl({ 'dbl.spamhaus.org': 'clean' }, { checkedAt: daysAgo(3) });
+      expect(service.blacklistComponent(stale, NOW)).toEqual({ earned: 0, possible: 0 });
     });
   });
 
-  describe('computePlacementScore', () => {
-    it('returns 20 when there is no placement test yet', () => {
-      expect(service.computePlacementScore(null)).toBe(20);
+  describe('placement component', () => {
+    it('no test is unknown — not a neutral 20', () => {
+      expect(service.placementComponent(null, NOW)).toEqual({ earned: 0, possible: 0 });
     });
 
-    it('returns 40 for 100% Primary placement', () => {
-      expect(
-        service.computePlacementScore({
-          seedCount: 10,
-          primaryCount: 10,
-          promotionsCount: 0,
-          spamCount: 0,
-        } as any),
-      ).toBe(40);
+    it.each([
+      ['queued', { status: 'queued', placementScore: null }],
+      ['running', { status: 'running', placementScore: null }],
+      ['failed', { status: 'failed', placementScore: null }],
+      ['stale', { completedAt: daysAgo(40) }],
+      ['with zero seeds', { seedCount: 0, observedCount: 0 }],
+    ])('a %s test is unknown', (_name, overrides) => {
+      expect(service.placementComponent(placementRow(overrides), NOW)).toEqual({
+        earned: 0,
+        possible: 0,
+      });
     });
 
-    it('returns 20 for 100% Promotions placement', () => {
-      expect(
-        service.computePlacementScore({
-          seedCount: 10,
-          primaryCount: 0,
-          promotionsCount: 10,
-          spamCount: 0,
-        } as any),
-      ).toBe(20);
+    it('a complete test earns its score out of 40', () => {
+      expect(service.placementComponent(placementRow({ placementScore: 90 }), NOW)).toEqual({
+        earned: 36,
+        possible: 40,
+      });
+      expect(service.placementComponent(placementRow({ placementScore: 0 }), NOW)).toEqual({
+        earned: 0,
+        possible: 40,
+      });
     });
 
-    it('returns 0 for 100% spam/missing placement', () => {
-      expect(
-        service.computePlacementScore({
-          seedCount: 10,
-          primaryCount: 0,
-          promotionsCount: 0,
-          spamCount: 10,
-        } as any),
-      ).toBe(0);
+    it('a partial test is judged in proportion to the seeds observed', () => {
+      const half = placementRow({ status: 'partial', observedCount: 5, placementScore: 100 });
+      expect(service.placementComponent(half, NOW)).toEqual({ earned: 20, possible: 20 });
     });
 
-    it('weights a mixed placement result correctly', () => {
-      // 5 primary + 3 promotions out of 10 seeds: (5*1 + 3*0.5)/10 = 0.65 -> round(0.65*40) = 26
+    it('clamps out-of-range inputs', () => {
+      expect(service.placementComponent(placementRow({ placementScore: 250 }), NOW).earned).toBe(
+        40,
+      );
+      expect(service.placementComponent(placementRow({ placementScore: -5 }), NOW).earned).toBe(0);
       expect(
-        service.computePlacementScore({
-          seedCount: 10,
-          primaryCount: 5,
-          promotionsCount: 3,
-          spamCount: 2,
-        } as any),
-      ).toBe(26);
+        service.placementComponent(placementRow({ observedCount: 99, placementScore: 100 }), NOW),
+      ).toEqual({ earned: 40, possible: 40 });
+    });
+  });
+
+  describe('compose', () => {
+    it('with nothing measured there is no score at all', () => {
+      expect(service.compose(null, null, null, NOW)).toMatchObject({
+        score: null,
+        completeness: 0,
+      });
     });
 
-    it('returns 0 when seedCount is 0 (avoid division by zero)', () => {
-      expect(
-        service.computePlacementScore({
-          seedCount: 0,
-          primaryCount: 0,
-          promotionsCount: 0,
-          spamCount: 0,
-        } as any),
-      ).toBe(0);
+    it('a never-measured inbox no longer scores 50', () => {
+      // Old rules: 0 (dns) + 30 (assumed clean) + 20 (neutral placement) = 50.
+      const composed = service.compose(
+        dnsRow({ spfValid: false, dkimValid: false, dmarcValid: false, mxValid: false }),
+        null,
+        null,
+        NOW,
+      );
+      expect(composed).toMatchObject({ score: 0, completeness: 30 });
+    });
+
+    it('scores over what is known and reports how much that is', () => {
+      const composed = service.compose(dnsRow(), null, null, NOW);
+      expect(composed).toMatchObject({ score: 100, completeness: 30 });
+    });
+
+    it('everything measured and healthy is 100 at full completeness', () => {
+      const allClean = rbl(Object.fromEntries(RBL_ZONES.map((z) => [z.zone, 'clean'])));
+      const composed = service.compose(
+        dnsRow(),
+        allClean,
+        placementRow({ placementScore: 100 }),
+        NOW,
+      );
+      expect(composed).toMatchObject({ score: 100, completeness: 100 });
+    });
+
+    it('a listing pulls the score down across the whole 100', () => {
+      const listed = rbl({ 'dbl.spamhaus.org': 'listed' });
+      const composed = service.compose(
+        dnsRow(),
+        listed,
+        placementRow({ placementScore: 100 }),
+        NOW,
+      );
+      expect(composed).toMatchObject({ score: 70, completeness: 100 });
     });
   });
 });

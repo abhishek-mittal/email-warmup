@@ -7,7 +7,7 @@ beyond `docker`, `pnpm`, and `lsof` (already required for the project).
 
 | Command | What it does |
 |---|---|
-| `.bin/dev up` | Start Postgres + Redis containers, then NestJS backend (`:3001`) + Next.js frontend (`:3000`). Waits for both ports to bind before returning. |
+| `.bin/dev up` | Start Postgres + Redis containers, then NestJS backend (`:4611`) + Next.js frontend (`:3000`). Waits for both ports to bind before returning. |
 | `.bin/dev start` | Alias for `up`. |
 | `.bin/dev stop` | Stop backend + frontend processes. Leaves infra containers running. |
 | `.bin/dev down` | Stop backend + frontend **and** the docker-compose stack. |
@@ -34,4 +34,4 @@ cd ..
 .bin/dev up
 ```
 
-Then open <http://localhost:3000>. Backend health: <http://localhost:3001/health>.
+Then open <http://localhost:3000>. Backend health: <http://localhost:4611/health>.

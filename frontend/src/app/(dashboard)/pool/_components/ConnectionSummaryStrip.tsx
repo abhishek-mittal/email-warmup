@@ -40,7 +40,7 @@ export function ConnectionSummaryStrip({ poolInboxId }: { poolInboxId: string })
 
   if (loading) {
     return (
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+      <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">
         Loading connection details…
       </div>
     );
@@ -72,7 +72,7 @@ export function ConnectionSummaryStrip({ poolInboxId }: { poolInboxId: string })
 
 function OAuthSummary({ summary }: { summary: PoolConnectionSummary }) {
   return (
-    <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-3">
       <Field
         label="Provider"
         value={
@@ -99,7 +99,7 @@ function OAuthSummary({ summary }: { summary: PoolConnectionSummary }) {
 
 function CustomSummary({ summary }: { summary: PoolConnectionSummary }) {
   return (
-    <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs sm:grid-cols-2">
       <Field
         label="SMTP"
         value={
@@ -151,15 +151,15 @@ function Field({
 }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
         {label}
       </p>
-      <p className="mt-0.5 font-mono text-[11px] text-slate-800">{value}</p>
+      <p className="mt-0.5 font-mono text-[11px] text-stone-800">{value}</p>
       {extra ? (
-        <p className="mt-0.5 text-[10px] text-slate-500">{extra}</p>
+        <p className="mt-0.5 text-[10px] text-stone-500">{extra}</p>
       ) : null}
       {secretPresent !== undefined ? (
-        <p className="mt-0.5 text-[10px] text-slate-500">
+        <p className="mt-0.5 text-[10px] text-stone-500">
           {secretPresent ? '✓ Password present' : '✗ Missing'}
         </p>
       ) : null}

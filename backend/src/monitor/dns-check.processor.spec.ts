@@ -17,7 +17,7 @@ describe('DnsCheckProcessor', () => {
   let processor: DnsCheckProcessor;
   let dnsService: {
     checkSpf: jest.Mock;
-    checkDkim: jest.Mock;
+    checkDkimForInbox: jest.Mock;
     checkDmarc: jest.Mock;
     checkMx: jest.Mock;
     checkRdns: jest.Mock;
@@ -28,6 +28,7 @@ describe('DnsCheckProcessor', () => {
     id: 'inbox-1',
     userId: 'user-1',
     email: 'sender@sendco.com',
+    provider: 'custom',
     dkimSelector: 'mailo',
     sendingIp: null,
     status: 'active',
@@ -79,7 +80,7 @@ describe('DnsCheckProcessor', () => {
 
     dnsService = {
       checkSpf: jest.fn().mockResolvedValue(passSpf),
-      checkDkim: jest.fn().mockResolvedValue(passDkim),
+      checkDkimForInbox: jest.fn().mockResolvedValue(passDkim),
       checkDmarc: jest.fn().mockResolvedValue(passDmarc),
       checkMx: jest.fn().mockResolvedValue(passMx),
       checkRdns: jest.fn().mockResolvedValue(passRdns),
@@ -114,18 +115,18 @@ describe('DnsCheckProcessor', () => {
       await processor.process(makeJob());
 
       expect(dnsService.checkSpf).toHaveBeenCalledWith('sendco.com');
-      expect(dnsService.checkDkim).toHaveBeenCalledWith('sendco.com', 'mailo');
+      expect(dnsService.checkDkimForInbox).toHaveBeenCalledWith('sendco.com', 'mailo', 'custom');
       expect(dnsService.checkDmarc).toHaveBeenCalledWith('sendco.com');
       expect(dnsService.checkMx).toHaveBeenCalledWith('sendco.com');
     });
 
-    it("falls back to selector 'default' when inbox.dkimSelector is null", async () => {
+    it('passes a missing selector through rather than guessing "default"', async () => {
       mockSelectSequence([[{ ...inbox, dkimSelector: null }], []]);
       mockInsert();
 
       await processor.process(makeJob());
 
-      expect(dnsService.checkDkim).toHaveBeenCalledWith('sendco.com', 'default');
+      expect(dnsService.checkDkimForInbox).toHaveBeenCalledWith('sendco.com', null, 'custom');
     });
 
     it('skips checkRdns and writes rdnsValid: null when sendingIp is not set', async () => {
@@ -229,7 +230,7 @@ describe('DnsCheckProcessor', () => {
 
     it('alerts exactly once and includes every currently-failing critical code when DKIM newly fails while SPF was already failing', async () => {
       dnsService.checkSpf.mockResolvedValue(failSpf);
-      dnsService.checkDkim.mockResolvedValue(failDkim);
+      dnsService.checkDkimForInbox.mockResolvedValue(failDkim);
       mockSelectSequence([[inbox], [{ spfValid: false, dkimValid: true, mxValid: true }]]);
       mockInsert();
 
@@ -269,7 +270,7 @@ describe('DnsCheckProcessor', () => {
     });
 
     it('uses DKIM_INVALID as the issue code (not DKIM_MISSING) when dkim fails with that code', async () => {
-      dnsService.checkDkim.mockResolvedValue({
+      dnsService.checkDkimForInbox.mockResolvedValue({
         status: 'fail',
         code: 'DKIM_INVALID',
         detail: 'bad',

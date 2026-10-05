@@ -123,14 +123,14 @@ export function PoolLogsTab({ poolInboxId }: Props) {
             { value: 'all', label: 'All' },
           ]}
         />
-        <label className="inline-flex flex-1 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs">
-          <span className="text-slate-500">Search:</span>
+        <label className="inline-flex flex-1 items-center gap-2 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs">
+          <span className="text-stone-500">Search:</span>
           <input
             type="text"
             placeholder="free-text grep across all fields"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-slate-700 placeholder:text-slate-400 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-stone-700 placeholder:text-stone-400 focus:outline-none"
           />
         </label>
         <button
@@ -139,8 +139,8 @@ export function PoolLogsTab({ poolInboxId }: Props) {
           aria-pressed={follow}
           className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
             follow
-              ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              ? 'border-brand-300 bg-brand-50 text-brand-700'
+              : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
           }`}
         >
           <PulseDot state={follow ? 'live' : 'idle'} size="xs" label={follow ? 'Following' : 'Paused'} />
@@ -161,11 +161,11 @@ export function PoolLogsTab({ poolInboxId }: Props) {
         </p>
       ) : null}
 
-      <div className="max-h-[640px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-200 shadow-inner">
+      <div className="max-h-[640px] overflow-y-auto rounded-2xl border border-stone-800 bg-stone-950 p-4 font-mono text-xs leading-relaxed text-stone-200 shadow-inner">
         {loading && lines.length === 0 ? (
-          <p className="text-slate-500">Loading logs…</p>
+          <p className="text-stone-500">Loading logs…</p>
         ) : lines.length === 0 ? (
-          <p className="text-slate-500">
+          <p className="text-stone-500">
             No log entries found for this pool inbox. Logs appear here once warmup activity
             starts.
           </p>
@@ -175,7 +175,7 @@ export function PoolLogsTab({ poolInboxId }: Props) {
         <div ref={linesEndRef} />
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-stone-500">
         Showing {lines.length} of the most recent matching lines
         {follow ? ` · updating every ${FOLLOW_INTERVAL_MS / 1000}s` : ''}.
       </p>
@@ -204,12 +204,12 @@ function FilterSelect<T extends string>({
   options,
 }: FilterSelectProps<T>) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs">
-      <span className="text-slate-500">{label}:</span>
+    <label className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs">
+      <span className="text-stone-500">{label}:</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="bg-transparent text-slate-700 focus:outline-none"
+        className="bg-transparent text-stone-700 focus:outline-none"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -225,19 +225,19 @@ const LEVEL_COLOR: Record<string, string> = {
   info: 'text-emerald-400',
   warn: 'text-amber-400',
   error: 'text-rose-400',
-  debug: 'text-slate-400',
-  trace: 'text-slate-500',
+  debug: 'text-stone-400',
+  trace: 'text-stone-500',
 };
 
 function LogLineRow({ line }: { line: PoolLogLine }) {
   const ts = new Date(line.time);
   const timeStr = isNaN(ts.getTime()) ? line.time : ts.toISOString().slice(11, 19);
-  const levelColor = LEVEL_COLOR[line.levelName] ?? 'text-slate-300';
+  const levelColor = LEVEL_COLOR[line.levelName] ?? 'text-stone-300';
   return (
     <div className="flex gap-2">
-      <span className="text-slate-500">{timeStr}</span>
+      <span className="text-stone-500">{timeStr}</span>
       <span className={`uppercase ${levelColor}`}>{line.levelName.padEnd(5)}</span>
-      <span className="text-slate-300">{line.msg}</span>
+      <span className="text-stone-300">{line.msg}</span>
     </div>
   );
 }

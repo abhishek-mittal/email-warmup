@@ -7,9 +7,13 @@ import { WarmupReceiveProcessor } from './warmup-receive.processor';
 import { WarmupService } from './warmup.service';
 import { RampService } from './ramp.service';
 import { PairingService } from './pairing.service';
+import { WarmupLedgerService } from './warmup-ledger.service';
+import { SafetyModule } from '../safety/safety.module';
+import { PlacementModule } from '../placement/placement.module';
+import { BounceMonitorService } from '../safety/bounce-monitor.service';
 
 @Module({
-  imports: [QueueModule, InboxModule],
+  imports: [QueueModule, InboxModule, SafetyModule, PlacementModule],
   providers: [
     ContentService,
     WarmupSendProcessor,
@@ -17,7 +21,16 @@ import { PairingService } from './pairing.service';
     WarmupService,
     RampService,
     PairingService,
+    WarmupLedgerService,
+    BounceMonitorService,
   ],
-  exports: [ContentService, WarmupService, RampService, PairingService],
+  exports: [
+    ContentService,
+    WarmupService,
+    RampService,
+    PairingService,
+    WarmupLedgerService,
+    BounceMonitorService,
+  ],
 })
 export class WarmupModule {}
