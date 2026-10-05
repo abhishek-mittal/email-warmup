@@ -9,6 +9,7 @@ import { MailCredentialService } from './oauth/mail-credential.service';
 import { TokenRefreshProcessor } from './oauth/token-refresh.processor';
 import { MailboxLinkService } from './oauth/mailbox-link.service';
 import { DnsService } from '../monitor/dns.service';
+import { PairingService } from '../warmup/pairing.service';
 import { BillingModule } from '../billing/billing.module';
 import { QueueModule } from '../queue/queue.module';
 
@@ -27,6 +28,9 @@ import { QueueModule } from '../queue/queue.module';
     // Stateless; provided here as well as in MonitorModule, which cannot be
     // imported from this module without a cycle.
     DnsService,
+    // Stateless; provided here too (importing WarmupModule would cycle: warmup
+    // imports inbox). Used only for the read-only warmupEligibility check.
+    PairingService,
   ],
   exports: [
     InboxService,

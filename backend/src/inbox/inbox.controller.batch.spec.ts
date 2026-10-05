@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { InboxController } from './inbox.controller';
 import { InboxService } from './inbox.service';
+import { PairingService } from '@/warmup/pairing.service';
 import {
   getLatestAnalysisForInbox,
   getLatestAnalysisForInboxes,
@@ -21,6 +22,7 @@ describe('InboxController — batch + GET :id', () => {
     connectCustomSmtp: jest.Mock;
     findByUser: jest.Mock;
   };
+  let pairing: { hasEligiblePartners: jest.Mock };
 
   function makeReq(userId: string) {
     return { userId } as any;
@@ -37,6 +39,7 @@ describe('InboxController — batch + GET :id', () => {
       connectCustomSmtp: jest.fn(),
       findByUser: jest.fn(),
     };
+    pairing = { hasEligiblePartners: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InboxController],
@@ -50,6 +53,7 @@ describe('InboxController — batch + GET :id', () => {
           Map,
         ),
         { provide: InboxService, useValue: inboxService },
+        { provide: PairingService, useValue: pairing },
       ],
     }).compile();
 
@@ -149,7 +153,11 @@ describe('InboxController — batch + GET :id', () => {
 
       expect(inboxService.findById).toHaveBeenCalledWith('user-1', 'inbox-1');
       expect(getLatestAnalysisForInbox).toHaveBeenCalledWith('inbox-1');
-      expect(result).toEqual({ ...inboxRow, analysis: analysisRow });
+      expect(result).toEqual({
+        ...inboxRow,
+        analysis: analysisRow,
+        warmupEligibility: { canStart: true },
+      });
     });
 
     it('attaches analysis: null when no analysis row exists yet', async () => {
@@ -159,7 +167,23 @@ describe('InboxController — batch + GET :id', () => {
 
       const result = await controller.findOne(makeReq('user-1'), 'inbox-1');
 
-      expect(result).toEqual({ ...inboxRow, analysis: null });
+      expect(result).toEqual({
+        ...inboxRow,
+        analysis: null,
+        warmupEligibility: { canStart: true },
+      });
+    });
+
+    it('sets warmupEligibility.canStart=false when there are no partners', async () => {
+      const inboxRow = { id: 'inbox-1', userId: 'user-1', email: 'a@domain.com' };
+      inboxService.findById.mockResolvedValue(inboxRow);
+      (getLatestAnalysisForInbox as jest.Mock).mockResolvedValue(null);
+      pairing.hasEligiblePartners.mockResolvedValue(false);
+
+      const result = await controller.findOne(makeReq('user-1'), 'inbox-1');
+
+      expect(pairing.hasEligiblePartners).toHaveBeenCalledWith(inboxRow);
+      expect(result).toMatchObject({ warmupEligibility: { canStart: false } });
     });
 
     it('throws NotFoundException when the inbox does not exist or is not owned by the user', async () => {

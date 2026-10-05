@@ -19,6 +19,7 @@ import { validateSync } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { BetterAuthGuard } from '@/auth/better-auth.guard';
 import { InboxService, BatchInboxEntry } from './inbox.service';
+import { PairingService } from '@/warmup/pairing.service';
 import { MailboxLinkService, LinkProvider } from './oauth/mailbox-link.service';
 import { normalizeAliases } from './dto/connect-custom-smtp.dto';
 import { parseInboxBatchCsv, isMalformedCsvRow } from '@/common/csv-parser';
@@ -31,7 +32,10 @@ import {
 @Controller('inboxes')
 @UseGuards(BetterAuthGuard)
 export class InboxController {
-  constructor(private readonly inboxService: InboxService) {}
+  constructor(
+    private readonly inboxService: InboxService,
+    private readonly pairing: PairingService,
+  ) {}
 
   /**
    * Attaches each inbox's latest `inbox_analysis` row (or null if analysis
@@ -54,7 +58,9 @@ export class InboxController {
     const inbox = await this.inboxService.findById(req.userId!, id);
     if (!inbox) throw new NotFoundException();
     const analysis = await getLatestAnalysisForInbox(id);
-    return { ...inbox, analysis };
+    // Drives the UI's Start button vs. the "add warming inboxes" prompt.
+    const canStart = await this.pairing.hasEligiblePartners(inbox as never);
+    return { ...inbox, analysis, warmupEligibility: { canStart } };
   }
 
   /**
