@@ -127,7 +127,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     const insertMock = db.insert as jest.Mock;
     expect(insertMock).toHaveBeenCalledTimes(1);
     const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
-    expect(setCall.status).toBe('active');
+    expect(setCall.status).toBe('ready');
     expect(setCall).not.toHaveProperty('poolConsentAt');
   });
 
@@ -139,7 +139,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     await (service as any).runPrecheck('inbox-1', 'gmail', true);
 
     const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
-    expect(setCall.status).toBe('active');
+    expect(setCall.status).toBe('ready');
     expect(setCall.poolConsentAt).toBeInstanceOf(Date);
   });
 
@@ -192,7 +192,7 @@ describe('InboxService — pool enrollment on activation (runPrecheck)', () => {
     // Should still mark the inbox active (SMTP + DNS are enough to send).
     expect(db.update).toHaveBeenCalled();
     const setCall = (db.update as jest.Mock).mock.results[0].value.set.mock.calls[0][0];
-    expect(setCall.status).toBe('active');
+    expect(setCall.status).toBe('ready');
 
     // Should NOT have inserted a pool_members row (warmup needs IMAP).
     const insertMock = db.insert as jest.Mock;

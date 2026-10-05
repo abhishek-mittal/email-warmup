@@ -377,7 +377,8 @@ export class InboxService {
 
     const poolConsentAt = inbox.poolConsentAt ?? new Date();
     await db.update(inboxes).set({ poolConsentAt }).where(eq(inboxes.id, inboxId));
-    const enrolled = inbox.status === 'active' && (await this.enrollInPool(inbox));
+    const enrolled =
+      (inbox.status === 'active' || inbox.status === 'ready') && (await this.enrollInPool(inbox));
     this.logger.info({ userId, inboxId, enrolled }, 'pool consent recorded');
     return { id: inboxId, poolConsentAt, enrolled };
   }
@@ -646,12 +647,14 @@ export class InboxService {
       // Conditional on 'pending' so a slow precheck can't re-activate an
       // inbox that was paused or removed in the meantime. Pool consent is
       // recorded only when the owner explicitly gave it on this request.
+      // Lands in 'ready', not 'active': warmup never auto-starts. The user
+      // presses Start (inbox-control) to go ready -> active.
       await db
         .update(inboxes)
-        .set({ status: 'active', ...(poolConsent ? { poolConsentAt: new Date() } : {}) })
+        .set({ status: 'ready', ...(poolConsent ? { poolConsentAt: new Date() } : {}) })
         .where(and(eq(inboxes.id, inboxId), eq(inboxes.status, 'pending')));
       this.logger.info(
-        { inboxId, provider, fromStatus: 'pending', toStatus: 'active' },
+        { inboxId, provider, fromStatus: 'pending', toStatus: 'ready' },
         'inbox status changed',
       );
     }
