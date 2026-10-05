@@ -76,6 +76,23 @@ export class PairingService {
   }
 
   /**
+   * Cheap existence check powering the warmup start gate: does this inbox have
+   * at least one eligible warm-with partner with spare capacity right now — a
+   * different-domain private pool inbox, or (when consented) a shared pool
+   * member? Same filters as selectPartners, no scoring/distribution.
+   */
+  async hasEligiblePartners(
+    sender: InboxRow,
+    since: Date = new Date(Date.now() - PAIRED_RECENTLY_WINDOW_MS),
+    executor: DbExecutor = db,
+  ): Promise<boolean> {
+    const priv = await this.privateCandidates(sender, since, executor);
+    if (priv.some((c) => c.capacity > 0)) return true;
+    const shared = await this.sharedCandidates(sender, since, executor);
+    return shared.some((c) => c.capacity > 0);
+  }
+
+  /**
    * Round-robin over candidates in score order, so the best partner gets the
    * first send but not all of them.
    */
@@ -164,7 +181,9 @@ export class PairingService {
           eq(poolMembers.quarantined, false),
           ne(poolMembers.domain, senderMember.domain),
           ne(poolMembers.inboxId, sender.id),
-          eq(inboxes.status, 'active'),
+          // 'ready' inboxes (consented, verified, not yet started warming their
+          // own sends) are still valid receivers others can warm against.
+          inArray(inboxes.status, ['active', 'ready']),
           isNotNull(inboxes.poolConsentAt),
         ),
       );
