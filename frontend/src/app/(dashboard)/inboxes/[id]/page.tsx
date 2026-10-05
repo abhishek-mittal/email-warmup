@@ -5,6 +5,7 @@ import { InboxPageHeader } from './_components/InboxPageHeader';
 import { InboxDashboardTabs } from './_components/InboxDashboardTabs';
 import { InboxControlButtons } from '@/app/(dashboard)/_components/InboxControlButtons';
 import { PoolParticipation } from './_components/PoolParticipation';
+import { WarmupStartPrompt } from './_components/WarmupStartPrompt';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ interface InboxResponse {
   status: string;
   statusReason?: string | null;
   poolConsentAt?: string | null;
+  warmupEligibility?: { canStart: boolean };
   warmupDay: number;
   // T013 also attaches `analysis`, `warmupSpeed`, etc. We only need a
   // handful here, but the server-side inbox response is the same
@@ -74,19 +76,29 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         poolConsentAt={inbox.poolConsentAt ?? null}
       />
 
-      {/* Page-level Pause/Resume. The same component also shows up as a
-          per-row button in the inbox list — `size="md"` here gives it
-          more padding for the page header. */}
-      <div className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-stone-900">Warmup control</p>
-          <p className="text-xs text-stone-500">
-            Pause stops all pending send and receive jobs and freezes the daily schedule.
-            Resume re-queues today&rsquo;s sends immediately — no need to wait for the 05:00 UTC cron.
-          </p>
+      {/* Warmup control. A `ready` inbox with no warm-with partner shows the
+          add-sources prompt instead of a Start button; otherwise Start /
+          Pause / Resume per status. */}
+      {inbox.status === 'ready' && inbox.warmupEligibility?.canStart === false ? (
+        <WarmupStartPrompt inboxId={inbox.id} />
+      ) : (
+        <div className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-stone-900">Warmup control</p>
+            <p className="text-xs text-stone-500">
+              {inbox.status === 'ready'
+                ? 'Warmup has not started yet. Press Start to begin scheduling sends.'
+                : 'Pause freezes the daily schedule; Resume re-queues today’s sends immediately.'}
+            </p>
+          </div>
+          <InboxControlButtons
+            inboxId={inbox.id}
+            status={inbox.status}
+            size="md"
+            canStart={inbox.warmupEligibility?.canStart}
+          />
         </div>
-        <InboxControlButtons inboxId={inbox.id} status={inbox.status} size="md" />
-      </div>
+      )}
 
       <InboxDashboardTabs inboxId={inbox.id} />
 

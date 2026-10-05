@@ -18,6 +18,13 @@ interface Props {
    * their own refresh.
    */
   onChanged?: (newStatus: string) => void;
+  /**
+   * For a `ready` inbox: whether a warm-with partner exists. When `false`,
+   * this component renders nothing (the parent shows WarmupStartPrompt). When
+   * undefined (e.g. the list page, which doesn't precompute it), the Start
+   * button is shown and a server-side 409 `no_partners` surfaces the prompt.
+   */
+  canStart?: boolean;
 }
 
 interface ControlResult {
@@ -36,7 +43,7 @@ interface ControlResult {
  * Bulk operations live in `BulkInboxActions` (separate component) so
  * this stays small. Both share the same toast + refresh flow.
  */
-export function InboxControlButtons({ inboxId, status, size = 'sm', onChanged }: Props) {
+export function InboxControlButtons({ inboxId, status, size = 'sm', onChanged, canStart }: Props) {
   const api = useApi();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -52,15 +59,16 @@ export function InboxControlButtons({ inboxId, status, size = 'sm', onChanged }:
     ) : null;
   }
 
+  const isReady = status === 'ready';
   const isPaused = status === 'paused';
-  const action = isPaused ? 'resume' : 'pause';
+  const action = isReady ? 'start' : isPaused ? 'resume' : 'pause';
 
   async function run() {
     if (busy) return;
     setBusy(true);
     try {
       const res = await api<ControlResult>(`/inboxes/${inboxId}/${action}`, { method: 'POST' });
-      const label = isPaused ? 'Resumed' : 'Paused';
+      const label = isReady ? 'Started' : isPaused ? 'Resumed' : 'Paused';
       show(`${label} warmup for this inbox.`, 'success');
       if (onChanged) {
         onChanged(res.status);
@@ -68,8 +76,23 @@ export function InboxControlButtons({ inboxId, status, size = 'sm', onChanged }:
         router.refresh();
       }
     } catch (e) {
-      const msg = e instanceof ApiError ? e.body : e instanceof Error ? e.message : `Failed to ${action}`;
-      show(msg || `Failed to ${action}`, 'error');
+      const apiErr = e instanceof ApiError ? e : null;
+      let code: string | undefined;
+      if (apiErr) {
+        try {
+          code = JSON.parse(apiErr.body)?.code;
+        } catch {
+          code = undefined;
+        }
+      }
+      if (code === 'no_partners') {
+        show('No inboxes to warm with yet. Join the shared pool or add warming inboxes.', 'error');
+        // Let the parent reveal the add-sources prompt.
+        onChanged?.('ready');
+      } else {
+        const msg = apiErr ? apiErr.body : e instanceof Error ? e.message : `Failed to ${action}`;
+        show(msg || `Failed to ${action}`, 'error');
+      }
     } finally {
       setBusy(false);
     }
@@ -77,6 +100,26 @@ export function InboxControlButtons({ inboxId, status, size = 'sm', onChanged }:
 
   const padding = size === 'md' ? 'px-3 py-1.5 text-sm' : 'px-2.5 py-1 text-xs';
   const baseClasses = `inline-flex items-center gap-1.5 rounded-full font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${padding}`;
+
+  if (isReady) {
+    // No partners → parent renders WarmupStartPrompt instead of a Start button.
+    if (canStart === false) return null;
+    return (
+      <>
+        <button
+          type="button"
+          onClick={run}
+          disabled={busy}
+          title="Start warmup — begin scheduling sends for this inbox"
+          className={`${baseClasses} bg-brand-600 text-white hover:bg-brand-700`}
+        >
+          {busy ? <PulseDot state="busy" size="xs" /> : null}
+          {busy ? 'Starting…' : 'Start warmup'}
+        </button>
+        {toast ? <Toast message={toast.message} kind={toast.kind} onDone={clear} /> : null}
+      </>
+    );
+  }
 
   if (isPaused) {
     return (
