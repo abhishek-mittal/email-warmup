@@ -43,7 +43,18 @@ export default function Page() {
     try {
       const redirect =
         new URLSearchParams(window.location.search).get('redirect_url') || '/inboxes';
-      await signIn.oauth2({ providerId: 'citadel', callbackURL: redirect });
+      const res = await signIn.oauth2({ providerId: 'citadel', callbackURL: redirect });
+      // better-auth's client redirect plugin does not reliably navigate here, so
+      // drive the redirect to Citadel ourselves from the returned authorize URL.
+      const url = (res as { data?: { url?: string }; url?: string } | undefined)?.data?.url
+        ?? (res as { url?: string } | undefined)?.url;
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      const errMsg = (res as { error?: { message?: string } } | undefined)?.error?.message;
+      setError(errMsg ?? 'WebNCO ID sign-in failed');
+      setBusy(false);
     } catch (err: unknown) {
       setError((err as { message?: string })?.message ?? 'WebNCO ID sign-in failed');
       setBusy(false);
