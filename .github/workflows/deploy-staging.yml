@@ -1,0 +1,212 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-staging.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to this run's commit SHA)"
+        required: false
+
+concurrency:
+  group: emailwarm-staging-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/abhishek-mittal/emailwarm-backend
+  FRONTEND_IMAGE: ghcr.io/abhishek-mittal/emailwarm-frontend
+  MAILER_IMAGE: ghcr.io/abhishek-mittal/emailwarm-mailer
+
+jobs:
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        run: echo "tag=${{ github.event.inputs.image_tag || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.BACKEND_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build + push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ vars.NEXT_PUBLIC_BETTER_AUTH_URL }}
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.FRONTEND_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build + push mailer (SMTP -> Graph relay)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/relay
+          push: true
+          tags: |
+            ${{ env.MAILER_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.MAILER_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EMAILWARM_DEPLOY_KEY }}
+
+      - name: Trust the VPS host key
+        run: ssh-keyscan -H "${{ secrets.EMAILWARM_HOST_IP }}" >> ~/.ssh/known_hosts
+
+      - name: Render staging.env
+        run: |
+          umask 077
+          cat > staging.env <<EOF
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          DATABASE_URL=postgresql://emailwarm:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/emailwarm
+          REDIS_URL=redis://redis:6379/1
+          ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+          BETTER_AUTH_SECRET=${{ secrets.BETTER_AUTH_SECRET }}
+          INTERNAL_SECRET=${{ secrets.INTERNAL_SECRET }}
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          MICROSOFT_CLIENT_ID=${{ vars.MICROSOFT_CLIENT_ID }}
+          MICROSOFT_CLIENT_SECRET=${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          # Platform mailer = the citadel-mailer SMTP->Graph relay sidecar.
+          # Fixed infra values (the relay ignores SMTP auth); the real secrets
+          # are the Graph app creds below. From must be a Graph-policy-permitted
+          # mailbox (am@webnco.xyz).
+          PLATFORM_SMTP_HOST=citadel-mailer
+          PLATFORM_SMTP_PORT=2525
+          PLATFORM_SMTP_USER=unused
+          PLATFORM_SMTP_PASS=unused
+          PLATFORM_FROM_EMAIL=EmailWarm <am@webnco.xyz>
+          # Microsoft Graph app for the relay (shared with webnco-id/Citadel).
+          MS_TENANT_ID=${{ vars.MS_TENANT_ID }}
+          MS_CLIENT_ID=${{ vars.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET=${{ secrets.MS_CLIENT_SECRET }}
+          APP_URL=https://stg-ew.webnco.xyz
+          CORS_ORIGINS=https://stg-ew.webnco.xyz
+          LOG_LEVEL=info
+          DEMO_MODE=true
+          DEMO_INBOX_CREDITS=${{ vars.DEMO_INBOX_CREDITS }}
+          DEMO_PLACEMENT_CREDITS=${{ vars.DEMO_PLACEMENT_CREDITS }}
+          API_URL=http://backend:4611
+          NEXT_PUBLIC_API_URL=https://stg-ew.webnco.xyz
+          BETTER_AUTH_URL=https://stg-ew.webnco.xyz
+          NEXT_PUBLIC_BETTER_AUTH_URL=https://stg-ew.webnco.xyz
+          ZITADEL_ISSUER=https://id.webnco.xyz
+          ZITADEL_CLIENT_ID=${{ vars.ZITADEL_CLIENT_ID }}
+          ZITADEL_CLIENT_SECRET=${{ secrets.ZITADEL_CLIENT_SECRET }}
+          FOUNDER_EMAILS=${{ vars.FOUNDER_EMAILS }}
+          EOF
+          if grep -q 'REPLACE_BEFORE_ENABLING' staging.env; then
+            echo "staging.env still has placeholders — aborting"; exit 1
+          fi
+          # Fail fast if any required value rendered empty. Backend crash-loops
+          # on an empty backend var; the mailer relay exits on an empty MS_*
+          # (PLATFORM_SMTP_* are fixed literals above, so not checked here).
+          for key in POSTGRES_PASSWORD ENCRYPTION_KEY BETTER_AUTH_SECRET INTERNAL_SECRET \
+                     ANTHROPIC_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
+                     MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET \
+                     MS_TENANT_ID MS_CLIENT_ID MS_CLIENT_SECRET; do
+            if grep -qE "^${key}=$" staging.env; then
+              echo "required env ${key} is empty — set it in the staging Environment"; exit 1
+            fi
+          done
+
+      - name: Ship env + compose to the box
+        env:
+          HOST: root@${{ secrets.EMAILWARM_HOST_IP }}
+        run: |
+          ssh "$HOST" "mkdir -p /opt/emailwarm /etc/emailwarm /etc/caddy/sites"
+          scp staging.env "$HOST:/etc/emailwarm/staging.env"
+          ssh "$HOST" "chmod 600 /etc/emailwarm/staging.env"
+          scp deploy/docker-compose.staging.yml "$HOST:/opt/emailwarm/docker-compose.staging.yml"
+          scp deploy/caddy/stg-ew.caddy "$HOST:/etc/caddy/sites/stg-ew.caddy"
+          rm -f staging.env
+
+      - name: Pull + up + health check
+        env:
+          HOST: root@${{ secrets.EMAILWARM_HOST_IP }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          ssh "$HOST" bash -s <<REMOTE
+          set -euo pipefail
+          echo "${GHCR_PULL_TOKEN}" | docker login ghcr.io -u abhishek-mittal --password-stdin
+          cd /opt/emailwarm
+          export POSTGRES_PASSWORD="\$(grep '^POSTGRES_PASSWORD=' /etc/emailwarm/staging.env | cut -d= -f2-)"
+          export IMAGE_TAG="${IMAGE_TAG}"
+          docker compose -f docker-compose.staging.yml pull
+          docker compose -f docker-compose.staging.yml up -d
+          docker image prune -f
+          echo "--- waiting for frontend health ---"
+          for i in \$(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3100/ >/dev/null 2>&1; then echo "frontend healthy"; break; fi
+            if [ "\$i" = "30" ]; then echo "frontend did not become healthy" >&2; \
+              docker compose -f docker-compose.staging.yml logs --tail=50 frontend backend >&2; exit 1; fi
+            sleep 2
+          done
+          REMOTE
+
+      - name: Reload Caddy with the staging site block
+        env:
+          HOST: root@${{ secrets.EMAILWARM_HOST_IP }}
+        run: |
+          ssh "$HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          # Fragment already shipped to /etc/caddy/sites/. bootstrap wired the
+          # `import sites/*` line. Validate the WHOLE config (never break probe),
+          # then reload.
+          if caddy validate --config /etc/caddy/Caddyfile; then
+            systemctl reload caddy
+            echo "Caddy reloaded with stg-ew site block"
+          else
+            echo "Caddyfile failed validation — NOT reloading" >&2
+            exit 1
+          fi
+          REMOTE
