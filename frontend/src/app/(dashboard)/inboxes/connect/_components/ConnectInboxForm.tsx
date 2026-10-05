@@ -28,6 +28,8 @@ const LINK_ERRORS: Record<string, string> = {
   limit: 'You have reached the inbox limit for your plan.',
   connection_failed:
     'Access was granted, but the mailbox did not pass the connection check. Make sure IMAP is enabled for it, then try again.',
+  insufficient_scope:
+    'Gmail send & read access was not granted. Reconnect and allow full access (the “Read, compose, send and permanently delete all your email” permission) when Google asks.',
 };
 
 export function ConnectInboxForm() {

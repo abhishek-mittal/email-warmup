@@ -42,6 +42,8 @@ export class GoogleOAuthService {
     access_token: string;
     refresh_token: string;
     expires_in: number;
+    /** Space-separated scopes Google actually granted. */
+    scope?: string;
     /** The mailbox address, read from the ID token the provider returned with the tokens. */
     email: string;
   }> {
@@ -74,6 +76,10 @@ export class GoogleOAuthService {
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_in: data.expires_in,
+      // Space-separated scopes Google actually GRANTED (may be fewer than
+      // requested — restricted scopes like mail.google.com are dropped if the
+      // consent screen hasn't registered them or the user unticked them).
+      scope: typeof data.scope === 'string' ? (data.scope as string) : undefined,
       email,
     };
   }

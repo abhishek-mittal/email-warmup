@@ -21,6 +21,7 @@ const KNOWN_ERROR_CODES = new Set([
   'duplicate',
   'limit',
   'connection_failed',
+  'insufficient_scope',
 ]);
 
 function redirectTo(req: Request, path: string): Response {

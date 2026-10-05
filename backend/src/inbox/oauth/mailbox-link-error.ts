@@ -7,7 +7,8 @@ export type MailboxLinkErrorCode =
   | 'provider_error'
   | 'duplicate'
   | 'limit'
-  | 'connection_failed';
+  | 'connection_failed'
+  | 'insufficient_scope';
 
 export class MailboxLinkError extends BadRequestException {
   constructor(

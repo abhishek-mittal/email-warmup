@@ -12,6 +12,14 @@ import { MailboxLinkError } from './mailbox-link-error';
 
 export { MailboxLinkError } from './mailbox-link-error';
 
+/** Full Gmail mailbox access (SMTP/IMAP via XOAUTH2) requires this scope. */
+export const GMAIL_MAIL_SCOPE = 'https://mail.google.com/';
+
+/** True only if Google actually granted the restricted full-mail scope. */
+export function grantsGmailMailScope(scope: string | undefined | null): boolean {
+  return (scope ?? '').split(/\s+/).filter(Boolean).includes(GMAIL_MAIL_SCOPE);
+}
+
 export type LinkProvider = 'gmail' | 'outlook';
 
 const STATE_TTL_MS = 5 * 60_000;
@@ -102,6 +110,24 @@ export class MailboxLinkService {
         'provider_error',
         'The mail provider did not complete the connection. Please try again.',
       );
+    }
+
+    // Gmail SMTP/IMAP (XOAUTH2) needs the restricted https://mail.google.com/
+    // scope. Google grants only scopes registered on the OAuth consent screen,
+    // so a requested-but-ungranted mail scope slips through here and would
+    // otherwise fail later with a cryptic "can't create access token" at the
+    // SMTP precheck. Catch it now with a clear, actionable message.
+    if (provider === 'gmail') {
+      if (!grantsGmailMailScope(tokens.scope)) {
+        this.logger.warn(
+          { userId, provider, grantedScope: tokens.scope ?? null },
+          'mailbox link failed: Gmail mail scope not granted',
+        );
+        throw new MailboxLinkError(
+          'insufficient_scope',
+          'Gmail send & read access was not granted. Reconnect and allow full access (the “Read, compose, send and permanently delete all your email” permission) when Google asks.',
+        );
+      }
     }
 
     return this.inboxService.connectOAuthMailbox(userId, provider, tokens, {
