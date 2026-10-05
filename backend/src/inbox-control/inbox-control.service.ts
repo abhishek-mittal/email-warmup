@@ -1,4 +1,10 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { inboxes, users } from '../db/schema';
@@ -57,9 +63,47 @@ export class InboxControlService {
    * Returns the inbox's actual status, which stays e.g. 'error' when the
    * inbox can't be resumed by a click.
    */
+  private noPartnersError(): ConflictException {
+    return new ConflictException({
+      error: 'No inboxes to warm with yet. Join the shared pool or add warming inboxes.',
+      code: 'no_partners',
+    });
+  }
+
+  /**
+   * Explicit "Start warmup": a `ready` inbox with at least one eligible
+   * warm-with partner transitions to `active`. Blocks with 409 `no_partners`
+   * when nothing to warm against, and 409 `not_ready` when the inbox isn't in
+   * the `ready` state.
+   */
+  async startOne(userId: string, inboxId: string): Promise<{ id: string; status: string }> {
+    const inbox = await this.assertOwnership(userId, inboxId);
+    await this.assertPlanAllowsWarmup(userId);
+    if (inbox.status !== 'ready') {
+      throw new ConflictException({ error: 'Inbox is not ready to start.', code: 'not_ready' });
+    }
+    if (!(await this.warmupService.inboxCanWarm(inboxId))) {
+      throw this.noPartnersError();
+    }
+    const status = await this.warmupService.startInbox(inboxId);
+    this.logger.log({ userId, inboxId, from: 'ready', to: status }, 'inbox warmup started by user');
+    return { id: inboxId, status };
+  }
+
+  async startMany(userId: string, inboxIds: string[]) {
+    return this.runBulk(userId, inboxIds, 'start');
+  }
+
   async resumeOne(userId: string, inboxId: string): Promise<{ id: string; status: string }> {
     const inbox = await this.assertOwnership(userId, inboxId);
     await this.assertPlanAllowsWarmup(userId);
+    // Don't resume into an empty pool — same gate as Start.
+    if (
+      (inbox.status === 'paused' || inbox.status === 'ready') &&
+      !(await this.warmupService.inboxCanWarm(inboxId))
+    ) {
+      throw this.noPartnersError();
+    }
     const status = (await this.warmupService.resumeInbox(inboxId)) ?? inbox.status;
     this.logger.log(
       { userId, inboxId, from: inbox.status, to: status },
@@ -100,7 +144,7 @@ export class InboxControlService {
   private async runBulk(
     userId: string,
     inboxIds: string[],
-    action: 'pause' | 'resume',
+    action: 'pause' | 'resume' | 'start',
   ): Promise<{
     updated: { id: string; status: string }[];
     failed: { id: string; reason: string }[];
@@ -118,7 +162,11 @@ export class InboxControlService {
       seen.add(id);
       try {
         const result =
-          action === 'pause' ? await this.pauseOne(userId, id) : await this.resumeOne(userId, id);
+          action === 'pause'
+            ? await this.pauseOne(userId, id)
+            : action === 'start'
+              ? await this.startOne(userId, id)
+              : await this.resumeOne(userId, id);
         updated.push(result);
       } catch (err: any) {
         // 404 (not found / not yours) — surface as a per-row failure

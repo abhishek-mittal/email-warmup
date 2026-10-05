@@ -440,6 +440,35 @@ export class WarmupService {
    * a click can't fix (revoked credentials, pending, graduated) stays as it
    * is. Returns the inbox's status after the call.
    */
+  /** True if this inbox has at least one eligible warm-with partner right now. */
+  async inboxCanWarm(inboxId: string): Promise<boolean> {
+    const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+    const inbox = rows[0];
+    if (!inbox) return false;
+    return this.pairingService.hasEligiblePartners(inbox);
+  }
+
+  /**
+   * Explicit user "Start warmup": ready -> active, then schedule. Mirrors
+   * resumeInbox but transitions from 'ready' (not 'paused') and does not fire
+   * when a system hold is in place. Returns the resulting status.
+   */
+  async startInbox(inboxId: string): Promise<string> {
+    const started = await db
+      .update(inboxes)
+      .set({ status: 'active', statusReason: null })
+      .where(and(eq(inboxes.id, inboxId), eq(inboxes.status, 'ready')))
+      .returning({ id: inboxes.id });
+
+    if (started.length === 0) {
+      const rows = await db.select().from(inboxes).where(eq(inboxes.id, inboxId)).limit(1);
+      return rows[0]?.status ?? 'ready';
+    }
+
+    await this.scheduleInbox(inboxId);
+    return 'active';
+  }
+
   async resumeInbox(inboxId: string): Promise<string | null> {
     // A system hold (e.g. bounce rate over the limit) is not the user's to lift:
     // an operator has to release it first.

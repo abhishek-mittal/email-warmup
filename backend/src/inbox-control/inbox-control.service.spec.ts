@@ -14,7 +14,12 @@ jest.mock('../db', () => ({
 
 describe('InboxControlService', () => {
   let service: InboxControlService;
-  let warmupService: { pauseInbox: jest.Mock; resumeInbox: jest.Mock };
+  let warmupService: {
+    pauseInbox: jest.Mock;
+    resumeInbox: jest.Mock;
+    inboxCanWarm: jest.Mock;
+    startInbox: jest.Mock;
+  };
   const bounceMonitor = {
     stats: jest
       .fn()
@@ -36,6 +41,8 @@ describe('InboxControlService', () => {
     warmupService = {
       pauseInbox: jest.fn().mockResolvedValue(undefined),
       resumeInbox: jest.fn().mockResolvedValue('active'),
+      inboxCanWarm: jest.fn().mockResolvedValue(true),
+      startInbox: jest.fn().mockResolvedValue('active'),
     };
 
     const module = await Test.createTestingModule({
@@ -73,6 +80,51 @@ describe('InboxControlService', () => {
       const r = await service.pauseOne('user-1', 'abc');
       expect(r).toEqual({ id: 'abc', status: 'paused' });
       expect(warmupService.pauseInbox).toHaveBeenCalledWith('abc');
+    });
+  });
+
+  describe('startOne (warmup start gate)', () => {
+    it('activates a ready inbox that has partners', async () => {
+      makeSelectChain([{ id: 'i', userId: 'u', status: 'ready' }]); // ownership
+      makeSelectChain([{ id: 'u', plan: 'growth' }]); // plan check
+      warmupService.inboxCanWarm.mockResolvedValue(true);
+      warmupService.startInbox.mockResolvedValue('active');
+      await expect(service.startOne('u', 'i')).resolves.toEqual({ id: 'i', status: 'active' });
+      expect(warmupService.startInbox).toHaveBeenCalledWith('i');
+    });
+
+    it('rejects 409 no_partners when the ready inbox has no partners', async () => {
+      makeSelectChain([{ id: 'i', userId: 'u', status: 'ready' }]);
+      makeSelectChain([{ id: 'u', plan: 'growth' }]);
+      warmupService.inboxCanWarm.mockResolvedValue(false);
+      await expect(service.startOne('u', 'i')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'no_partners' },
+      });
+      expect(warmupService.startInbox).not.toHaveBeenCalled();
+    });
+
+    it('rejects 409 not_ready when the inbox is not in ready state', async () => {
+      makeSelectChain([{ id: 'i', userId: 'u', status: 'active' }]);
+      makeSelectChain([{ id: 'u', plan: 'growth' }]);
+      await expect(service.startOne('u', 'i')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'not_ready' },
+      });
+      expect(warmupService.startInbox).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resumeOne partner guard', () => {
+    it('rejects 409 no_partners when a paused inbox has no partners', async () => {
+      makeSelectChain([{ id: 'i', userId: 'u', status: 'paused' }]); // ownership
+      makeSelectChain([{ id: 'u', plan: 'growth' }]); // plan check
+      warmupService.inboxCanWarm.mockResolvedValue(false);
+      await expect(service.resumeOne('u', 'i')).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'no_partners' },
+      });
+      expect(warmupService.resumeInbox).not.toHaveBeenCalled();
     });
   });
 

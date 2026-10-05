@@ -51,6 +51,20 @@ export class InboxControlController {
     return this.control.resumeOne(req.userId!, id);
   }
 
+  @Post(':id/start')
+  async startOne(@Req() req: Request & { userId?: string }, @Param('id') id: string) {
+    return this.control.startOne(req.userId!, id);
+  }
+
+  @Post('start')
+  async startMany(
+    @Req() req: Request & { userId?: string },
+    @Body() body: { inboxIds?: string[] },
+  ) {
+    const ids = this.extractIds(body);
+    return this.control.startMany(req.userId!, ids);
+  }
+
   @Post('pause')
   async pauseMany(
     @Req() req: Request & { userId?: string },
